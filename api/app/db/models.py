@@ -1,0 +1,846 @@
+"""SQLAlchemy models mapped onto the existing schema.
+
+Columns are camelCase in the database (Prisma created them that way), so every
+attribute names its column explicitly. Enum types already exist, hence
+``create_type=False`` throughout — SQLAlchemy binds to them and never tries to
+issue ``CREATE TYPE``.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
+
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, Numeric, Text
+from sqlalchemy.dialects.postgresql import ENUM, JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db import enums
+from app.db.base import Base, new_id, utcnow
+
+
+def pg_enum(python_enum: type, name: str) -> ENUM:
+    return ENUM(python_enum, name=name, create_type=False, values_callable=lambda e: [m.value for m in e])
+
+
+def _id() -> Mapped[str]:
+    return mapped_column(Text, primary_key=True, default=new_id)
+
+
+def _created() -> Mapped[datetime]:
+    return mapped_column("createdAt", DateTime, default=utcnow, nullable=False)
+
+
+def _updated() -> Mapped[datetime]:
+    return mapped_column("updatedAt", DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+
+# ===========================================================================
+# Identity & sessions
+# ===========================================================================
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = _id()
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    password_hash: Mapped[str] = mapped_column("passwordHash", Text, nullable=False)
+    role: Mapped[enums.Role] = mapped_column(pg_enum(enums.Role, "Role"), nullable=False)
+    phone: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[enums.UserStatus] = mapped_column(
+        pg_enum(enums.UserStatus, "UserStatus"), nullable=False, default=enums.UserStatus.ACTIVE
+    )
+
+    email_verified_at: Mapped[datetime | None] = mapped_column("emailVerifiedAt", DateTime)
+    last_login_at: Mapped[datetime | None] = mapped_column("lastLoginAt", DateTime)
+    failed_login_count: Mapped[int] = mapped_column("failedLoginCount", Integer, default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column("lockedUntil", DateTime)
+
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    patient: Mapped[Patient | None] = relationship(back_populates="user", uselist=False)
+    doctor: Mapped[Doctor | None] = relationship(back_populates="user", uselist=False)
+
+
+class Session(Base):
+    """Server-side session.
+
+    The inactivity rule (R8) is enforced by comparing ``last_seen_at`` on every
+    authenticated request. The client timer is a courtesy; this is the control.
+    """
+
+    __tablename__ = "sessions"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    #: Drives the idle-timeout tier. See ``core.session_policy``.
+    device_class: Mapped[str] = mapped_column("deviceClass", Text, default="PERSONAL", nullable=False)
+    user_agent: Mapped[str | None] = mapped_column("userAgent", Text)
+    ip_address: Mapped[str | None] = mapped_column("ipAddress", Text)
+
+    created_at: Mapped[datetime] = _created()
+    last_seen_at: Mapped[datetime] = mapped_column("lastSeenAt", DateTime, default=utcnow, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column("expiresAt", DateTime, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column("revokedAt", DateTime)
+    revoked_reason: Mapped[str | None] = mapped_column("revokedReason", Text)
+
+
+class RefreshToken(Base):
+    """Rotating refresh tokens. Only the hash is stored."""
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    session_id: Mapped[str] = mapped_column(
+        "sessionId", Text, ForeignKey("sessions.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column("tokenHash", Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column("expiresAt", DateTime, nullable=False)
+    created_at: Mapped[datetime] = _created()
+    #: Set when rotated. Presenting a used token means it leaked (see service).
+    used_at: Mapped[datetime | None] = mapped_column("usedAt", DateTime)
+    replaced_by_id: Mapped[str | None] = mapped_column("replacedById", Text)
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column("tokenHash", Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column("expiresAt", DateTime, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column("usedAt", DateTime)
+    created_at: Mapped[datetime] = _created()
+
+
+# ===========================================================================
+# Organisation
+# ===========================================================================
+
+
+class Department(Base):
+    __tablename__ = "departments"
+
+    id: Mapped[str] = _id()
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    location: Mapped[str | None] = mapped_column(Text)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    doctors: Mapped[list[Doctor]] = relationship(back_populates="department")
+
+
+class Doctor(Base):
+    __tablename__ = "doctors"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    specialization: Mapped[str] = mapped_column(Text, nullable=False)
+    license_number: Mapped[str] = mapped_column("licenseNumber", Text, nullable=False)
+    department_id: Mapped[str | None] = mapped_column(
+        "departmentId", Text, ForeignKey("departments.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    qualifications: Mapped[str | None] = mapped_column(Text)
+    years_experience: Mapped[int | None] = mapped_column("yearsExperience", Integer)
+    consultation_fee: Mapped[Decimal] = mapped_column(
+        "consultationFee", Numeric(10, 2), default=Decimal("0"), nullable=False
+    )
+    #: [{ dayOfWeek, startTime, endTime, slotMinutes }]
+    availability: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
+    accepting_patients: Mapped[bool] = mapped_column(
+        "acceptingPatients", Boolean, default=True, nullable=False
+    )
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    user: Mapped[User] = relationship(back_populates="doctor")
+    department: Mapped[Department | None] = relationship(back_populates="doctors")
+
+
+class DoctorTimeOff(Base):
+    __tablename__ = "doctor_time_off"
+
+    id: Mapped[str] = _id()
+    doctor_id: Mapped[str] = mapped_column(
+        "doctorId", Text, ForeignKey("doctors.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    starts_at: Mapped[datetime] = mapped_column("startsAt", DateTime, nullable=False)
+    ends_at: Mapped[datetime] = mapped_column("endsAt", DateTime, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+
+
+class Patient(Base):
+    __tablename__ = "patients"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    medical_record_number: Mapped[str] = mapped_column("medicalRecordNumber", Text, nullable=False)
+    date_of_birth: Mapped[datetime | None] = mapped_column("dateOfBirth", DateTime)
+    gender: Mapped[enums.Gender] = mapped_column(
+        pg_enum(enums.Gender, "Gender"), default=enums.Gender.UNDISCLOSED, nullable=False
+    )
+    blood_group: Mapped[str | None] = mapped_column("bloodGroup", Text)
+    address: Mapped[str | None] = mapped_column(Text)
+    emergency_contact_name: Mapped[str | None] = mapped_column("emergencyContactName", Text)
+    emergency_contact_phone: Mapped[str | None] = mapped_column("emergencyContactPhone", Text)
+    allergies: Mapped[str | None] = mapped_column(Text)
+    chronic_conditions: Mapped[str | None] = mapped_column("chronicConditions", Text)
+
+    #: Consent for third-party AI / speech processing (conflict C2). Checked
+    #: before any payload leaves the system; withdrawal disables only those
+    #: features, never the rest of the portal.
+    ai_consent_granted_at: Mapped[datetime | None] = mapped_column("aiConsentGrantedAt", DateTime)
+    ai_consent_withdrawn_at: Mapped[datetime | None] = mapped_column("aiConsentWithdrawnAt", DateTime)
+
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    user: Mapped[User] = relationship(back_populates="patient")
+
+    @property
+    def ai_consent_active(self) -> bool:
+        if self.ai_consent_granted_at is None:
+            return False
+        if self.ai_consent_withdrawn_at is None:
+            return True
+        return self.ai_consent_withdrawn_at < self.ai_consent_granted_at
+
+
+class DoctorPatientAssignment(Base):
+    """The care relationship.
+
+    A doctor's access to a patient is authorized by a row here (or by an active
+    encounter) — never by holding the DOCTOR role alone.
+    """
+
+    __tablename__ = "doctor_patient_assignments"
+
+    id: Mapped[str] = _id()
+    doctor_id: Mapped[str] = mapped_column(
+        "doctorId", Text, ForeignKey("doctors.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    is_primary: Mapped[bool] = mapped_column("isPrimary", Boolean, default=False, nullable=False)
+    assigned_at: Mapped[datetime] = mapped_column("assignedAt", DateTime, default=utcnow, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column("endedAt", DateTime)
+    assigned_by: Mapped[str | None] = mapped_column("assignedBy", Text)
+
+
+# ===========================================================================
+# Appointments
+# ===========================================================================
+
+
+class Appointment(Base):
+    __tablename__ = "appointments"
+
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    doctor_id: Mapped[str] = mapped_column(
+        "doctorId", Text, ForeignKey("doctors.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    appointment_date: Mapped[datetime] = mapped_column("appointmentDate", DateTime, nullable=False)
+    start_time: Mapped[datetime] = mapped_column("startTime", DateTime, nullable=False)
+    end_time: Mapped[datetime] = mapped_column("endTime", DateTime, nullable=False)
+    status: Mapped[enums.AppointmentStatus] = mapped_column(
+        pg_enum(enums.AppointmentStatus, "AppointmentStatus"),
+        default=enums.AppointmentStatus.REQUESTED,
+        nullable=False,
+    )
+    reason: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    #: "<doctorId>|<ISO start>" while the appointment holds the slot, NULL once
+    #: cancelled. The unique index turns double-booking into a database error
+    #: rather than a race Postgres allows many NULLs, so cancelled slots free up.
+    slot_key: Mapped[str | None] = mapped_column("slotKey", Text)
+
+    cancelled_at: Mapped[datetime | None] = mapped_column("cancelledAt", DateTime)
+    cancelled_by: Mapped[str | None] = mapped_column("cancelledBy", Text)
+    cancel_reason: Mapped[str | None] = mapped_column("cancelReason", Text)
+    rescheduled_from_id: Mapped[str | None] = mapped_column("rescheduledFromId", Text)
+    completed_at: Mapped[datetime | None] = mapped_column("completedAt", DateTime)
+
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    @staticmethod
+    def build_slot_key(doctor_id: str, start_time: datetime) -> str:
+        return f"{doctor_id}|{start_time.isoformat()}"
+
+
+# ===========================================================================
+# Clinical records
+# ===========================================================================
+
+
+class MedicalRecord(Base):
+    __tablename__ = "medical_records"
+
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    doctor_id: Mapped[str] = mapped_column(
+        "doctorId", Text, ForeignKey("doctors.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False
+    )
+    appointment_id: Mapped[str | None] = mapped_column(
+        "appointmentId",
+        Text,
+        ForeignKey("appointments.id", ondelete="SET NULL", onupdate="CASCADE"),
+    )
+    symptoms: Mapped[str | None] = mapped_column(Text)
+    diagnosis: Mapped[str | None] = mapped_column(Text)
+    treatment_plan: Mapped[str | None] = mapped_column("treatmentPlan", Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    follow_up_date: Mapped[datetime | None] = mapped_column("followUpDate", DateTime)
+    follow_up_notes: Mapped[str | None] = mapped_column("followUpNotes", Text)
+
+    #: Always PHYSICIAN here. Machine output lives in ReportedSymptom /
+    #: MedicalDocument until a doctor promotes it.
+    source: Mapped[enums.DataSource] = mapped_column(
+        pg_enum(enums.DataSource, "DataSource"), default=enums.DataSource.PHYSICIAN, nullable=False
+    )
+
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+class Prescription(Base):
+    __tablename__ = "prescriptions"
+
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    doctor_id: Mapped[str] = mapped_column(
+        "doctorId", Text, ForeignKey("doctors.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False
+    )
+    medical_record_id: Mapped[str | None] = mapped_column(
+        "medicalRecordId", Text, ForeignKey("medical_records.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    medication: Mapped[str] = mapped_column(Text, nullable=False)
+    dosage: Mapped[str] = mapped_column(Text, nullable=False)
+    frequency: Mapped[str] = mapped_column(Text, nullable=False)
+    duration: Mapped[str] = mapped_column(Text, nullable=False)
+    instructions: Mapped[str | None] = mapped_column(Text)
+    start_date: Mapped[datetime | None] = mapped_column("startDate", DateTime)
+    end_date: Mapped[datetime | None] = mapped_column("endDate", DateTime)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+class ReportedSymptom(Base):
+    """Staging tier for patient-reported and AI-extracted symptoms.
+
+    Never a diagnosis. A doctor promotes a row into a MedicalRecord, and that
+    promotion is what gives the statement a clinical author (conflict C7).
+    """
+
+    __tablename__ = "reported_symptoms"
+
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    symptom: Mapped[str] = mapped_column(Text, nullable=False)
+    severity: Mapped[str | None] = mapped_column(Text)
+    duration_text: Mapped[str | None] = mapped_column("durationText", Text)
+    raw_text: Mapped[str | None] = mapped_column("rawText", Text)
+    source: Mapped[enums.DataSource] = mapped_column(
+        pg_enum(enums.DataSource, "DataSource"),
+        default=enums.DataSource.PATIENT_REPORTED,
+        nullable=False,
+    )
+    input_type: Mapped[enums.InputType] = mapped_column(
+        "inputType", pg_enum(enums.InputType, "InputType"), default=enums.InputType.TEXT, nullable=False
+    )
+    confidence: Mapped[float | None] = mapped_column(Float)
+    ai_interaction_id: Mapped[str | None] = mapped_column(
+        "aiInteractionId", Text, ForeignKey("ai_interactions.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    promoted_to_record_id: Mapped[str | None] = mapped_column(
+        "promotedToRecordId", Text, ForeignKey("medical_records.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    promoted_by_id: Mapped[str | None] = mapped_column("promotedById", Text)
+    promoted_at: Mapped[datetime | None] = mapped_column("promotedAt", DateTime)
+    created_at: Mapped[datetime] = _created()
+
+
+# ===========================================================================
+# Documents, storage & OCR
+# ===========================================================================
+
+
+class MedicalDocument(Base):
+    __tablename__ = "medical_documents"
+
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    uploaded_by_id: Mapped[str] = mapped_column(
+        "uploadedById", Text, ForeignKey("users.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False
+    )
+    medical_record_id: Mapped[str | None] = mapped_column(
+        "medicalRecordId", Text, ForeignKey("medical_records.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    document_type: Mapped[enums.DocumentType] = mapped_column(
+        "documentType",
+        pg_enum(enums.DocumentType, "DocumentType"),
+        default=enums.DocumentType.OTHER,
+        nullable=False,
+    )
+    title: Mapped[str | None] = mapped_column(Text)
+    original_file_name: Mapped[str] = mapped_column("originalFileName", Text, nullable=False)
+    mime_type: Mapped[str] = mapped_column("mimeType", Text, nullable=False)
+    file_size: Mapped[int] = mapped_column("fileSize", Integer, nullable=False)
+    checksum_sha256: Mapped[str | None] = mapped_column("checksumSha256", Text)
+
+    #: Private bucket, addressed by path. A delivery URL is signed on demand
+    #: after the access check, so a document cannot be reached without passing
+    #: RBAC and producing an audit entry (conflict C8).
+    storage_bucket: Mapped[str] = mapped_column(
+        "storageBucket", Text, default="medical-documents", nullable=False
+    )
+    storage_path: Mapped[str] = mapped_column("storagePath", Text, nullable=False)
+
+    ocr_status: Mapped[enums.OcrStatus] = mapped_column(
+        "ocrStatus", pg_enum(enums.OcrStatus, "OcrStatus"), default=enums.OcrStatus.PENDING, nullable=False
+    )
+    ocr_engine: Mapped[enums.OcrEngine | None] = mapped_column(
+        "ocrEngine", pg_enum(enums.OcrEngine, "OcrEngine")
+    )
+    ocr_confidence: Mapped[float | None] = mapped_column("ocrConfidence", Float)
+    extracted_text: Mapped[str | None] = mapped_column("extractedText", Text)
+    #: Structured OCR output awaiting human confirmation.
+    structured_data: Mapped[dict[str, Any] | None] = mapped_column("structuredData", JSONB)
+    confirmed_by_id: Mapped[str | None] = mapped_column("confirmedById", Text)
+    confirmed_at: Mapped[datetime | None] = mapped_column("confirmedAt", DateTime)
+    ocr_error: Mapped[str | None] = mapped_column("ocrError", Text)
+
+    deleted_at: Mapped[datetime | None] = mapped_column("deletedAt", DateTime)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+# ===========================================================================
+# Vitals & alerts
+# ===========================================================================
+
+
+class Vital(Base):
+    __tablename__ = "vitals"
+
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    recorded_by_id: Mapped[str | None] = mapped_column(
+        "recordedById", Text, ForeignKey("users.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    source: Mapped[enums.DataSource] = mapped_column(
+        pg_enum(enums.DataSource, "DataSource"), default=enums.DataSource.DEVICE, nullable=False
+    )
+    device_id: Mapped[str | None] = mapped_column("deviceId", Text)
+
+    heart_rate: Mapped[int | None] = mapped_column("heartRate", Integer)
+    systolic_bp: Mapped[int | None] = mapped_column("systolicBp", Integer)
+    diastolic_bp: Mapped[int | None] = mapped_column("diastolicBp", Integer)
+    oxygen_saturation: Mapped[float | None] = mapped_column("oxygenSaturation", Float)
+    temperature: Mapped[float | None] = mapped_column(Float)
+    respiratory_rate: Mapped[int | None] = mapped_column("respiratoryRate", Integer)
+
+    recorded_at: Mapped[datetime] = mapped_column("recordedAt", DateTime, default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
+class VitalThreshold(Base):
+    """Configurable thresholds.
+
+    ``patient_id`` NULL is the hospital default for that vital; a row with a
+    patient overrides it. Per-patient overrides are what stop a COPD patient's
+    ordinary saturation from firing a hospital alarm every reading (C9).
+    """
+
+    __tablename__ = "vital_thresholds"
+
+    id: Mapped[str] = _id()
+    vital_type: Mapped[enums.VitalType] = mapped_column(
+        "vitalType", pg_enum(enums.VitalType, "VitalType"), nullable=False
+    )
+    patient_id: Mapped[str | None] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE")
+    )
+    min_value: Mapped[float | None] = mapped_column("minValue", Float)
+    max_value: Mapped[float | None] = mapped_column("maxValue", Float)
+    severity: Mapped[enums.AlertSeverity] = mapped_column(
+        pg_enum(enums.AlertSeverity, "AlertSeverity"), default=enums.AlertSeverity.WARNING, nullable=False
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    #: Consecutive breaching readings before an alert fires — filters sensor
+    #: artefacts such as a detached probe.
+    sustained_readings: Mapped[int] = mapped_column("sustainedReadings", Integer, default=1, nullable=False)
+    created_by_id: Mapped[str | None] = mapped_column("createdById", Text)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    vital_id: Mapped[str | None] = mapped_column(
+        "vitalId", Text, ForeignKey("vitals.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    doctor_id: Mapped[str | None] = mapped_column(
+        "doctorId", Text, ForeignKey("doctors.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    vital_type: Mapped[enums.VitalType] = mapped_column(
+        "vitalType", pg_enum(enums.VitalType, "VitalType"), nullable=False
+    )
+    measured_value: Mapped[float] = mapped_column("measuredValue", Float, nullable=False)
+    threshold_min: Mapped[float | None] = mapped_column("thresholdMin", Float)
+    threshold_max: Mapped[float | None] = mapped_column("thresholdMax", Float)
+    severity: Mapped[enums.AlertSeverity] = mapped_column(
+        pg_enum(enums.AlertSeverity, "AlertSeverity"), nullable=False
+    )
+    status: Mapped[enums.AlertStatus] = mapped_column(
+        pg_enum(enums.AlertStatus, "AlertStatus"), default=enums.AlertStatus.OPEN, nullable=False
+    )
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    acknowledged_by_id: Mapped[str | None] = mapped_column(
+        "acknowledgedById", Text, ForeignKey("users.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column("acknowledgedAt", DateTime)
+    resolved_at: Mapped[datetime | None] = mapped_column("resolvedAt", DateTime)
+    escalated_at: Mapped[datetime | None] = mapped_column("escalatedAt", DateTime)
+    escalation_level: Mapped[int] = mapped_column("escalationLevel", Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
+# ===========================================================================
+# Billing
+# ===========================================================================
+
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    #: Unique: one invoice per appointment. This is the idempotency guarantee
+    #: for "complete consultation" retries (R4) — a duplicate fails at the
+    #: database, not only in application logic.
+    appointment_id: Mapped[str | None] = mapped_column(
+        "appointmentId",
+        Text,
+        ForeignKey("appointments.id", ondelete="SET NULL", onupdate="CASCADE"),
+    )
+    invoice_number: Mapped[str] = mapped_column("invoiceNumber", Text, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    tax_amount: Mapped[Decimal] = mapped_column(
+        "taxAmount", Numeric(10, 2), default=Decimal("0"), nullable=False
+    )
+    total_amount: Mapped[Decimal] = mapped_column("totalAmount", Numeric(10, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(Text, default="INR", nullable=False)
+    status: Mapped[enums.InvoiceStatus] = mapped_column(
+        pg_enum(enums.InvoiceStatus, "InvoiceStatus"), default=enums.InvoiceStatus.DRAFT, nullable=False
+    )
+    line_items: Mapped[list[dict[str, Any]]] = mapped_column("lineItems", JSONB, default=list, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    issued_at: Mapped[datetime | None] = mapped_column("issuedAt", DateTime)
+    due_at: Mapped[datetime | None] = mapped_column("dueAt", DateTime)
+    paid_at: Mapped[datetime | None] = mapped_column("paidAt", DateTime)
+    voided_at: Mapped[datetime | None] = mapped_column("voidedAt", DateTime)
+    #: Credit notes reference the invoice they correct; issued invoices are
+    #: never edited in place (conflict C4, requirement R6).
+    amends_invoice_id: Mapped[str | None] = mapped_column("amendsInvoiceId", Text)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+# ===========================================================================
+# AI & notifications
+# ===========================================================================
+
+
+class AIInteraction(Base):
+    __tablename__ = "ai_interactions"
+
+    id: Mapped[str] = _id()
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    session_id: Mapped[str] = mapped_column("sessionId", Text, nullable=False)
+    input: Mapped[str] = mapped_column(Text, nullable=False)
+    input_type: Mapped[enums.InputType] = mapped_column(
+        "inputType", pg_enum(enums.InputType, "InputType"), default=enums.InputType.TEXT, nullable=False
+    )
+    extracted_symptoms: Mapped[list[str]] = mapped_column(
+        "extractedSymptoms", JSONB, default=list, nullable=False
+    )
+    response: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Set when the safety layer detects red-flag symptoms and escalates.
+    emergency_flagged: Mapped[bool] = mapped_column(
+        "emergencyFlagged", Boolean, default=False, nullable=False
+    )
+    recommended_department: Mapped[str | None] = mapped_column("recommendedDepartment", Text)
+    urgency_level: Mapped[str | None] = mapped_column("urgencyLevel", Text)
+    model_name: Mapped[str | None] = mapped_column("modelName", Text)
+    latency_ms: Mapped[int | None] = mapped_column("latencyMs", Integer)
+    created_at: Mapped[datetime] = _created()
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    type: Mapped[enums.NotificationType] = mapped_column(
+        pg_enum(enums.NotificationType, "NotificationType"), nullable=False
+    )
+    channel: Mapped[enums.NotificationChannel] = mapped_column(
+        pg_enum(enums.NotificationChannel, "NotificationChannel"),
+        default=enums.NotificationChannel.IN_APP,
+        nullable=False,
+    )
+    status: Mapped[enums.NotificationStatus] = mapped_column(
+        pg_enum(enums.NotificationStatus, "NotificationStatus"),
+        default=enums.NotificationStatus.PENDING,
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    link: Mapped[str | None] = mapped_column(Text)
+    notification_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB)
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column("sentAt", DateTime)
+    read_at: Mapped[datetime | None] = mapped_column("readAt", DateTime)
+    failed_at: Mapped[datetime | None] = mapped_column("failedAt", DateTime)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created()
+
+
+# ===========================================================================
+# Emergency access & audit
+# ===========================================================================
+
+
+class EmergencyAccess(Base):
+    """Break-glass grant (R3, conflict C1).
+
+    Scoped to one patient, time-boxed, reviewed. Never an unrestricted bypass:
+    every read under a grant writes an EMERGENCY_ACCESS_USED audit entry.
+    """
+
+    __tablename__ = "emergency_access"
+
+    id: Mapped[str] = _id()
+    requester_id: Mapped[str] = mapped_column(
+        "requesterId", Text, ForeignKey("users.id", ondelete="RESTRICT", onupdate="CASCADE"), nullable=False
+    )
+    patient_id: Mapped[str] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[enums.EmergencyAccessStatus] = mapped_column(
+        pg_enum(enums.EmergencyAccessStatus, "EmergencyAccessStatus"),
+        default=enums.EmergencyAccessStatus.ACTIVE,
+        nullable=False,
+    )
+    ip_address: Mapped[str | None] = mapped_column("ipAddress", Text)
+    user_agent: Mapped[str | None] = mapped_column("userAgent", Text)
+    granted_at: Mapped[datetime] = mapped_column("grantedAt", DateTime, default=utcnow, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column("expiresAt", DateTime, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column("revokedAt", DateTime)
+    revoked_by_id: Mapped[str | None] = mapped_column("revokedById", Text)
+    #: Post-hoc compliance review. Unreviewed grants surface on the admin
+    #: dashboard — the deterrent is the review, not the restriction.
+    reviewed_at: Mapped[datetime | None] = mapped_column("reviewedAt", DateTime)
+    reviewed_by_id: Mapped[str | None] = mapped_column("reviewedById", Text)
+    review_notes: Mapped[str | None] = mapped_column("reviewNotes", Text)
+    access_count: Mapped[int] = mapped_column("accessCount", Integer, default=0, nullable=False)
+
+
+class AuditLog(Base):
+    """Append-only (R6). No update or delete path exists anywhere in the app.
+
+    ``user_id`` is deliberately NOT a foreign key: with ON DELETE SET NULL an
+    admin deleting a user silently erased who did what across the whole
+    history, and with RESTRICT no account could ever be removed. The trail has
+    to outlive its subject.
+    """
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str | None] = mapped_column("userId", Text)
+    actor_role: Mapped[enums.Role | None] = mapped_column("actorRole", pg_enum(enums.Role, "Role"))
+    action: Mapped[enums.AuditAction] = mapped_column(
+        pg_enum(enums.AuditAction, "AuditAction"), nullable=False
+    )
+    severity: Mapped[enums.AuditSeverity] = mapped_column(
+        pg_enum(enums.AuditSeverity, "AuditSeverity"),
+        default=enums.AuditSeverity.INFO,
+        nullable=False,
+    )
+    entity_type: Mapped[str | None] = mapped_column("entityType", Text)
+    entity_id: Mapped[str | None] = mapped_column("entityId", Text)
+    patient_id: Mapped[str | None] = mapped_column("patientId", Text)
+    ip_address: Mapped[str | None] = mapped_column("ipAddress", Text)
+    user_agent: Mapped[str | None] = mapped_column("userAgent", Text)
+    request_id: Mapped[str | None] = mapped_column("requestId", Text)
+    #: References only — field names and record ids, never clinical values (C5).
+    audit_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB)
+    emergency_access_id: Mapped[str | None] = mapped_column("emergencyAccessId", Text)
+    previous_hash: Mapped[str | None] = mapped_column("previousHash", Text)
+    entry_hash: Mapped[str] = mapped_column("entryHash", Text, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+
+class SystemConfig(Base):
+    __tablename__ = "system_config"
+
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    value: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    updated_by_id: Mapped[str | None] = mapped_column("updatedById", Text)
+    updated_at: Mapped[datetime] = _updated()
+
+
+# ===========================================================================
+# Indexes
+# ===========================================================================
+#
+# Declared here rather than inline so the whole access-pattern story reads in
+# one place. Names match what the original migration created, so autogenerate
+# compares equal instead of proposing to drop and recreate them — and, more
+# importantly, a database built from Alembic alone gets the same indexes the
+# development database already has.
+
+Index("users_role_status_idx", User.role, User.status)
+
+Index("sessions_userId_revokedAt_idx", Session.user_id, Session.revoked_at)
+Index("sessions_expiresAt_idx", Session.expires_at)  # expiry sweeps
+
+Index("refresh_tokens_sessionId_idx", RefreshToken.session_id)
+Index("refresh_tokens_userId_idx", RefreshToken.user_id)
+Index("password_reset_tokens_userId_idx", PasswordResetToken.user_id)
+
+Index("doctors_departmentId_idx", Doctor.department_id)
+Index("doctors_specialization_idx", Doctor.specialization)
+Index("doctor_time_off_doctorId_startsAt_idx", DoctorTimeOff.doctor_id, DoctorTimeOff.starts_at)
+
+# The care relationship is read on every doctor request, so it is indexed both
+# ways: by doctor to list a caseload, by patient to answer "may this doctor?".
+Index(
+    "doctor_patient_assignments_doctorId_patientId_key",
+    DoctorPatientAssignment.doctor_id,
+    DoctorPatientAssignment.patient_id,
+    unique=True,
+)
+Index(
+    "doctor_patient_assignments_patientId_endedAt_idx",
+    DoctorPatientAssignment.patient_id,
+    DoctorPatientAssignment.ended_at,
+)
+
+Index("appointments_doctorId_startTime_idx", Appointment.doctor_id, Appointment.start_time)
+Index("appointments_patientId_startTime_idx", Appointment.patient_id, Appointment.start_time)
+Index("appointments_status_idx", Appointment.status)
+
+Index("medical_records_patientId_createdAt_idx", MedicalRecord.patient_id, MedicalRecord.created_at)
+Index("medical_records_doctorId_idx", MedicalRecord.doctor_id)
+Index("prescriptions_patientId_active_idx", Prescription.patient_id, Prescription.active)
+Index("prescriptions_medicalRecordId_idx", Prescription.medical_record_id)
+Index("reported_symptoms_patientId_createdAt_idx", ReportedSymptom.patient_id, ReportedSymptom.created_at)
+
+Index("medical_documents_patientId_createdAt_idx", MedicalDocument.patient_id, MedicalDocument.created_at)
+Index("medical_documents_documentType_idx", MedicalDocument.document_type)
+Index("medical_documents_ocrStatus_idx", MedicalDocument.ocr_status)  # OCR job queue scan
+
+Index("vitals_patientId_recordedAt_idx", Vital.patient_id, Vital.recorded_at)
+# One threshold per vital per patient; the NULL patient row is the hospital
+# default, and Postgres allows many NULLs under a unique index.
+Index(
+    "vital_thresholds_vitalType_patientId_key",
+    VitalThreshold.vital_type,
+    VitalThreshold.patient_id,
+    unique=True,
+)
+
+Index("alerts_patientId_status_idx", Alert.patient_id, Alert.status)
+Index("alerts_doctorId_status_idx", Alert.doctor_id, Alert.status)
+Index("alerts_status_createdAt_idx", Alert.status, Alert.created_at)  # escalation sweeps
+
+Index("invoices_patientId_status_idx", Invoice.patient_id, Invoice.status)
+
+Index("ai_interactions_patientId_createdAt_idx", AIInteraction.patient_id, AIInteraction.created_at)
+Index("ai_interactions_sessionId_idx", AIInteraction.session_id)
+
+Index("notifications_userId_status_idx", Notification.user_id, Notification.status)
+Index("notifications_userId_readAt_idx", Notification.user_id, Notification.read_at)
+
+Index("emergency_access_patientId_status_idx", EmergencyAccess.patient_id, EmergencyAccess.status)
+Index("emergency_access_requesterId_idx", EmergencyAccess.requester_id)
+# Drives the expiry sweep and the unreviewed-grant dashboard.
+Index("emergency_access_status_expiresAt_idx", EmergencyAccess.status, EmergencyAccess.expires_at)
+
+# Audit reads are compliance queries: by actor, by patient, by action, by severity.
+Index("audit_logs_userId_timestamp_idx", AuditLog.user_id, AuditLog.timestamp)
+Index("audit_logs_patientId_timestamp_idx", AuditLog.patient_id, AuditLog.timestamp)
+Index("audit_logs_action_timestamp_idx", AuditLog.action, AuditLog.timestamp)
+Index("audit_logs_severity_timestamp_idx", AuditLog.severity, AuditLog.timestamp)
+
+
+# Single-column uniqueness, declared as named unique indexes to match how the
+# schema was originally created.
+Index("users_email_key", User.email, unique=True)
+Index("refresh_tokens_tokenHash_key", RefreshToken.token_hash, unique=True)
+Index("password_reset_tokens_tokenHash_key", PasswordResetToken.token_hash, unique=True)
+Index("departments_name_key", Department.name, unique=True)
+Index("departments_code_key", Department.code, unique=True)
+Index("doctors_userId_key", Doctor.user_id, unique=True)
+Index("doctors_licenseNumber_key", Doctor.license_number, unique=True)
+Index("patients_userId_key", Patient.user_id, unique=True)
+Index("patients_medicalRecordNumber_key", Patient.medical_record_number, unique=True)
+# Holds the slot while active, NULL once cancelled — this is what turns
+# double-booking into a database error rather than a race (R14).
+Index("appointments_slotKey_key", Appointment.slot_key, unique=True)
+Index("medical_records_appointmentId_key", MedicalRecord.appointment_id, unique=True)
+Index("medical_documents_storagePath_key", MedicalDocument.storage_path, unique=True)
+# One invoice per appointment: the idempotency guarantee for consultation
+# completion retries (R4).
+Index("invoices_appointmentId_key", Invoice.appointment_id, unique=True)
+Index("invoices_invoiceNumber_key", Invoice.invoice_number, unique=True)

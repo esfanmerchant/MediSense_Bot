@@ -1,0 +1,48 @@
+# --- Secrets: never commit ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Dependencies ---
+node_modules/
+.pnpm-store/
+
+# --- Python ---
+.venv/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+
+# --- OCR: models are downloaded on first run, _smoke is regenerated ---
+ocr/models/
+ocr/_smoke/
+.paddleocr/
+.paddlex/
+
+# --- Build output ---
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# --- Test / coverage ---
+coverage/
+.pytest_cache/
+.ruff_cache/
+
+# --- Runtime artifacts ---
+logs/
+*.log
+npm-debug.log*
+uploads/tmp/
+.tesseract-cache/
+
+# --- Editor / OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,17 @@
+{
+  "name": "medisense",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MediSense — Smart Healthcare Management System",
+  "scripts": {
+    "dev": "npm --prefix client run dev",
+    "dev:api": "api/.venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 4000 --app-dir api",
+    "build": "npm --prefix client run build",
+    "lint": "npm --prefix client run lint",
+    "typecheck": "npm --prefix client exec tsc -- --noEmit",
+    "verify": "npm run typecheck && npm run lint && npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

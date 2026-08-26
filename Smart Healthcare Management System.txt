@@ -1,0 +1,1978 @@
+Smart Healthcare Management System
+1. Project Objective
+
+Build a production-quality Smart Healthcare Management System for a hospital network.
+
+The application must provide:
+
+Admin management
+Doctor management
+Patient self-service portal
+Appointment management
+Medical records
+Prescriptions
+Billing
+Medical document uploads
+OCR
+Cloudinary storage
+AI healthcare chatbot
+Speech-to-text symptom input
+Preliminary symptom analysis
+Real-time patient vitals
+Doctor alerts
+Emergency access
+RBAC
+Audit logging
+Secure authentication
+Automatic 2-minute inactivity logout
+
+The patient portal must allow patients to access their records, appointments, prescriptions, reports and billing without staff assistance.
+
+2. Important Implementation Principle
+
+Do not attempt to build the entire system in one step.
+
+Codex should work in phases.
+
+For every phase:
+
+Inspect the existing project.
+Understand the current architecture.
+Create/update the implementation.
+Run tests.
+Run lint/type checks.
+Fix errors.
+Only then proceed to the next phase.
+
+Do not rewrite working code unnecessarily.
+
+If a technology stack already exists in the repository, preserve it unless there is a strong technical reason to change it.
+
+3. Recommended Architecture
+
+Use a modular architecture.
+
+Frontend
+│
+├── Authentication
+├── Admin Dashboard
+├── Doctor Dashboard
+├── Patient Dashboard
+├── Appointment UI
+├── Medical Records UI
+├── Billing UI
+├── AI Chatbot
+├── Voice Input
+├── OCR Upload
+└── Notifications
+        │
+        ▼
+Backend API
+│
+├── Auth Service
+├── User Service
+├── Patient Service
+├── Doctor Service
+├── Appointment Service
+├── Medical Record Service
+├── Prescription Service
+├── Billing Service
+├── Vital Monitoring Service
+├── Notification Service
+├── OCR Service
+├── AI Service
+├── File/Cloudinary Service
+└── Audit Service
+        │
+        ├── Database
+        ├── Cloudinary
+        ├── AI Provider
+        └── Email/Notification Provider
+
+Keep business logic out of UI components wherever possible.
+
+4. User Roles
+
+The system has three primary roles:
+
+ADMIN
+DOCTOR
+PATIENT
+
+The requirements also mention emergency access by an on-duty nurse.
+
+Therefore, Codex should design the authorization system so that a future role can be added:
+
+NURSE
+
+Do not necessarily expose a full Nurse dashboard unless required, but make the RBAC architecture extensible.
+
+5. Authentication
+
+Implement secure authentication.
+
+Required functionality:
+
+Login
+Logout
+Registration where appropriate
+Password hashing
+Password reset
+Email verification if applicable
+Session/token management
+Role-based authorization
+Inactivity timeout
+
+Never store plaintext passwords.
+
+Never store secrets directly in source code.
+
+Use environment variables:
+
+DATABASE_URL=
+JWT_SECRET=
+SESSION_SECRET=
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+AI_API_KEY=
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASSWORD=
+6. Gmail / Email Configuration
+
+If email notifications are implemented through Gmail SMTP, do not ask users to provide their normal Gmail password.
+
+Use a Gmail App Password when the Google account supports it.
+
+Expected configuration:
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-16-character-app-password
+SMTP_SECURE=false
+
+Codex must:
+
+Never hardcode the App Password.
+Never commit .env.
+Add .env to .gitignore.
+Provide .env.example.
+Never print SMTP credentials in logs.
+7. Database Design
+
+Create a normalized relational database.
+
+At minimum, implement these entities.
+
+User
+User
+- id
+- name
+- email
+- passwordHash
+- role
+- phone
+- status
+- createdAt
+- updatedAt
+- lastLoginAt
+Patient
+Patient
+- id
+- userId
+- dateOfBirth
+- gender
+- bloodGroup
+- address
+- emergencyContact
+- createdAt
+- updatedAt
+Doctor
+Doctor
+- id
+- userId
+- specialization
+- licenseNumber
+- departmentId
+- availability
+- createdAt
+- updatedAt
+Appointment
+Appointment
+- id
+- patientId
+- doctorId
+- appointmentDate
+- startTime
+- endTime
+- status
+- reason
+- notes
+- createdAt
+- updatedAt
+MedicalRecord
+MedicalRecord
+- id
+- patientId
+- doctorId
+- appointmentId
+- diagnosis
+- symptoms
+- treatmentPlan
+- notes
+- createdAt
+- updatedAt
+Prescription
+Prescription
+- id
+- patientId
+- doctorId
+- medicalRecordId
+- medication
+- dosage
+- frequency
+- duration
+- instructions
+- createdAt
+MedicalDocument
+MedicalDocument
+- id
+- patientId
+- uploadedBy
+- documentType
+- originalFileName
+- cloudinaryUrl
+- extractedText
+- mimeType
+- fileSize
+- createdAt
+Vital
+Vital
+- id
+- patientId
+- recordedBy
+- heartRate
+- bloodPressure
+- oxygenLevel
+- temperature
+- respiratoryRate
+- recordedAt
+Invoice
+Invoice
+- id
+- patientId
+- appointmentId
+- amount
+- status
+- invoiceNumber
+- issuedAt
+- paidAt
+AuditLog
+AuditLog
+- id
+- userId
+- action
+- entityType
+- entityId
+- timestamp
+- ipAddress
+- metadata
+AIInteraction
+AIInteraction
+- id
+- patientId
+- sessionId
+- input
+- inputType
+- extractedSymptoms
+- response
+- createdAt
+8. Patient Dashboard
+
+The patient dashboard is one of the most important modules.
+
+Implement:
+
+Patient Dashboard
+│
+├── Overview
+├── Profile
+├── Medical History
+├── Consultations
+├── Prescriptions
+├── Laboratory Reports
+├── Medical Documents
+├── Appointments
+├── Billing
+├── AI Assistant
+├── Voice Symptom Input
+└── Notifications
+
+Patients must only be able to access their own records.
+
+A request such as:
+
+GET /patients/123/records
+
+must verify that the logged-in user actually owns patient 123.
+
+Never trust IDs supplied by the frontend.
+
+9. Doctor Dashboard
+
+Implement:
+
+Doctor Dashboard
+│
+├── Overview
+├── Assigned Patients
+├── Patient Search
+├── Patient Medical History
+├── Consultations
+├── Prescriptions
+├── Diagnosis
+├── Treatment Plans
+├── Medical Reports
+├── Appointments
+├── Patient Vitals
+├── Emergency Alerts
+└── Notifications
+
+Doctors can update prescriptions, diagnoses and medical histories in real time from authorized terminals.
+
+Authorization must verify that the doctor has permission to access the patient.
+
+10. Admin Dashboard
+
+Implement:
+
+Admin Dashboard
+│
+├── Overview
+├── Users
+│   ├── Patients
+│   └── Doctors
+├── Departments
+├── Appointments
+├── Billing
+├── Reports
+├── Hospital Analytics
+├── Audit Logs
+├── Security Events
+└── System Configuration
+
+The administrator should be able to manage users, doctors, patients, appointments, schedules, departments, reports and system configuration.
+
+11. RBAC
+
+Implement centralized authorization middleware.
+
+Example:
+
+requireAuth()
+requireRole("ADMIN")
+requireRole("DOCTOR")
+requireRole("PATIENT")
+
+But don't rely only on role.
+
+Also implement resource-level authorization.
+
+Example:
+
+PATIENT
+    ↓
+Can access own records only
+
+DOCTOR
+    ↓
+Can access assigned/authorized patients
+
+ADMIN
+    ↓
+Can manage system according to administrative permissions
+
+Never implement authorization solely in the frontend.
+
+12. Emergency Access
+
+The requirements specify that an on-duty nurse may override normal restrictions during a declared emergency.
+
+Implement emergency access as a controlled "break-glass" mechanism.
+
+Requirements:
+
+Emergency declared
+       ↓
+Authorized nurse requests emergency access
+       ↓
+System verifies authorization
+       ↓
+Require emergency reason
+       ↓
+Temporary access granted
+       ↓
+Critical patient data displayed
+       ↓
+Every action recorded in AuditLog
+       ↓
+Emergency access expires
+
+Every emergency access event must record:
+
+user
+patient
+reason
+timestamp
+IP
+records accessed
+actions performed
+expiration
+
+Do not create an unrestricted bypass.
+
+13. Medical Records
+
+Medical history should support lifelong records.
+
+The requirements specify storage of consultation history, prescriptions, diagnoses and reports.
+
+Each medical record should contain:
+
+Patient
+Doctor
+Date
+Symptoms
+Diagnosis
+Treatment
+Prescription
+Notes
+Attached Documents
+Follow-up
+
+Doctors can create/update records.
+
+Patients can view their records.
+
+Patients must not be able to modify physician-authored medical records.
+
+14. Appointment System
+
+Implement:
+
+Search doctors
+        ↓
+Select specialization
+        ↓
+View availability
+        ↓
+Select date/time
+        ↓
+Book appointment
+        ↓
+Confirmation
+        ↓
+Reminder
+        ↓
+Doctor consultation
+        ↓
+Complete consultation
+        ↓
+Generate invoice
+
+Required operations:
+
+Book
+View
+Reschedule
+Cancel
+Confirm
+Complete
+
+The system must prevent double booking.
+
+Use database-level constraints/transactions where appropriate.
+
+15. Automated Billing
+
+When a doctor marks a consultation:
+
+COMPLETED
+
+the backend should automatically trigger invoice creation.
+
+Flow:
+
+Doctor completes consultation
+          ↓
+Backend transaction
+          ↓
+Consultation status = COMPLETED
+          ↓
+Invoice generated
+          ↓
+Patient notified
+          ↓
+Admin notified
+
+The requirement specifically calls for automatic billing immediately after consultation completion.
+
+Prevent duplicate invoices if the request is retried.
+
+Use idempotency/unique constraints.
+
+16. Real-Time Vital Monitoring
+
+The system should support:
+
+Heart rate
+Blood pressure
+Oxygen saturation
+Temperature
+Respiratory rate
+
+The requirements specify automatic alerts when readings cross defined thresholds.
+
+Architecture:
+
+Vital Device / Input
+        ↓
+Backend
+        ↓
+Validate reading
+        ↓
+Save Vital
+        ↓
+Threshold Engine
+        ↓
+Normal ──────────→ Save
+        │
+        ↓
+Abnormal
+        ↓
+Create Alert
+        ↓
+Notify Assigned Doctor
+
+Use WebSockets/SSE or another appropriate real-time mechanism for the dashboard.
+
+Do not rely solely on frontend timers.
+
+17. Threshold System
+
+Do not hardcode thresholds throughout the application.
+
+Create configurable thresholds.
+
+Example:
+
+VitalThreshold
+- vitalType
+- minimum
+- maximum
+- severity
+- enabled
+
+Example:
+
+Heart Rate
+min = ...
+max = ...
+
+Oxygen
+min = ...
+
+The actual medical thresholds should be configurable by authorized hospital personnel and validated against the project's clinical requirements.
+
+18. AI Chatbot
+
+The patient dashboard must include an AI assistant.
+
+The requirements specify that it should answer healthcare questions, explain prescriptions/reports, assist with appointments, recommend departments, perform preliminary symptom analysis, and identify situations requiring immediate attention.
+
+Architecture:
+
+Patient
+   ↓
+Chat UI
+   ↓
+Backend AI endpoint
+   ↓
+Safety / input validation
+   ↓
+AI provider
+   ↓
+Response validation
+   ↓
+Patient
+
+Never expose the AI provider API key to the browser.
+
+19. AI Safety
+
+This is particularly important because the application deals with healthcare.
+
+The AI must not claim to provide a definitive medical diagnosis.
+
+Use language such as:
+
+This information is for preliminary guidance only
+and does not replace evaluation by a licensed healthcare professional.
+
+The source requirements explicitly state that the chatbot is preliminary guidance and does not replace a doctor's diagnosis.
+
+Implement emergency escalation.
+
+For example, if the AI detects potentially urgent symptoms:
+
+Potential emergency
+       ↓
+Show emergency warning
+       ↓
+Recommend immediate professional/emergency care
+       ↓
+Do not provide false reassurance
+
+Do not let the model invent medications, prescriptions, or definitive diagnoses.
+
+20. Speech-to-Text
+
+Implement voice input for patients who have difficulty typing.
+
+The specified workflow is:
+
+Microphone
+   ↓
+Speech
+   ↓
+Speech-to-text
+   ↓
+Text
+   ↓
+NLP symptom extraction
+   ↓
+AI analysis
+   ↓
+Response
+
+The requirements specifically describe speech-to-text followed by NLP symptom extraction and AI analysis.
+
+UI:
+
+[ 🎤 Speak your symptoms ]
+
+"Since yesterday I have fever and headache..."
+
+Then display:
+
+Detected symptoms:
+✓ Fever
+✓ Headache
+
+Allow the patient to correct the extracted symptoms before analysis.
+
+21. Store Voice-Derived Symptoms
+
+The requirements state that symptoms can be automatically saved in the patient's medical history.
+
+However, do not silently create a physician-authored diagnosis.
+
+Store:
+
+Source = AI / PATIENT_REPORTED
+
+rather than presenting the AI result as a doctor's diagnosis.
+
+Example:
+
+Patient-reported symptoms:
+Fever
+Headache
+Fatigue
+
+Source:
+Patient via voice assistant
+
+AI preliminary assessment:
+...
+22. OCR
+
+Implement document OCR.
+
+The specified workflow is:
+
+Patient uploads image/PDF
+        ↓
+Validate file
+        ↓
+OCR
+        ↓
+Extract text
+        ↓
+Display extracted information
+        ↓
+Patient confirms/corrects
+        ↓
+Save structured data
+        ↓
+Upload original document to Cloudinary
+        ↓
+Save Cloudinary reference in DB
+
+This is consistent with the provided requirements.
+
+23. OCR Document Types
+
+Support:
+
+Prescriptions
+Laboratory reports
+Blood test reports
+Medical certificates
+Referral letters
+Discharge summaries
+Other medical documents
+
+The source specifically lists these document categories.
+
+24. OCR Validation
+
+Never automatically assume OCR is correct.
+
+For example:
+
+OCR detected:
+
+Medicine: Amoxicillin
+Dosage: 500mg
+Frequency: 2/day
+
+Show:
+
+Is this information correct?
+
+[Edit] [Confirm]
+
+Only save confirmed structured information.
+
+This is particularly important for prescriptions because OCR errors could alter medication information.
+
+25. Cloudinary Integration
+
+Cloudinary should store the original uploaded files.
+
+The source requirements specify storing medical reports, prescriptions, X-rays, MRI scans, CT scans, profile images and other healthcare documents.
+
+Architecture:
+
+Browser
+   ↓
+Backend
+   ↓
+Validate file
+   ↓
+Cloudinary
+   ↓
+Cloudinary URL
+   ↓
+Database
+
+Database should contain metadata and the Cloudinary reference rather than storing large files directly.
+
+The source explicitly describes saving the Cloudinary URL and metadata in the database while the actual files remain in cloud storage.
+
+26. Cloudinary Security
+
+Do not expose unrestricted Cloudinary credentials.
+
+Use:
+
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+
+Never put:
+
+CLOUDINARY_API_SECRET
+
+in frontend code.
+
+Use authenticated/private delivery where appropriate for sensitive medical documents.
+
+Do not make medical records publicly accessible merely because they have a URL.
+
+27. File Validation
+
+Before uploading:
+
+Validate MIME type
+Validate extension
+Validate file size
+Validate content
+Generate safe filename
+Virus/malware scanning if available
+
+Reject unsupported files.
+
+Do not trust:
+
+filename
+Content-Type
+client-side validation
+
+alone.
+
+28. Audit Logging
+
+Every sensitive operation must be logged.
+
+The requirements call for a complete and immutable audit log of access and modifications.
+
+Log events such as:
+
+LOGIN
+LOGOUT
+PATIENT_RECORD_VIEW
+PATIENT_RECORD_UPDATE
+PRESCRIPTION_CREATED
+PRESCRIPTION_UPDATED
+DOCUMENT_UPLOADED
+DOCUMENT_VIEWED
+DOCUMENT_DELETED
+APPOINTMENT_CREATED
+APPOINTMENT_CANCELLED
+INVOICE_CREATED
+AI_INTERACTION
+OCR_PROCESSED
+EMERGENCY_ACCESS
+VITAL_ALERT
+
+Include:
+
+actor
+role
+timestamp
+action
+resource
+resourceId
+IP
+metadata
+29. Audit Log Immutability
+
+Do not provide normal users with:
+
+UPDATE /audit-log
+DELETE /audit-log
+
+Audit records should be append-only.
+
+If the project needs stronger immutability, use an append-only storage mechanism or database controls appropriate to the deployment environment.
+
+30. Session Timeout
+
+The system requires a 2-minute inactivity timeout for all users.
+
+Implement both:
+
+Frontend
+
+Track:
+
+mousemove
+keydown
+click
+touch
+scroll
+
+Reset inactivity timer.
+
+Backend
+
+Do not rely on frontend alone.
+
+The server/session layer must also enforce expiration.
+
+Flow:
+
+No activity for 2 minutes
+        ↓
+Session expires
+        ↓
+User redirected to login
+        ↓
+Sensitive page inaccessible
+31. Notifications
+
+Implement notification infrastructure.
+
+Required notification types include:
+
+Appointment reminders
+Medicine reminders
+Billing notifications
+Emergency alerts
+Report upload notifications
+
+These are explicitly included in the requirements.
+
+Create a reusable notification service instead of implementing email/SMS logic separately in every module.
+
+32. Email Notifications
+
+Create a centralized service:
+
+NotificationService
+    ├── Email
+    ├── In-App
+    └── Future SMS/WhatsApp
+
+Examples:
+
+Appointment booked
+Appointment reminder
+Invoice generated
+Emergency alert
+Report uploaded
+Password reset
+
+For Gmail SMTP, use an App Password rather than the account's normal password.
+
+33. API Design
+
+Use consistent REST endpoints, for example:
+
+/auth/login
+/auth/logout
+/auth/refresh
+
+/users
+/users/:id
+
+/patients
+/patients/:id
+/patients/:id/records
+
+/doctors
+/doctors/:id
+/doctors/:id/patients
+
+/appointments
+/appointments/:id
+
+/prescriptions
+/prescriptions/:id
+
+/medical-records
+/medical-records/:id
+
+/documents
+/documents/:id
+
+/ocr/process
+
+/vitals
+/vitals/:patientId
+
+/alerts
+
+/invoices
+/invoices/:id
+
+/notifications
+
+/ai/chat
+/ai/symptoms
+
+/audit-logs
+
+Use HTTP status codes consistently.
+
+34. Frontend Security
+
+Never trust frontend role checks.
+
+This:
+
+if (user.role === "ADMIN") {
+   showAdminPanel();
+}
+
+is useful for UI only.
+
+It is not authorization.
+
+Backend must independently verify permissions.
+
+35. Data Privacy
+
+Medical information is highly sensitive.
+
+Implement:
+
+Encryption in transit
+Encryption at rest where appropriate
+Secure cookies/tokens
+Password hashing
+RBAC
+Resource-level authorization
+Audit logging
+Secure file access
+Minimal data exposure
+Secure API responses
+No sensitive information in logs
+
+Never log:
+
+passwords
+tokens
+API keys
+App Passwords
+medical documents
+full AI conversations
+
+unless there is a specifically justified and secured audit requirement.
+
+36. Environment Configuration
+
+Create:
+
+.env
+.env.example
+
+.env.example should contain placeholders:
+
+DATABASE_URL=
+
+AUTH_SECRET=
+
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+
+AI_API_KEY=
+
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASSWORD=
+
+.env must never be committed.
+
+37. Error Handling
+
+Every API should return predictable errors.
+
+Example:
+
+{
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "You are not authorized to access this resource."
+  }
+}
+
+Do not return internal stack traces to users.
+
+Log detailed errors server-side.
+
+38. Loading and Empty States
+
+Every dashboard must handle:
+
+Loading
+Success
+Empty
+Error
+Unauthorized
+Session expired
+
+For example:
+
+No appointments found.
+
+rather than displaying a blank screen.
+
+39. Responsive Design
+
+The patient dashboard should be especially simple.
+
+Support:
+
+Desktop
+Tablet
+Mobile
+
+The source emphasizes accessibility, including voice input for elderly, disabled and visually impaired users.
+
+Use:
+
+Large buttons
+Clear labels
+Keyboard accessibility
+Screen-reader-friendly controls
+High-contrast UI
+Visible microphone controls
+Simple navigation
+40. Recommended Project Structure
+
+Codex should aim for something similar to:
+
+src/
+│
+├── app/
+├── components/
+├── pages/
+│   ├── auth/
+│   ├── admin/
+│   ├── doctor/
+│   └── patient/
+│
+├── modules/
+│   ├── auth/
+│   ├── users/
+│   ├── patients/
+│   ├── doctors/
+│   ├── appointments/
+│   ├── medical-records/
+│   ├── prescriptions/
+│   ├── billing/
+│   ├── vitals/
+│   ├── notifications/
+│   ├── documents/
+│   ├── ocr/
+│   ├── ai/
+│   └── audit/
+│
+├── services/
+│   ├── cloudinary/
+│   ├── email/
+│   ├── ai/
+│   ├── ocr/
+│   └── notifications/
+│
+├── middleware/
+│   ├── auth/
+│   ├── authorization/
+│   ├── audit/
+│   └── error/
+│
+├── database/
+├── utils/
+└── tests/
+
+Adapt this to the repository's existing framework rather than blindly creating this exact structure.
+
+41. Testing Requirements
+
+Codex should write tests for every major module.
+
+Authentication
+Login success
+Wrong password
+Unknown user
+Expired session
+Logout
+RBAC
+Patient cannot access another patient
+Doctor cannot access unauthorized patient
+Admin permissions work
+Unauthorized API requests rejected
+Appointments
+Book appointment
+Double booking prevented
+Cancel appointment
+Reschedule appointment
+Billing
+Consultation completion creates invoice
+Repeated completion does not create duplicate invoice
+OCR
+Valid file accepted
+Invalid file rejected
+OCR result stored
+Original document stored
+Cloudinary
+Upload succeeds
+Upload failure handled
+Unauthorized file access prevented
+AI
+Chat endpoint works
+API key never exposed
+Emergency symptoms trigger warning
+AI output does not become physician diagnosis
+Audit
+Sensitive operation creates log
+Log cannot be modified through normal API
+Emergency access creates audit event
+42. Seed Data
+
+Create development seed data.
+
+Example:
+
+Admin:
+admin@example.com
+
+Doctor:
+doctor@example.com
+
+Patient:
+patient@example.com
+
+Do not use real patient data.
+
+Use obviously fake/demo information.
+
+Create:
+
+Doctors
+Patients
+Appointments
+Medical records
+Prescriptions
+Invoices
+Vitals
+Documents
+
+so the dashboards can be tested immediately.
+
+43. Dashboard Workflow
+Patient
+Login
+ ↓
+Dashboard
+ ↓
+View health summary
+ ↓
+View appointments
+ ↓
+View records
+ ↓
+Chat with AI
+ ↓
+Upload report
+ ↓
+OCR
+ ↓
+Confirm extracted data
+ ↓
+Document stored
+Doctor
+Login
+ ↓
+Doctor Dashboard
+ ↓
+View assigned patients
+ ↓
+Open patient
+ ↓
+Review history
+ ↓
+Monitor vitals
+ ↓
+Receive alerts
+ ↓
+Consult patient
+ ↓
+Update diagnosis
+ ↓
+Create prescription
+ ↓
+Complete consultation
+ ↓
+Invoice automatically generated
+Admin
+Login
+ ↓
+Admin Dashboard
+ ↓
+Manage users
+ ↓
+Manage doctors
+ ↓
+Manage appointments
+ ↓
+View billing
+ ↓
+View reports
+ ↓
+Review audit logs
+ ↓
+Manage system configuration
+44. Codex Development Order
+
+This is the most important part.
+
+Tell Codex to implement in exactly this general sequence.
+
+Phase 1 — Repository Analysis
+
+Before changing anything:
+
+Inspect repository
+Identify framework
+Identify frontend
+Identify backend
+Identify database
+Identify existing authentication
+Identify package manager
+Identify environment configuration
+Identify existing tests
+Identify existing UI components
+
+Then produce a short architecture report.
+
+Do not start rewriting the application before this analysis.
+
+Phase 2 — Foundation
+
+Implement:
+
+Database
+Environment configuration
+Authentication
+User model
+Roles
+RBAC middleware
+Error handling
+Logging
+Base API structure
+
+Test this completely.
+
+Phase 3 — Core Users
+
+Implement:
+
+Admin
+Doctor
+Patient
+Profiles
+Role dashboards
+Phase 4 — Appointments
+
+Implement:
+
+Doctor availability
+Appointment booking
+Rescheduling
+Cancellation
+Appointment status
+Notifications
+Phase 5 — Medical Records
+
+Implement:
+
+Medical history
+Consultations
+Diagnoses
+Prescriptions
+Treatment plans
+Doctor updates
+Patient read-only access
+Phase 6 — Documents + Cloudinary
+
+Implement:
+
+Upload
+Validation
+Cloudinary
+Metadata
+Secure retrieval
+Medical document UI
+Phase 7 — OCR
+
+Implement:
+
+OCR upload
+Text extraction
+Structured extraction
+Review screen
+Confirmation
+Database storage
+Cloudinary storage
+Phase 8 — AI
+
+Implement:
+
+AI chat
+Symptom extraction
+Preliminary analysis
+Department recommendation
+Emergency warnings
+AI interaction storage
+Safety rules
+Phase 9 — Voice
+
+Implement:
+
+Microphone
+Speech-to-text
+Symptom extraction
+Editable transcript
+AI analysis
+Patient-reported symptom storage
+Phase 10 — Vitals
+
+Implement:
+
+Vital recording
+Thresholds
+Real-time updates
+Alerts
+Doctor notifications
+Phase 11 — Billing
+
+Implement:
+
+Invoice generation
+Invoice history
+Invoice download
+Payment status
+Automatic generation after consultation
+Phase 12 — Notifications
+
+Implement:
+
+In-app notifications
+Email notifications
+Appointment reminders
+Billing notifications
+Emergency notifications
+Phase 13 — Audit + Security
+
+Implement:
+
+Audit logging
+Emergency access logging
+Session timeout
+Security headers
+Rate limiting
+Input validation
+File validation
+Access control review
+Phase 14 — Testing
+
+Run:
+
+Unit tests
+Integration tests
+API tests
+Authorization tests
+UI tests
+Security tests
+
+Fix all failures.
+
+Phase 15 — Final Review
+
+Codex should perform a final review against every requirement:
+
+R1 ✓
+R2 ✓
+R3 ✓
+R4 ✓
+R5 ✓
+R6 ✓
+R7 ✓
+R8 ✓
+
+AI ✓
+Voice ✓
+OCR ✓
+Cloudinary ✓
+Appointments ✓
+Billing ✓
+Notifications ✓
+RBAC ✓
+Audit ✓
+
+Do not mark a requirement complete simply because the UI exists. Verify the complete backend workflow.
+
+45. Definition of Done
+
+A feature is only considered complete when:
+
+UI implemented
++
+API implemented
++
+Database implemented
++
+Authorization implemented
++
+Validation implemented
++
+Error handling implemented
++
+Audit logging implemented where required
++
+Tests written
++
+Tests passing
++
+No secrets committed
+46. Final Master Prompt for Codex
+
+You can paste the following directly into Codex:
+
+Smart Healthcare Management System — Codex Master Implementation Instructions
+
+You are the lead software engineer responsible for implementing the Smart Healthcare Management System described in this specification.
+
+Objective
+
+Build a secure, modular, production-quality healthcare management platform with three primary roles:
+
+ADMIN
+DOCTOR
+PATIENT
+
+The system must support:
+
+Authentication
+Role-based access control
+Patient management
+Doctor management
+Appointments
+Medical records
+Prescriptions
+Diagnoses and treatment plans
+Medical document uploads
+OCR
+Cloudinary storage
+AI healthcare chatbot
+Speech-to-text symptom input
+Preliminary symptom analysis
+Real-time patient vitals
+Doctor alerts
+Emergency access
+Automated billing
+Notifications
+Immutable/append-only audit logging
+2-minute inactivity session timeout
+Critical Engineering Rules
+First inspect the existing repository and identify the existing stack.
+Do not replace the existing architecture unnecessarily.
+Reuse existing components and services where appropriate.
+Do not hardcode secrets.
+Never expose API keys or Cloudinary secrets to the frontend.
+Never store plaintext passwords.
+Never trust frontend authorization.
+Every sensitive backend endpoint must perform authorization.
+Patients can access only their own records.
+Doctors can access only patients they are authorized to treat.
+Admin permissions must be explicitly enforced.
+Emergency access must be controlled and audited.
+AI output must never be presented as a definitive medical diagnosis.
+OCR results must be reviewable/correctable before being treated as structured medical information.
+Medical documents must be stored securely.
+Audit logs must be append-only.
+The server must enforce session expiration; frontend inactivity handling alone is insufficient.
+Do not commit .env.
+Create .env.example.
+Do not log passwords, API keys, tokens, App Passwords, or unnecessary sensitive medical information.
+Development Process
+
+Work incrementally.
+
+For every phase:
+
+Inspect current implementation.
+Plan changes.
+Implement changes.
+Run tests.
+Run lint/type checks.
+Fix failures.
+Verify authorization.
+Continue only after the phase is stable.
+
+Do not attempt a complete rewrite in a single step.
+
+Phase Order
+Phase 1
+
+Repository and architecture analysis.
+
+Phase 2
+
+Database, authentication, roles, RBAC, middleware and error handling.
+
+Phase 3
+
+Admin, Doctor and Patient dashboards.
+
+Phase 4
+
+Appointments and scheduling.
+
+Phase 5
+
+Medical records, consultations, diagnoses and prescriptions.
+
+Phase 6
+
+Medical document upload and Cloudinary integration.
+
+Phase 7
+
+OCR processing and document-data extraction.
+
+Phase 8
+
+AI healthcare chatbot and symptom analysis.
+
+Phase 9
+
+Speech-to-text symptom input.
+
+Phase 10
+
+Real-time vital monitoring and alerts.
+
+Phase 11
+
+Automated billing and invoices.
+
+Phase 12
+
+Notifications and email integration.
+
+Phase 13
+
+Audit logging, emergency access and security hardening.
+
+Phase 14
+
+Complete unit/integration/API/security/UI testing.
+
+Phase 15
+
+Requirement-by-requirement final verification.
+
+Authentication
+
+Implement secure authentication and authorization.
+
+Use environment variables for all secrets.
+
+If Gmail SMTP is used, configure it using a Gmail App Password rather than the normal Gmail account password.
+
+Example:
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+
+Never commit these credentials.
+
+Roles
+
+ADMIN:
+
+Manage doctors and patients
+Manage hospital operations
+Manage appointments
+View reports and analytics
+Manage departments
+View audit/security events
+Manage system configuration
+
+DOCTOR:
+
+View authorized patients
+View medical history
+Manage consultations
+Create/update prescriptions
+Add diagnoses
+Add treatment plans
+Upload reports
+Monitor vitals
+Receive alerts
+Manage appointments
+
+PATIENT:
+
+View own profile
+View medical history
+View consultations
+View prescriptions
+View reports
+Upload documents
+Book/reschedule/cancel appointments
+View billing
+Interact with AI assistant
+Use voice symptom input
+
+Design RBAC so a NURSE role can be added for emergency access.
+
+Medical Records
+
+Support lifelong patient records containing:
+
+Symptoms
+Diagnoses
+Treatment plans
+Prescriptions
+Consultations
+Reports
+Follow-up information
+
+Patient records must be protected by resource-level authorization.
+
+Appointments
+
+Implement:
+
+Doctor availability
+Booking
+Rescheduling
+Cancellation
+Appointment confirmation
+Appointment reminders
+Double-booking prevention
+Billing
+
+When a doctor completes a consultation:
+
+Mark consultation completed.
+Generate exactly one invoice.
+Make invoice available to patient/admin.
+Trigger notification.
+
+Use database constraints/idempotency to prevent duplicate invoices.
+
+AI Chatbot
+
+Implement a backend AI service.
+
+Capabilities:
+
+Healthcare questions
+Portal guidance
+Appointment assistance
+Prescription explanations
+Lab report explanations
+Department recommendations
+Preliminary symptom analysis
+Urgency guidance
+
+The AI must explicitly communicate that it provides preliminary information and does not replace a licensed doctor.
+
+Never allow AI-generated information to silently become a physician diagnosis.
+
+Voice
+
+Implement:
+
+Microphone → speech-to-text → transcript → symptom extraction → user review → AI analysis → result.
+
+Allow users to edit the transcript/symptoms before analysis.
+
+Store voice-derived symptoms as patient-reported/AI-assisted information rather than physician-authored diagnosis.
+
+OCR
+
+Support uploaded:
+
+Prescriptions
+Lab reports
+Blood test reports
+Medical certificates
+Referral letters
+Discharge summaries
+Other medical documents
+
+Workflow:
+
+Upload → validate → OCR → extract text → display → user review → confirm → save structured data → upload original to Cloudinary.
+
+Never trust OCR blindly for medical information.
+
+Cloudinary
+
+Store original medical files securely.
+
+Store database metadata such as:
+
+Cloudinary identifier
+URL/reference
+File type
+Original filename
+Patient
+Uploader
+Upload timestamp
+Extracted text
+
+Do not expose unrestricted Cloudinary credentials.
+
+Use secure/private delivery for sensitive documents where appropriate.
+
+Vitals
+
+Support:
+
+Heart rate
+Blood pressure
+Oxygen level
+Temperature
+Respiratory rate
+
+Create configurable thresholds.
+
+When a vital exceeds its configured threshold:
+
+Store the reading.
+Create an alert.
+Notify the assigned doctor.
+Record the event in the audit system.
+
+Use a real-time transport such as WebSockets/SSE where appropriate.
+
+Emergency Access
+
+Implement controlled break-glass access.
+
+The authorized user must:
+
+Be on duty/authorized.
+Provide a reason.
+Receive temporary access.
+Access only necessary critical data.
+Have every action logged.
+
+Emergency access must expire automatically.
+
+Audit Logging
+
+Record all sensitive actions including:
+
+Login
+Logout
+Record access
+Record modification
+Prescription changes
+Document access
+Document upload
+Appointment changes
+Invoice creation
+AI interactions where appropriate
+OCR processing
+Vital alerts
+Emergency access
+
+Audit records must be append-only and inaccessible for modification/deletion through ordinary application APIs.
+
+Session Security
+
+Enforce a two-minute inactivity timeout.
+
+Implement it on both:
+
+Frontend
+Backend/session layer
+
+After two minutes of inactivity:
+
+Expire session.
+Require authentication again.
+Prevent access to protected resources.
+Notifications
+
+Implement a centralized notification service supporting:
+
+In-app notifications
+Email
+
+Support:
+
+Appointment reminders
+Medicine reminders
+Billing notifications
+Emergency alerts
+Report upload notifications
+Security
+
+Implement:
+
+Secure password hashing
+Input validation
+Authorization
+RBAC
+Resource-level access control
+Rate limiting where appropriate
+Secure headers
+Secure cookies/tokens
+File validation
+Secure Cloudinary access
+Audit logging
+Session timeout
+Secret management
+Testing
+
+Write tests for:
+
+Authentication
+RBAC
+Patient isolation
+Doctor authorization
+Appointment booking
+Double-booking prevention
+Billing idempotency
+OCR
+Cloudinary uploads
+AI endpoint
+Emergency warnings
+Emergency access
+Audit logging
+Session timeout
+Vital threshold alerts
+Final Verification
+
+Before declaring the project complete, verify every requirement individually:
+
+R1 — Real-time vital monitoring and doctor alerts.
+R2 — Secure role-based patient data access.
+R3 — Controlled emergency override with logging.
+R4 — Automatic billing after consultation.
+R5 — Real-time authorized doctor record updates.
+R6 — Append-only audit logging.
+R7 — Patient self-service portal.
+R8 — Two-minute inactivity timeout.
+
+Also verify:
+
+AI chatbot
+Speech recognition
+Symptom extraction
+OCR
+Cloudinary
+Appointments
+Medical history
+Prescriptions
+Notifications
+Security
+Testing
+
+Do not claim a feature is complete merely because its frontend exists. Verify the complete workflow from UI → backend → database/external service → authorization → error handling → audit logging → tests.
+
+At the end of each implementation phase, report:
+
+What was implemented.
+Files changed.
+Database changes.
+APIs added/changed.
+Security considerations.
+Tests added.
+Test results.
+Remaining work.
+
+Begin by inspecting the repository. Do not implement anything until you understand the existing project structure and technology stack.
+
+The above implementation plan follows the supplied specification, including the three roles, AI assistant, voice workflow, OCR workflow, Cloudinary storage, vital monitoring, billing, RBAC, audit logging and session timeout.
+
+One important recommendation: because this is a healthcare system, I'd have Codex treat the AI symptom checker as a decision-support/preliminary guidance feature, not as an autonomous diagnostic system. That distinction is already present in your requirements and should remain enforced throughout the implementation.

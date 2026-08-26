@@ -1,0 +1,164 @@
+"""Validated application settings.
+
+Every value the API needs is declared here and checked at import time. A
+missing or malformed required value stops the process at startup rather than
+surfacing later as a 500 during a login.
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The repo keeps one .env at the root, shared by the API and the tooling.
+REPO_ROOT = Path(__file__).resolve().parents[3]
+ENV_FILE = REPO_ROOT / ".env"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE,
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=True,
+    )
+
+    # --- Runtime ---------------------------------------------------------
+    NODE_ENV: str = "development"
+    PORT: int = 4000
+    CLIENT_ORIGIN: str = "http://localhost:3000"
+
+    # --- Database --------------------------------------------------------
+    DATABASE_URL: str = ""
+    DIRECT_URL: str = ""
+
+    # --- Authentication --------------------------------------------------
+    JWT_SECRET: str = ""
+    SESSION_SECRET: str = ""
+    SESSION_IDLE_TIMEOUT_SECONDS: int = 120
+    SESSION_ABSOLUTE_TIMEOUT_SECONDS: int = 43_200
+
+    # --- Supabase Storage ------------------------------------------------
+    SUPABASE_URL: str = ""
+    SUPABASE_PUBLISHABLE_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_DOCUMENTS_BUCKET: str = "medical-documents"
+    SUPABASE_AVATARS_BUCKET: str = "avatars"
+    SUPABASE_SIGNED_URL_TTL_SECONDS: int = 300
+
+    # --- AI provider -----------------------------------------------------
+    AI_API_KEY: str = ""
+    AI_MODEL: str = "gemini-2.0-flash"
+    AI_ENABLED: bool = True
+
+    # --- OCR -------------------------------------------------------------
+    OCR_ENABLED: bool = True
+    OCR_DET_MODEL: str = "PP-OCRv5_mobile_det"
+    OCR_REC_MODEL: str = "PP-OCRv5_mobile_rec"
+    # PaddlePaddle 3.3.1 on Windows CPU crashes in the oneDNN executor with
+    # "ConvertPirAttribute2RuntimeAttribute not support". Plain kernels work.
+    OCR_ENABLE_MKLDNN: bool = False
+    # Below this, a field is always sent for human review regardless of type.
+    OCR_CONFIDENCE_REVIEW_THRESHOLD: float = 0.90
+
+    # --- Email -----------------------------------------------------------
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_SECURE: bool = False
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "MediSense <no-reply@medisense.local>"
+    EMAIL_ENABLED: bool = False
+
+    # --- Derived ---------------------------------------------------------
+
+    @property
+    def is_production(self) -> bool:
+        return self.NODE_ENV == "production"
+
+    @property
+    def is_test(self) -> bool:
+        return self.NODE_ENV == "test"
+
+    @property
+    def storage_configured(self) -> bool:
+        return bool(self.SUPABASE_URL and self.SUPABASE_SERVICE_ROLE_KEY)
+
+    @property
+    def ai_configured(self) -> bool:
+        return self.AI_ENABLED and bool(self.AI_API_KEY)
+
+    @property
+    def email_configured(self) -> bool:
+        return self.EMAIL_ENABLED and bool(self.SMTP_USER and self.SMTP_PASSWORD)
+
+    @property
+    def async_database_url(self) -> str:
+        """Runtime URL for SQLAlchemy's asyncpg driver.
+
+        Supabase's transaction-mode pooler speaks the ``pgbouncer=true`` query
+        flag, which asyncpg does not understand, so it is stripped here and the
+        prepared-statement cache is disabled instead (see ``db/session.py``).
+        """
+        return _to_asyncpg(self.DATABASE_URL)
+
+    @property
+    def migration_database_url(self) -> str:
+        """Sync URL for Alembic, over the direct (session-mode) connection.
+
+        The transaction pooler cannot run DDL, so migrations must not use it.
+        """
+        base = self.DIRECT_URL or self.DATABASE_URL
+        return _to_psycopg(base)
+
+    @field_validator("JWT_SECRET", "SESSION_SECRET")
+    @classmethod
+    def _secret_long_enough(cls, value: str, info) -> str:
+        # Tests supply their own; only a real run must have a real secret.
+        import os
+
+        if os.getenv("NODE_ENV") == "test":
+            return value or ("test" * 10)
+        if len(value) < 32:
+            raise ValueError(
+                f"{info.field_name} must be at least 32 characters. "
+                'Generate one with: python -c "import secrets;print(secrets.token_urlsafe(48))"'
+            )
+        return value
+
+
+def _strip_query_key(url: str, key: str) -> str:
+    parts = urlsplit(url)
+    if not parts.query:
+        return url
+    kept = [q for q in parts.query.split("&") if not q.startswith(f"{key}=")]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "&".join(kept), parts.fragment))
+
+
+def _swap_scheme(url: str, scheme: str) -> str:
+    parts = urlsplit(url)
+    return urlunsplit((scheme, parts.netloc, parts.path, parts.query, parts.fragment))
+
+
+def _to_asyncpg(url: str) -> str:
+    if not url:
+        return ""
+    return _swap_scheme(_strip_query_key(url, "pgbouncer"), "postgresql+asyncpg")
+
+
+def _to_psycopg(url: str) -> str:
+    if not url:
+        return ""
+    return _swap_scheme(_strip_query_key(url, "pgbouncer"), "postgresql+psycopg")
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

@@ -1,0 +1,137 @@
+"use client";
+
+import { AppShell } from "@/components/AppShell";
+import { Badge, Card, EmptyState, ErrorState, Loading, StatTile } from "@/components/ui";
+import { dashboard } from "@/lib/api";
+import { useAsync } from "@/lib/useAsync";
+
+const ACTION_LABELS: Record<string, string> = {
+  LOGIN_FAILED: "Failed sign-in",
+  ACCESS_DENIED: "Access denied",
+  EMERGENCY_ACCESS_GRANTED: "Emergency access granted",
+  EMERGENCY_ACCESS_USED: "Emergency access used",
+  EMERGENCY_ACCESS_REVOKED: "Emergency access revoked",
+  USER_STATUS_CHANGED: "Account status changed",
+  SESSION_EXPIRED: "Session ended",
+};
+
+export default function AdminDashboard() {
+  const { data, error, loading, reload } = useAsync(() => dashboard.admin());
+  const unreviewed = data?.counts.unreviewedEmergencyGrants ?? 0;
+
+  return (
+    <AppShell role="ADMIN">
+      <div id="main">
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+          Hospital overview
+        </h1>
+        <p className="mt-1 text-slate-600 dark:text-slate-400">
+          Users, departments, activity and security events.
+        </p>
+
+        {loading && <Loading label="Loading the overview" />}
+        {error && <ErrorState message={error.message} onRetry={reload} />}
+
+        {data && (
+          <div className="mt-6 space-y-6">
+            {/* Unreviewed break-glass grants are surfaced above everything else:
+                the post-hoc review is what makes emergency override safe to
+                offer at all (conflict C1). */}
+            {unreviewed > 0 && (
+              <div
+                role="alert"
+                className="rounded-lg border border-red-300 bg-red-50 p-5 dark:border-red-800 dark:bg-red-950/50"
+              >
+                <p className="font-medium text-red-900 dark:text-red-200">
+                  {unreviewed} emergency access {unreviewed === 1 ? "grant" : "grants"} awaiting
+                  review
+                </p>
+                <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+                  Every break-glass access must be reviewed. Unreviewed grants stay on this
+                  dashboard until someone signs them off.
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <StatTile label="Patients" value={data.counts.patients ?? 0} />
+              <StatTile label="Doctors" value={data.counts.doctors ?? 0} />
+              <StatTile label="Departments" value={data.counts.departments ?? 0} />
+              <StatTile
+                label="Suspended accounts"
+                value={data.counts.suspendedAccounts ?? 0}
+                tone={data.counts.suspendedAccounts ? "warning" : "neutral"}
+              />
+              <StatTile label="Appointments this week" value={data.counts.appointmentsThisWeek ?? 0} />
+              <StatTile
+                label="Unpaid invoices"
+                value={data.counts.unpaidInvoices ?? 0}
+                tone={data.counts.unpaidInvoices ? "warning" : "neutral"}
+              />
+              <StatTile
+                label="Active emergency grants"
+                value={data.counts.activeEmergencyGrants ?? 0}
+                tone={data.counts.activeEmergencyGrants ? "critical" : "good"}
+              />
+              <StatTile
+                label="Failed sign-ins (7d)"
+                value={data.counts.failedLoginsThisWeek ?? 0}
+                tone={(data.counts.failedLoginsThisWeek ?? 0) > 20 ? "warning" : "neutral"}
+              />
+            </div>
+
+            <Card
+              title="Recent security events"
+              description="Denied access, failed sign-ins and break-glass activity from the last 7 days."
+            >
+              {data.recentSecurityEvents.length === 0 ? (
+                <EmptyState
+                  title="Nothing to review"
+                  description="No security events have been recorded this week."
+                />
+              ) : (
+                <div className="-mx-5 overflow-x-auto px-5">
+                  <table className="w-full min-w-[560px] text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-700">
+                        <th className="py-2 pr-4 font-medium">Event</th>
+                        <th className="py-2 pr-4 font-medium">Severity</th>
+                        <th className="py-2 pr-4 font-medium">When</th>
+                        <th className="py-2 font-medium">Source</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {data.recentSecurityEvents.map((event) => (
+                        <tr key={event.id}>
+                          <td className="py-2.5 pr-4 text-slate-900 dark:text-slate-100">
+                            {ACTION_LABELS[event.action] ?? event.action}
+                          </td>
+                          <td className="py-2.5 pr-4">
+                            <Badge tone={event.severity === "BREAK_GLASS" ? "critical" : "warning"}>
+                              {event.severity.toLowerCase().replace("_", " ")}
+                            </Badge>
+                          </td>
+                          <td className="py-2.5 pr-4 tabular-nums text-slate-600 dark:text-slate-400">
+                            {new Date(event.timestamp).toLocaleString(undefined, {
+                              day: "numeric",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                          <td className="py-2.5 tabular-nums text-slate-600 dark:text-slate-400">
+                            {event.ipAddress ?? "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          </div>
+        )}
+      </div>
+    </AppShell>
+  );
+}

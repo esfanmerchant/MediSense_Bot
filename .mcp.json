@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "//": "Windows: npx must be launched through cmd /c, otherwise the server fails to spawn.",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--read-only",
+        "--project-ref=xzcsxotnjwkgbhdzvrae"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

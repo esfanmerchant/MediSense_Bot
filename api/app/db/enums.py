@@ -43,6 +43,25 @@ class AppointmentStatus(StrEnum):
     NO_SHOW = "NO_SHOW"
 
 
+#: Appointment statuses that establish a doctor's care relationship with a
+#: patient, and so authorize access to their data.
+#:
+#: REQUESTED is absent deliberately — a patient asking for an appointment must
+#: not hand the doctor their chart before anyone accepts it, or requesting a
+#: consultation would become a way to grant access. COMPLETED *is* present: you
+#: treated them, and the notes stay yours to read.
+#:
+#: Defined here, in the module that depends on nothing, because both
+#: ``api/deps.py`` and ``modules/records/access.py`` decide access with it and a
+#: second copy would eventually disagree with the first.
+ENCOUNTER_STATUSES = (
+    AppointmentStatus.CONFIRMED,
+    AppointmentStatus.CHECKED_IN,
+    AppointmentStatus.IN_PROGRESS,
+    AppointmentStatus.COMPLETED,
+)
+
+
 class InvoiceStatus(StrEnum):
     DRAFT = "DRAFT"
     ISSUED = "ISSUED"
@@ -74,7 +93,18 @@ class OcrStatus(StrEnum):
 
 
 class OcrEngine(StrEnum):
+    """Which engine produced an extraction.
+
+    Recorded per document because engines disagree, and a field that needs
+    re-checking later should say what read it. ``MANUAL`` is what a human
+    correction becomes once a clinician has retyped a field.
+
+    TESSERACT predates the move to PaddleOCR and is kept because the value may
+    exist in rows written before the change; nothing produces it now.
+    """
+
     TESSERACT = "TESSERACT"
+    PADDLE_OCR = "PADDLE_OCR"
     GEMINI_VISION = "GEMINI_VISION"
     MANUAL = "MANUAL"
 

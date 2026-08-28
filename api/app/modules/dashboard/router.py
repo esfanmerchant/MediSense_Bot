@@ -43,16 +43,15 @@ from app.db.models import (
     Prescription,
     User,
 )
+from app.modules.appointments.service import ACTIVE_STATUSES
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-ACTIVE_APPOINTMENT_STATUSES = [
-    AppointmentStatus.REQUESTED,
-    AppointmentStatus.CONFIRMED,
-    AppointmentStatus.CHECKED_IN,
-]
+#: Imported rather than restated. "Still going to happen" is decided in one
+#: place; a second copy here would drift the day a status is added.
+ACTIVE_APPOINTMENT_STATUSES = list(ACTIVE_STATUSES)
 
 
 async def _count(db: DbSession, stmt: Any) -> int:

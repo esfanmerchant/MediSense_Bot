@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
+import { NotificationBell } from "@/components/NotificationBell";
 import { Button, Loading, Unauthorized, cx } from "@/components/ui";
 import { homePathFor, useSession } from "@/lib/session";
 import type { Role } from "@/lib/api";
@@ -13,26 +14,28 @@ interface NavItem {
   label: string;
 }
 
+/**
+ * Only routes that exist.
+ *
+ * Later phases add Documents, Billing, the AI assistant, alerts and the admin
+ * user/audit screens; their links go in when the pages do. A nav item that
+ * leads to a 404 reads as a broken product, not as a roadmap.
+ */
 const NAV: Record<Role, NavItem[]> = {
   PATIENT: [
     { href: "/patient", label: "Overview" },
     { href: "/patient/appointments", label: "Appointments" },
     { href: "/patient/records", label: "Medical history" },
     { href: "/patient/documents", label: "Documents" },
-    { href: "/patient/billing", label: "Billing" },
-    { href: "/patient/assistant", label: "AI assistant" },
   ],
   DOCTOR: [
     { href: "/doctor", label: "Overview" },
     { href: "/doctor/patients", label: "My patients" },
     { href: "/doctor/appointments", label: "Appointments" },
-    { href: "/doctor/alerts", label: "Alerts" },
   ],
   ADMIN: [
     { href: "/admin", label: "Overview" },
-    { href: "/admin/users", label: "Users" },
-    { href: "/admin/departments", label: "Departments" },
-    { href: "/admin/audit", label: "Audit log" },
+    { href: "/admin/appointments", label: "Appointments" },
   ],
   NURSE: [{ href: "/no-dashboard", label: "Emergency access" }],
 };
@@ -131,6 +134,7 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
             <span className="hidden text-sm text-slate-600 sm:inline dark:text-slate-400">
               {user.name} · {user.role.toLowerCase()}
             </span>
+            <NotificationBell role={user.role} />
             <Button variant="secondary" onClick={() => void signOut()}>
               Sign out
             </Button>

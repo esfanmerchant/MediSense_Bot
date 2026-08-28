@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     NODE_ENV: str = "development"
     PORT: int = 4000
     CLIENT_ORIGIN: str = "http://localhost:3000"
+    #: Wall-clock zone of the clinic. Appointment times are stored in UTC, but a
+    #: doctor's published "09:00-17:00" means nine in the morning where the
+    #: patient arrives — so windows are interpreted in this zone and converted
+    #: at the boundary. An IANA name; an unknown one falls back to UTC rather
+    #: than taking booking offline.
+    CLINIC_TIMEZONE: str = "Asia/Kolkata"
 
     # --- Database --------------------------------------------------------
     DATABASE_URL: str = ""
@@ -48,12 +54,23 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_DOCUMENTS_BUCKET: str = "medical-documents"
     SUPABASE_AVATARS_BUCKET: str = "avatars"
+    #: Delivery URLs are signed per request, after the access check. Short
+    #: enough that a leaked link is stale before it travels (conflict C8).
     SUPABASE_SIGNED_URL_TTL_SECONDS: int = 300
+    #: Must not exceed the bucket's own file_size_limit, or an upload the API
+    #: accepts would be rejected by storage after the patient waited for it.
+    MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024
+    STORAGE_TIMEOUT_SECONDS: float = 30.0
 
     # --- AI provider -----------------------------------------------------
     AI_API_KEY: str = ""
-    AI_MODEL: str = "gemini-2.0-flash"
+    AI_MODEL: str = "gemini-3.6-flash"
     AI_ENABLED: bool = True
+    AI_TIMEOUT_SECONDS: float = 60.0
+    #: Vision extraction sends the document to an external provider, so it runs
+    #: only for patients who have granted AI consent (conflict C2). Turning this
+    #: off keeps every document on local OCR regardless of consent.
+    AI_VISION_OCR_ENABLED: bool = True
 
     # --- OCR -------------------------------------------------------------
     OCR_ENABLED: bool = True

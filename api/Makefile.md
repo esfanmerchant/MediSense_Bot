@@ -16,6 +16,9 @@ cd api; ..\api\.venv\Scripts\python.exe -m alembic upgrade head    # apply migra
 cd api; ..\api\.venv\Scripts\python.exe -m alembic check           # fail if models drift from the schema
 cd api; ..\api\.venv\Scripts\python.exe -m alembic revision --autogenerate -m "describe change"
 
+# Storage: create the private buckets (idempotent, safe against a live project)
+api\.venv\Scripts\python.exe api\scripts\init_storage.py
+
 # Run
 api\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 4000 --app-dir api
 

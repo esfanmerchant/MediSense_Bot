@@ -8,21 +8,37 @@ treats, which would leak the care relationship itself.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func, or_, select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
 from app.api.responses import Page, ok, pagination
-from app.core.errors import forbidden, not_found
+from app.core.errors import bad_request, conflict, forbidden, not_found
+from app.db.base import new_id, utcnow
 from app.db.enums import AuditAction, Role, UserStatus
-from app.db.models import Department, Doctor, DoctorPatientAssignment, Patient, User
+from app.db.models import (
+    Appointment,
+    Department,
+    Doctor,
+    DoctorPatientAssignment,
+    DoctorTimeOff,
+    Patient,
+    User,
+)
+from app.modules.appointments.schedule import AvailabilityWindow, iso_utc, validate_windows
+from app.modules.appointments.service import holds_a_slot
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
 
 router = APIRouter(prefix="/doctors", tags=["doctors"])
+
+#: A single block of leave longer than this is almost certainly a typo in a
+#: date; a real sabbatical is entered as several.
+MAX_TIME_OFF_DAYS = 90
 
 
 class DoctorProfileUpdate(BaseModel):
@@ -32,9 +48,41 @@ class DoctorProfileUpdate(BaseModel):
         default=None, alias="yearsExperience"
     )
     accepting_patients: bool | None = Field(default=None, alias="acceptingPatients")
-    availability: list[dict[str, Any]] | None = None
+    #: Validated rather than stored as free-form JSON: these windows generate
+    #: the slot grid patients book against, so a malformed entry here is a
+    #: calendar that silently produces no appointments.
+    availability: Annotated[list[AvailabilityWindow], Field(max_length=40)] | None = None
 
     model_config = ConfigDict(str_strip_whitespace=True, populate_by_name=True)
+
+
+class TimeOffCreate(BaseModel):
+    """A block of leave, in UTC.
+
+    Unlike weekly availability, leave is an absolute interval rather than a
+    wall-clock pattern, so it is submitted and stored as UTC directly.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
+
+    starts_at: datetime = Field(alias="startsAt")
+    ends_at: datetime = Field(alias="endsAt")
+    reason: Annotated[str, Field(max_length=200)] | None = None
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def _to_naive_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is not None:
+            value = value.astimezone(UTC).replace(tzinfo=None)
+        return value.replace(second=0, microsecond=0)
+
+    @model_validator(mode="after")
+    def _interval_is_sane(self) -> TimeOffCreate:
+        if self.ends_at <= self.starts_at:
+            raise ValueError("endsAt must be later than startsAt")
+        if (self.ends_at - self.starts_at) > timedelta(days=MAX_TIME_OFF_DAYS):
+            raise ValueError(f"a single block of leave cannot exceed {MAX_TIME_OFF_DAYS} days")
+        return self
 
 
 def _serialize(doctor: Doctor, user: User, department: Department | None) -> dict[str, Any]:
@@ -126,6 +174,17 @@ async def update_my_profile(
         raise not_found("Doctor")
 
     changed = payload.model_dump(exclude_none=True, by_alias=False)
+
+    if payload.availability is not None:
+        # Overlapping windows would generate the same slot time twice, and the
+        # two patients who booked "09:00" would then collide on the unique slot
+        # key with no way to explain which one was wrong.
+        try:
+            validate_windows(payload.availability)
+        except ValueError as exc:
+            raise bad_request(str(exc)) from exc
+        changed["availability"] = [window.as_stored() for window in payload.availability]
+
     for field, value in changed.items():
         setattr(doctor, field, value)
     await db.flush()
@@ -201,6 +260,160 @@ async def my_patients(
         ],
         page.meta(total),
     )
+
+
+# ---------------------------------------------------------------------------
+# Time off
+# ---------------------------------------------------------------------------
+
+
+def _require_doctor(auth: CurrentAuth) -> str:
+    if auth.role != Role.DOCTOR or not auth.doctor_id:
+        raise forbidden("This endpoint is for doctors.")
+    return auth.doctor_id
+
+
+def _serialize_time_off(row: DoctorTimeOff) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "startsAt": iso_utc(row.starts_at),
+        "endsAt": iso_utc(row.ends_at),
+        "reason": row.reason,
+    }
+
+
+@router.get("/me/time-off")
+async def my_time_off(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
+    """Leave that has not finished yet.
+
+    Past leave is not returned: it no longer affects any booking, and a calendar
+    that accumulates every holiday a doctor has ever taken is harder to read for
+    no benefit.
+    """
+    doctor_id = _require_doctor(auth)
+    rows = (
+        (
+            await db.execute(
+                select(DoctorTimeOff)
+                .where(DoctorTimeOff.doctor_id == doctor_id, DoctorTimeOff.ends_at > utcnow())
+                .order_by(DoctorTimeOff.starts_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return ok([_serialize_time_off(row) for row in rows])
+
+
+@router.post("/me/time-off", status_code=201)
+async def add_time_off(
+    payload: TimeOffCreate, request: Request, auth: CurrentAuth, db: DbSession
+) -> dict[str, Any]:
+    """Block out time, provided no one is already booked into it.
+
+    Leave that would strand booked patients is refused rather than applied.
+    Silently making an appointment unattendable is worse than making the doctor
+    deal with it: they know which of those patients needs a call, and the system
+    does not.
+    """
+    doctor_id = _require_doctor(auth)
+
+    if payload.ends_at <= utcnow():
+        raise bad_request("Leave must end in the future.")
+
+    clashes = (
+        await db.execute(
+            select(func.count(DoctorTimeOff.id)).where(
+                DoctorTimeOff.doctor_id == doctor_id,
+                DoctorTimeOff.starts_at < payload.ends_at,
+                DoctorTimeOff.ends_at > payload.starts_at,
+            )
+        )
+    ).scalar_one()
+    if clashes:
+        raise conflict("That overlaps leave you have already booked.")
+
+    booked = (
+        await db.execute(
+            select(func.count(Appointment.id)).where(
+                Appointment.doctor_id == doctor_id,
+                holds_a_slot(),
+                Appointment.start_time < payload.ends_at,
+                Appointment.end_time > payload.starts_at,
+            )
+        )
+    ).scalar_one()
+    if booked:
+        raise conflict(
+            f"You have {booked} appointment{'s' if booked > 1 else ''} booked in that period. "
+            "Cancel or move them first."
+        )
+
+    time_off = DoctorTimeOff(
+        id=new_id(),
+        doctor_id=doctor_id,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+        reason=payload.reason,
+    )
+    db.add(time_off)
+    await db.flush()
+
+    await record_audit(
+        db,
+        AuditEntry(
+            action=AuditAction.CONFIG_CHANGED,
+            user_id=auth.user_id,
+            actor_role=auth.role,
+            entity_type="DoctorTimeOff",
+            entity_id=time_off.id,
+            ip_address=client_ip(request),
+            request_id=getattr(request.state, "request_id", None),
+            metadata={
+                "operation": "create",
+                "startsAt": iso_utc(time_off.starts_at),
+                "endsAt": iso_utc(time_off.ends_at),
+            },
+        ),
+    )
+    return ok(_serialize_time_off(time_off))
+
+
+@router.delete("/me/time-off/{time_off_id}")
+async def remove_time_off(
+    time_off_id: str, request: Request, auth: CurrentAuth, db: DbSession
+) -> dict[str, Any]:
+    """Cancel leave, making those slots bookable again."""
+    doctor_id = _require_doctor(auth)
+
+    # Scoped to the caller's own row, so another doctor's id simply is not found.
+    time_off = (
+        await db.execute(
+            select(DoctorTimeOff).where(
+                DoctorTimeOff.id == time_off_id, DoctorTimeOff.doctor_id == doctor_id
+            )
+        )
+    ).scalar_one_or_none()
+    if time_off is None:
+        raise not_found("Time off")
+
+    await db.delete(time_off)
+    await db.flush()
+
+    await record_audit(
+        db,
+        AuditEntry(
+            action=AuditAction.CONFIG_CHANGED,
+            user_id=auth.user_id,
+            actor_role=auth.role,
+            entity_type="DoctorTimeOff",
+            entity_id=time_off_id,
+            ip_address=client_ip(request),
+            request_id=getattr(request.state, "request_id", None),
+            metadata={"operation": "delete"},
+        ),
+    )
+    return ok({"id": time_off_id, "removed": True})
 
 
 @router.get("/{doctor_id}")

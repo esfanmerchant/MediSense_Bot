@@ -37,6 +37,9 @@ class Permission(StrEnum):
     RECORD_READ_ASSIGNED = "record:read:assigned"
     RECORD_WRITE = "record:write"
     PRESCRIPTION_READ_OWN = "prescription:read:own"
+    #: A prescriber who cannot see what a patient is already taking is a drug
+    #: interaction waiting to happen, so writing implies reading here.
+    PRESCRIPTION_READ_ASSIGNED = "prescription:read:assigned"
     PRESCRIPTION_WRITE = "prescription:write"
 
     # Appointments
@@ -98,6 +101,7 @@ _DOCTOR: frozenset[Permission] = frozenset(
         Permission.PATIENT_READ_ASSIGNED,
         Permission.RECORD_READ_ASSIGNED,
         Permission.RECORD_WRITE,
+        Permission.PRESCRIPTION_READ_ASSIGNED,
         Permission.PRESCRIPTION_WRITE,
         Permission.APPOINTMENT_READ_ASSIGNED,
         Permission.CONSULTATION_COMPLETE,

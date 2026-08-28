@@ -16,7 +16,7 @@ from app.core.security import verify_access_token
 from app.core.session_policy import LAST_SEEN_WRITE_THROTTLE_SECONDS, check_idle
 from app.db.base import utcnow
 from app.db.enums import (
-    AppointmentStatus,
+    ENCOUNTER_STATUSES,
     AuditAction,
     AuditSeverity,
     EmergencyAccessStatus,
@@ -226,14 +226,7 @@ async def resolve_patient_access(db: AsyncSession, auth: AuthContext, patient_id
                 select(Appointment.id).where(
                     Appointment.doctor_id == auth.doctor_id,
                     Appointment.patient_id == patient_id,
-                    Appointment.status.in_(
-                        [
-                            AppointmentStatus.CONFIRMED,
-                            AppointmentStatus.CHECKED_IN,
-                            AppointmentStatus.IN_PROGRESS,
-                            AppointmentStatus.COMPLETED,
-                        ]
-                    ),
+                    Appointment.status.in_(ENCOUNTER_STATUSES),
                 )
             )
         ).first()

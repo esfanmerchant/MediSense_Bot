@@ -8,6 +8,12 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
+/**
+ * Mirrors `ErrorCode` in api/app/core/errors.py, plus `NETWORK_ERROR`, which is
+ * the one failure the client raises itself — the request never reached a server
+ * that could name a code. Keep the two in step: a code missing here becomes a
+ * comparison TypeScript rejects as impossible.
+ */
 export type ErrorCode =
   | "BAD_REQUEST"
   | "VALIDATION_ERROR"
@@ -20,7 +26,12 @@ export type ErrorCode =
   | "FORBIDDEN_RESOURCE"
   | "NOT_FOUND"
   | "CONFLICT"
+  | "SLOT_UNAVAILABLE"
+  | "DUPLICATE_INVOICE"
+  | "UNSUPPORTED_FILE"
+  | "FILE_TOO_LARGE"
   | "RATE_LIMITED"
+  | "CONSENT_REQUIRED"
   | "SERVICE_UNAVAILABLE"
   | "INTERNAL_ERROR"
   | "NETWORK_ERROR";
@@ -64,9 +75,20 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-export interface Paginated<T> {
+export interface PageMeta {
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+/**
+ * `Extra` carries the per-endpoint additions to `meta` — the notifications list
+ * returns an unread count alongside the usual paging fields.
+ */
+export interface Paginated<T, Extra = unknown> {
   data: T[];
-  meta: { total: number; limit: number; offset: number; hasMore: boolean };
+  meta: PageMeta & Extra;
 }
 
 /**
@@ -132,10 +154,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 /** Same as apiRequest but keeps the pagination metadata. */
-export async function apiList<T>(
+export async function apiList<T, Extra = unknown>(
   path: string,
   query?: RequestOptions["query"],
-): Promise<Paginated<T>> {
+): Promise<Paginated<T, Extra>> {
   const response = await fetch(buildUrl(path, query), {
     credentials: "include",
     cache: "no-store",
@@ -159,6 +181,8 @@ export async function apiList<T>(
     meta: payload.meta ?? { total: payload.data.length, limit: 25, offset: 0, hasMore: false },
   };
 }
+
+
 
 // ---------------------------------------------------------------------------
 // Domain types
@@ -292,9 +316,30 @@ export interface PatientSummary {
   isPrimary: boolean;
 }
 
+export interface TimeOff {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  reason: string | null;
+}
+
 export const doctors = {
   myPatients: (query?: { limit?: number; offset?: number }) =>
     apiList<PatientSummary>("/doctors/me/patients", query),
+
+  timeOff: () => apiRequest<TimeOff[]>("/doctors/me/time-off"),
+
+  addTimeOff: (startsAt: string, endsAt: string, reason?: string) =>
+    apiRequest<TimeOff>("/doctors/me/time-off", {
+      method: "POST",
+      body: { startsAt, endsAt, reason },
+    }),
+
+  removeTimeOff: (id: string) =>
+    apiRequest<{ id: string; removed: boolean }>(`/doctors/me/time-off/${id}`, {
+      method: "DELETE",
+    }),
+
   directory: (query?: { search?: string; departmentId?: string; limit?: number }) =>
     apiList<{
       id: string;
@@ -306,8 +351,27 @@ export const doctors = {
     }>("/doctors", query),
 };
 
+export interface PatientProfile {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  medicalRecordNumber: string;
+  dateOfBirth: string | null;
+  gender: string;
+  bloodGroup: string | null;
+  address: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  aiConsentGranted: boolean;
+  /** Omitted for administrators — clinical fields sit behind a care relationship. */
+  allergies?: string | null;
+  chronicConditions?: string | null;
+}
+
 export const patients = {
-  me: () => apiRequest<Record<string, unknown>>("/patients/me"),
+  me: () => apiRequest<PatientProfile>("/patients/me"),
+  get: (id: string) => apiRequest<PatientProfile>(`/patients/${id}`),
   list: (query?: { search?: string; limit?: number; offset?: number }) =>
     apiList<{
       id: string;
@@ -349,4 +413,405 @@ export const departments = {
       location: string | null;
       doctorCount: number;
     }>("/departments"),
+};
+
+// ---------------------------------------------------------------------------
+// Appointments
+// ---------------------------------------------------------------------------
+
+export type AppointmentStatus =
+  | "REQUESTED"
+  | "CONFIRMED"
+  | "CHECKED_IN"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "NO_SHOW";
+
+export interface Appointment {
+  id: string;
+  patientId: string;
+  doctorId: string;
+  status: AppointmentStatus;
+  /** UTC, with an explicit Z — safe to pass straight to `new Date()`. */
+  startTime: string;
+  endTime: string;
+  /** Pre-formatted in the clinic's time zone, for when local time is wrong. */
+  localDate: string;
+  localTime: string;
+  durationMinutes: number;
+  reason: string | null;
+  notes: string | null;
+  doctorName: string | null;
+  specialization: string | null;
+  patientName: string | null;
+  medicalRecordNumber: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  rescheduledFromId: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface AvailabilitySlot {
+  startTime: string;
+  endTime: string;
+  /** Clinic-local "HH:MM", already formatted by the server. */
+  label: string;
+  available: boolean;
+}
+
+export interface AvailabilityDay {
+  date: string;
+  slots: AvailabilitySlot[];
+  availableCount: number;
+}
+
+export const appointments = {
+  list: (query?: {
+    status?: AppointmentStatus;
+    from?: string;
+    to?: string;
+    doctorId?: string;
+    patientId?: string;
+    upcomingOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => apiList<Appointment>("/appointments", query),
+
+  get: (id: string) => apiRequest<Appointment>(`/appointments/${id}`),
+
+  availability: (doctorId: string, from?: string, to?: string) =>
+    apiRequest<{ doctorId: string; timezone: string; days: AvailabilityDay[] }>(
+      "/appointments/availability",
+      { query: { doctorId, from, to } },
+    ),
+
+  book: (input: { doctorId: string; startTime: string; reason?: string; patientId?: string }) =>
+    apiRequest<Appointment>("/appointments", { method: "POST", body: input }),
+
+  cancel: (id: string, reason?: string) =>
+    apiRequest<Appointment>(`/appointments/${id}/cancel`, {
+      method: "POST",
+      body: { reason },
+    }),
+
+  /** Returns a *new* appointment; the original is cancelled and linked to it. */
+  reschedule: (id: string, startTime: string, reason?: string) =>
+    apiRequest<Appointment>(`/appointments/${id}/reschedule`, {
+      method: "POST",
+      body: { startTime, reason },
+    }),
+
+  setStatus: (id: string, status: AppointmentStatus, notes?: string) =>
+    apiRequest<Appointment>(`/appointments/${id}/status`, {
+      method: "POST",
+      body: { status, notes },
+    }),
+};
+
+// ---------------------------------------------------------------------------
+// Clinical records
+// ---------------------------------------------------------------------------
+
+export interface Prescription {
+  id: string;
+  patientId: string;
+  doctorId: string;
+  doctorName: string | null;
+  medicalRecordId: string | null;
+  medication: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MedicalRecord {
+  id: string;
+  patientId: string;
+  doctorId: string;
+  doctorName: string | null;
+  specialization: string | null;
+  appointmentId: string | null;
+  symptoms: string | null;
+  diagnosis: string | null;
+  treatmentPlan: string | null;
+  notes: string | null;
+  followUpDate: string | null;
+  followUpNotes: string | null;
+  /** Always "PHYSICIAN" here — machine output never reaches this table. */
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  amended: boolean;
+  /** Present when the record was requested with prescriptions included. */
+  prescriptions?: Prescription[];
+}
+
+export const records = {
+  list: (query?: {
+    patientId?: string;
+    includePrescriptions?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => apiList<MedicalRecord>("/records", query),
+
+  get: (id: string) => apiRequest<MedicalRecord>(`/records/${id}`),
+
+  create: (input: {
+    patientId: string;
+    appointmentId?: string;
+    symptoms?: string;
+    diagnosis?: string;
+    treatmentPlan?: string;
+    notes?: string;
+    followUpDate?: string;
+    followUpNotes?: string;
+  }) => apiRequest<MedicalRecord>("/records", { method: "POST", body: input }),
+
+  amend: (
+    id: string,
+    input: Partial<{
+      symptoms: string;
+      diagnosis: string;
+      treatmentPlan: string;
+      notes: string;
+      followUpDate: string;
+      followUpNotes: string;
+    }>,
+  ) => apiRequest<MedicalRecord>(`/records/${id}`, { method: "PATCH", body: input }),
+};
+
+export const prescriptions = {
+  list: (query?: {
+    patientId?: string;
+    activeOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }) => apiList<Prescription>("/prescriptions", query),
+
+  create: (input: {
+    patientId: string;
+    medicalRecordId?: string;
+    medication: string;
+    dosage: string;
+    frequency: string;
+    duration: string;
+    instructions?: string;
+  }) => apiRequest<Prescription>("/prescriptions", { method: "POST", body: input }),
+
+  update: (
+    id: string,
+    input: Partial<{ dosage: string; frequency: string; duration: string; instructions: string }>,
+  ) => apiRequest<Prescription>(`/prescriptions/${id}`, { method: "PATCH", body: input }),
+
+  discontinue: (id: string, reason?: string) =>
+    apiRequest<Prescription>(`/prescriptions/${id}/discontinue`, {
+      method: "POST",
+      body: { reason },
+    }),
+};
+
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+
+export type DocumentType =
+  | "PRESCRIPTION"
+  | "LAB_REPORT"
+  | "BLOOD_TEST"
+  | "MEDICAL_CERTIFICATE"
+  | "REFERRAL_LETTER"
+  | "DISCHARGE_SUMMARY"
+  | "IMAGING"
+  | "PROFILE_IMAGE"
+  | "OTHER";
+
+export interface MedicalDocument {
+  id: string;
+  patientId: string;
+  medicalRecordId: string | null;
+  documentType: DocumentType;
+  title: string | null;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  checksumSha256: string | null;
+  ocrStatus: string;
+  uploadedById: string;
+  uploadedBy: string | null;
+  createdAt: string;
+}
+
+/** Types the API accepts, for the file picker. The server re-checks the bytes. */
+export const ACCEPTED_UPLOAD_TYPES =
+  "application/pdf,image/jpeg,image/png,image/webp,image/tiff,image/heic";
+
+export const documents = {
+  list: (query?: { patientId?: string; documentType?: DocumentType; limit?: number }) =>
+    apiList<MedicalDocument>("/documents", query),
+
+  get: (id: string) => apiRequest<MedicalDocument>(`/documents/${id}`),
+
+  /**
+   * Multipart upload — deliberately not routed through `apiRequest`, which sets
+   * a JSON content type. The browser must set its own multipart boundary.
+   */
+  upload: async (input: {
+    file: File;
+    patientId: string;
+    documentType?: DocumentType;
+    title?: string;
+    medicalRecordId?: string;
+  }): Promise<MedicalDocument> => {
+    const form = new FormData();
+    form.append("file", input.file);
+    form.append("patientId", input.patientId);
+    if (input.documentType) form.append("documentType", input.documentType);
+    if (input.title) form.append("title", input.title);
+    if (input.medicalRecordId) form.append("medicalRecordId", input.medicalRecordId);
+
+    let response: Response;
+    try {
+      response = await fetch(`${API_URL}/documents`, {
+        method: "POST",
+        credentials: "include",
+        body: form,
+        cache: "no-store",
+      });
+    } catch {
+      throw new ApiError("NETWORK_ERROR", "Could not reach the server. Try again.", 0);
+    }
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || payload?.success === false) {
+      const error = payload?.error ?? {};
+      const apiError = new ApiError(
+        (error.code as ErrorCode) ?? "INTERNAL_ERROR",
+        error.message ?? "The file could not be uploaded.",
+        response.status,
+        error.details ?? [],
+      );
+      if (apiError.isAuthFailure) announceSessionEnded(apiError.code);
+      throw apiError;
+    }
+    return payload.data as MedicalDocument;
+  },
+
+  /**
+   * Asks for a short-lived signed link. There is no permanent URL: the link is
+   * minted only after the server re-checks access, and it expires in minutes.
+   */
+  downloadUrl: (id: string) =>
+    apiRequest<{
+      url: string;
+      expiresInSeconds: number;
+      fileName: string;
+      mimeType: string;
+    }>(`/documents/${id}/download`),
+
+  remove: (id: string) =>
+    apiRequest<{ id: string; removed: boolean }>(`/documents/${id}`, { method: "DELETE" }),
+};
+
+// ---------------------------------------------------------------------------
+// OCR — proposals, never facts
+// ---------------------------------------------------------------------------
+
+export type OcrStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "EXTRACTED"
+  | "CONFIRMED"
+  | "FAILED"
+  | "SKIPPED";
+
+/** One extracted value, with how much the engine trusts it. */
+export interface OcrField {
+  value: string | null;
+  confidence: number;
+  needs_review: boolean;
+}
+
+export interface OcrMedication {
+  medication: OcrField;
+  dosage: OcrField;
+  frequency: OcrField;
+  duration: OcrField;
+  sourceText: string;
+  lineConfidence: number;
+  needsReview: boolean;
+}
+
+export interface OcrStructured {
+  medications: OcrMedication[];
+  needsReview: boolean;
+  disclaimer: string;
+}
+
+export interface OcrState {
+  documentId: string;
+  status: OcrStatus;
+  engine: string | null;
+  confidence: number | null;
+  extractedText: string | null;
+  /**
+   * After extraction this is an `OcrStructured`. After a clinician confirms it
+   * becomes `{ proposed, confirmed }` — the machine's reading is kept beside
+   * the corrected one so "what did OCR say, and what did the doctor change"
+   * stays answerable.
+   */
+  structured: OcrStructured | Record<string, unknown> | null;
+  confirmedAt: string | null;
+  confirmedById: string | null;
+  error: string | null;
+  reviewThreshold: number;
+}
+
+export interface ConfirmedMedication {
+  medication: string;
+  dosage: string;
+  frequency: string;
+  duration?: string;
+  instructions?: string;
+}
+
+export const ocr = {
+  get: (documentId: string) => apiRequest<OcrState>(`/documents/${documentId}/ocr`),
+
+  run: (documentId: string) =>
+    apiRequest<OcrState>(`/documents/${documentId}/ocr`, { method: "POST" }),
+
+  /** Records a clinician's checked reading. Does not prescribe anything. */
+  confirm: (documentId: string, medications: ConfirmedMedication[]) =>
+    apiRequest<OcrState>(`/documents/${documentId}/ocr/confirm`, {
+      method: "POST",
+      body: { medications },
+    }),
+};
+
+export interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  link: string | null;
+  priority: number;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export const notifications = {
+  list: (query?: { unreadOnly?: boolean; limit?: number }) =>
+    apiList<Notification, { unread: number }>("/notifications", query),
+  markRead: (id: string) =>
+    apiRequest<{ id: string; read: boolean }>(`/notifications/${id}/read`, { method: "POST" }),
+  markAllRead: () =>
+    apiRequest<{ markedRead: number }>("/notifications/read-all", { method: "POST" }),
 };

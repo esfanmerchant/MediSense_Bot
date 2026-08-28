@@ -17,8 +17,11 @@ dependencies = [
     "pyjwt>=2.10",
     "python-multipart>=0.0.20",
     "structlog>=24.4",
+    # Storage talks to Supabase over its REST API rather than through the
+    # `supabase` SDK: the surface is four calls, the SDK's client is
+    # synchronous and would block the event loop, and a healthcare service is
+    # better off with one less dependency in its tree.
     "httpx>=0.28",
-    "supabase>=2.10",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +29,9 @@ ocr = [
     "paddlepaddle==3.3.1",
     "paddleocr>=3.0",
     "pillow>=11.0",
+    # Rasterises PDF pages for OCR. Ships its own PDFium build, so this needs
+    # no system Poppler and behaves the same on Windows as in a container.
+    "pypdfium2>=4.30",
 ]
 dev = [
     "pytest>=8.3",
@@ -33,6 +39,9 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.14",
     "types-python-dateutil",
+    # Renders the sample prescription the extraction tests read. Small, and it
+    # lets those tests run with only an AI key — no 500 MB local engine needed.
+    "pillow>=11.0",
 ]
 
 [tool.ruff]
@@ -65,5 +74,5 @@ disallow_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["paddleocr.*", "supabase.*", "paddle.*"]
+module = ["paddleocr.*", "paddle.*"]
 ignore_missing_imports = true

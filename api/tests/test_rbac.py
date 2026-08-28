@@ -24,6 +24,27 @@ class TestRolePermissions:
         assert role_has_permission(Role.DOCTOR, Permission.RECORD_READ_ASSIGNED)
         assert not role_has_permission(Role.DOCTOR, Permission.PATIENT_READ_ANY)
 
+    def test_a_prescriber_can_read_what_they_prescribe_against(self) -> None:
+        # A doctor who can write a prescription but not see current medication
+        # is a drug interaction waiting to happen.
+        assert role_has_permission(Role.DOCTOR, Permission.PRESCRIPTION_WRITE)
+        assert role_has_permission(Role.DOCTOR, Permission.PRESCRIPTION_READ_ASSIGNED)
+
+    @pytest.mark.parametrize(
+        "permission",
+        [
+            Permission.RECORD_READ_OWN,
+            Permission.RECORD_READ_ASSIGNED,
+            Permission.PRESCRIPTION_READ_OWN,
+            Permission.PRESCRIPTION_READ_ASSIGNED,
+        ],
+    )
+    def test_admins_hold_no_clinical_read_permission(self, permission: Permission) -> None:
+        # patient:read:any lets an administrator run the hospital. Reading a
+        # diagnosis is a separate gate, and they are on the wrong side of it.
+        assert role_has_permission(Role.ADMIN, Permission.PATIENT_READ_ANY)
+        assert not role_has_permission(Role.ADMIN, permission)
+
     def test_administration_is_separate_from_clinical_content(self) -> None:
         # Admins run the hospital; they get no standing right to read charts.
         assert role_has_permission(Role.ADMIN, Permission.USER_MANAGE)

@@ -27,6 +27,7 @@ import {
   auth,
   type AuthUser,
   type DeviceClass,
+  type LoginResult,
   type SessionInfo,
 } from "@/lib/api";
 
@@ -45,7 +46,21 @@ interface SessionState {
   /** Seconds until automatic sign-out, or null when the tier is exempt. */
   secondsRemaining: number | null;
   showWarning: boolean;
-  signIn: (email: string, password: string, deviceClass: DeviceClass) => Promise<AuthUser>;
+  /**
+   * Signs in, or reports what stands in the way.
+   *
+   * A second factor is not a failure, so it is not an exception: the caller
+   * gets the challenge and takes the person to the code screen. Everything
+   * that *is* a refusal — an unverified email, a doctor still awaiting
+   * approval — arrives as an `ApiError` with a code that names it.
+   */
+  signIn: (email: string, password: string, deviceClass: DeviceClass) => Promise<LoginResult>;
+  /**
+   * Adopts a session minted by another endpoint — email verification, or the
+   * second factor. The cookies are already set by then; this is what tells the
+   * rest of the app who is here.
+   */
+  adoptSession: (user: AuthUser, session: SessionInfo) => void;
   signOut: (reason?: string) => Promise<void>;
   stayAlive: () => void;
   refreshUser: () => Promise<void>;
@@ -222,13 +237,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       } catch {
         // Not being able to remember the choice is harmless.
       }
-      setUser(result.user);
-      setSession(result.session);
-      lastActivity.current = Date.now();
-      return result.user;
+      if (!result.requires2FA) {
+        setUser(result.user);
+        setSession(result.session);
+        lastActivity.current = Date.now();
+      }
+      return result;
     },
     [],
   );
+
+  const adoptSession = useCallback((nextUser: AuthUser, nextSession: SessionInfo) => {
+    setUser(nextUser);
+    setSession(nextSession);
+    lastActivity.current = Date.now();
+  }, []);
 
   // Derived, not stored: a signed-out user or an exempt device class has no
   // countdown regardless of what the last tick happened to leave behind.
@@ -245,11 +268,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         effectiveRemaining <= WARNING_AT_SECONDS &&
         effectiveRemaining > 0,
       signIn,
+      adoptSession,
       signOut,
       stayAlive,
       refreshUser,
     }),
-    [user, session, loading, secondsRemaining, signIn, signOut, stayAlive, refreshUser],
+    [user, session, loading, secondsRemaining, signIn, adoptSession, signOut, stayAlive, refreshUser],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

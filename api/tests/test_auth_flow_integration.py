@@ -14,11 +14,18 @@ from app.db.base import utcnow
 from app.db.enums import AuditAction, AuditSeverity
 from app.db.models import AuditLog, Session, User
 from app.modules.audit.service import verify_audit_chain
+from app.modules.auth import twofactor
 from tests.conftest import requires_db
 
 pytestmark = requires_db
 
 PASSWORD = "IntegrationPass123"
+#: Registration emails a code and stores only its hash, so a test cannot read
+#: the real one. A known hash is stamped onto the row instead and the ordinary
+#: endpoint is driven with it — see `test_email_verification_integration.py`,
+#: where that flow is what is actually under test. Here it is only the doorway
+#: to the sessions these tests are about.
+VERIFICATION_CODE = "424242"
 
 
 def unique_email(prefix: str = "test") -> str:
@@ -33,16 +40,41 @@ async def _delete_user(db: AsyncSession, user_id: str) -> None:
     await db.commit()
 
 
+async def register_and_verify(
+    client: TestClient, db: AsyncSession, email: str, name: str = "Integration Test Patient"
+) -> dict:
+    """Sign up and prove the address, returning the user payload."""
+    created = client.post(
+        "/api/auth/register", json={"name": name, "email": email, "password": PASSWORD}
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["data"]["pendingVerification"] is True
+
+    await db.execute(
+        update(User)
+        .where(User.email == email)
+        .values(
+            email_verification_code_hash=twofactor.hash_code(VERIFICATION_CODE),
+            email_verification_expires_at=utcnow() + timedelta(minutes=10),
+            email_verification_attempts=0,
+        )
+    )
+    await db.commit()
+
+    verified = client.post(
+        "/api/auth/verify-email", json={"email": email, "code": VERIFICATION_CODE}
+    )
+    assert verified.status_code == 200, verified.text
+    # Verification signs them in; these tests do their own logins.
+    client.cookies.clear()
+    return dict(verified.json()["data"]["user"])
+
+
 @pytest.fixture
 async def registered(client: TestClient, db: AsyncSession):
-    """A freshly registered patient, removed afterwards."""
+    """A freshly registered, verified patient, removed afterwards."""
     email = unique_email()
-    response = client.post(
-        "/api/auth/register",
-        json={"name": "Integration Test Patient", "email": email, "password": PASSWORD},
-    )
-    assert response.status_code == 201, response.text
-    user = response.json()["data"]["user"]
+    user = await register_and_verify(client, db, email)
     yield {"email": email, "id": user["id"], "user": user}
     await _delete_user(db, user["id"])
 
@@ -226,10 +258,8 @@ class TestAuditLog:
         self, client: TestClient, db: AsyncSession
     ) -> None:
         email = unique_email("doomed")
-        created = client.post(
-            "/api/auth/register", json={"name": "Deleted Later", "email": email, "password": PASSWORD}
-        )
-        user_id = created.json()["data"]["user"]["id"]
+        user = await register_and_verify(client, db, email, name="Deleted Later")
+        user_id = user["id"]
 
         await _delete_user(db, user_id)
 

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     #: patient arrives — so windows are interpreted in this zone and converted
     #: at the boundary. An IANA name; an unknown one falls back to UTC rather
     #: than taking booking offline.
-    CLINIC_TIMEZONE: str = "Asia/Kolkata"
+    CLINIC_TIMEZONE: str = "Asia/Karachi"
 
     # --- Billing ---------------------------------------------------------
     INVOICE_CURRENCY: str = "INR"
@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_DOCUMENTS_BUCKET: str = "medical-documents"
     SUPABASE_AVATARS_BUCKET: str = "avatars"
+    #: Credentials a doctor uploads with their registration — a licence
+    #: certificate, a degree, a national ID. Its own private bucket rather than
+    #: a prefix inside the clinical one, so nothing that grants access to
+    #: patient documents can reach an applicant's identity papers.
+    SUPABASE_CREDENTIALS_BUCKET: str = "doctor-credentials"
     #: Delivery URLs are signed per request, after the access check. Short
     #: enough that a leaked link is stale before it travels (conflict C8).
     SUPABASE_SIGNED_URL_TTL_SECONDS: int = 300

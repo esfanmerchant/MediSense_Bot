@@ -9,10 +9,13 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.core.session_policy import DeviceClass
-from app.db.enums import Gender, Role, UserStatus
+from app.db.enums import Gender, Role, TwoFactorMethod, UserStatus
 
 Password = Annotated[str, Field(min_length=10, max_length=200)]
 _PHONE = re.compile(r"^\+?[\d\s-]{7,20}$")
+#: Long enough for a six-digit code and a ten-character backup code, with room
+#: for the spaces people paste around them.
+Code = Annotated[str, Field(min_length=4, max_length=32)]
 
 
 class _Base(BaseModel):
@@ -27,6 +30,11 @@ class RegisterRequest(_Base):
     name: Annotated[str, Field(min_length=2, max_length=120)]
     email: EmailStr
     password: Password
+    #: The only two roles anybody may ask for. A doctor still cannot *practise*
+    #: by choosing this — it creates an application an administrator has to
+    #: approve — but NURSE and ADMIN remain accounts only an administrator
+    #: creates, so no one can grant themselves either by editing a request body.
+    role: Literal[Role.PATIENT, Role.DOCTOR] = Role.PATIENT
     phone: str | None = None
     date_of_birth: datetime | None = Field(default=None, alias="dateOfBirth")
     gender: Gender = Gender.UNDISCLOSED
@@ -86,6 +94,62 @@ class ChangePasswordRequest(_Base):
     new_password: Password = Field(alias="newPassword")
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
+
+
+class VerifyEmailRequest(_Base):
+    email: EmailStr
+    code: Code
+    #: Carried here as well as on login because verification issues the first
+    #: session, and a session created without it would silently get the
+    #: strictest timeout tier on a personal device.
+    device_class: DeviceClass = Field(default=DeviceClass.SHARED_TERMINAL, alias="deviceClass")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
+
+    _email = field_validator("email")(lambda v: _normalise_email(str(v)))
+
+
+class ResendCodeRequest(_Base):
+    email: EmailStr
+
+    _email = field_validator("email")(lambda v: _normalise_email(str(v)))
+
+
+class TwoFactorVerifyRequest(_Base):
+    challenge_id: Annotated[str, Field(min_length=8, max_length=64)] = Field(alias="challengeId")
+    code: Code
+    remember_device: bool = Field(default=False, alias="rememberDevice")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
+
+
+class ChallengeRequest(_Base):
+    challenge_id: Annotated[str, Field(min_length=8, max_length=64)] = Field(alias="challengeId")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
+
+
+class TwoFactorStartRequest(_Base):
+    method: TwoFactorMethod
+
+
+class TwoFactorConfirmRequest(_Base):
+    challenge_id: Annotated[str, Field(min_length=8, max_length=64)] = Field(alias="challengeId")
+    code: Code
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
+
+
+class TwoFactorDisableRequest(_Base):
+    #: The password is required as well as a current code. Either alone is
+    #: enough to *use* the account; turning the second factor off should need
+    #: both, or an unlocked session left open becomes a way to remove it.
+    password: Annotated[str, Field(min_length=1, max_length=200)]
+    code: Code
+
+
+class PasswordConfirmRequest(_Base):
+    password: Annotated[str, Field(min_length=1, max_length=200)]
 
 
 class UserOut(BaseModel):

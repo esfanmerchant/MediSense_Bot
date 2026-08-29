@@ -32,6 +32,14 @@ export type ErrorCode =
   | "FILE_TOO_LARGE"
   | "RATE_LIMITED"
   | "CONSENT_REQUIRED"
+  // The account exists but has not proved it owns the address yet.
+  | "EMAIL_NOT_VERIFIED"
+  | "INVALID_CODE"
+  | "CODE_EXPIRED"
+  // A doctor whose application has not been approved. The message says which.
+  | "PENDING_APPROVAL"
+  | "APPLICATION_REJECTED"
+  | "PROFILE_INCOMPLETE"
   | "SERVICE_UNAVAILABLE"
   | "INTERNAL_ERROR"
   | "NETWORK_ERROR";
@@ -248,9 +256,23 @@ export interface SessionInfo {
  */
 export type DeviceClass = "SHARED_TERMINAL" | "PERSONAL" | "MONITOR";
 
+/** What a sign-in produced: a session, or a challenge standing in its way. */
+export type LoginResult =
+  | { requires2FA: false; user: AuthUser; session: SessionInfo }
+  | { requires2FA: true; challengeId: string; method: TwoFactorMethod; sentTo: string | null };
+
+export type TwoFactorMethod = "EMAIL" | "TOTP";
+
+export interface VerificationPending {
+  pendingVerification: true;
+  email: string;
+  /** Seconds until another code may be requested. */
+  resendAfterSeconds: number;
+}
+
 export const auth = {
   login: (email: string, password: string, deviceClass: DeviceClass) =>
-    apiRequest<{ user: AuthUser; session: SessionInfo }>("/auth/login", {
+    apiRequest<LoginResult>("/auth/login", {
       method: "POST",
       body: { email, password, deviceClass },
     }),
@@ -261,7 +283,48 @@ export const auth = {
     password: string;
     phone?: string;
     dateOfBirth?: string;
-  }) => apiRequest<{ user: AuthUser }>("/auth/register", { method: "POST", body: input }),
+    /** Patients by default. A doctor's account is gated until an admin approves it. */
+    role?: "PATIENT" | "DOCTOR";
+  }) => apiRequest<VerificationPending>("/auth/register", { method: "POST", body: input }),
+
+  /** Exchanges the emailed code for a session. */
+  verifyEmail: (input: { email: string; code: string }) =>
+    apiRequest<{ user: AuthUser; session: SessionInfo; redirectTo: string }>(
+      "/auth/verify-email",
+      { method: "POST", body: input },
+    ),
+
+  /** Sends another code. Rate-limited server-side; the wait comes back here. */
+  resendCode: (input: { email: string }) =>
+    apiRequest<{ sent: boolean; resendAfterSeconds: number }>("/auth/resend-code", {
+      method: "POST",
+      body: input,
+    }),
+
+  /** Second step of a two-factor sign-in. */
+  verifyTwoFactor: (input: {
+    challengeId: string;
+    code: string;
+    /** Skips 2FA on this browser for 30 days. Never offered on a shared terminal. */
+    rememberDevice?: boolean;
+  }) =>
+    apiRequest<{ user: AuthUser; session: SessionInfo; redirectTo: string }>("/auth/2fa/verify", {
+      method: "POST",
+      body: input,
+    }),
+
+  /** Sends the email code for a challenge again. */
+  resendTwoFactor: (input: { challengeId: string }) =>
+    apiRequest<{ sent: boolean; resendAfterSeconds: number }>("/auth/2fa/resend", {
+      method: "POST",
+      body: input,
+    }),
+
+  forgotPassword: (email: string) =>
+    apiRequest<{ sent: boolean }>("/auth/forgot-password", { method: "POST", body: { email } }),
+
+  resetPassword: (input: { token: string; password: string }) =>
+    apiRequest<{ reset: boolean }>("/auth/reset-password", { method: "POST", body: input }),
 
   me: () => apiRequest<{ user: AuthUser }>("/auth/me"),
 
@@ -1229,4 +1292,190 @@ export const audit = {
 
   verify: (limit?: number) =>
     apiRequest<ChainVerification>("/audit-logs/verify", { query: { limit } }),
+};
+
+// ---------------------------------------------------------------------------
+// Account — the settings a person manages for themselves
+// ---------------------------------------------------------------------------
+
+export interface TwoFactorStatus {
+  enabled: boolean;
+  method: TwoFactorMethod | null;
+  /** How many single-use codes are still unspent. */
+  backupCodesRemaining: number;
+  /** Devices that currently skip the second step. */
+  trustedDevices: number;
+}
+
+export interface ActiveSession {
+  id: string;
+  deviceClass: DeviceClass;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  /** The session making this request. It cannot be revoked from here. */
+  current: boolean;
+}
+
+export const account = {
+  twoFactor: () => apiRequest<TwoFactorStatus>("/account/2fa"),
+
+  /**
+   * Begins enrolment. `EMAIL` sends a code; `TOTP` returns the secret and a
+   * ready-to-scan QR — neither takes effect until `confirmTwoFactor`.
+   */
+  startTwoFactor: (input: { method: TwoFactorMethod }) =>
+    apiRequest<{
+      challengeId: string;
+      method: TwoFactorMethod;
+      /** TOTP only: the shared secret, and an inline SVG of its QR code. */
+      secret: string | null;
+      qrSvg: string | null;
+      sentTo: string | null;
+    }>("/account/2fa/start", { method: "POST", body: input }),
+
+  /** Proves the method works, and only then turns it on. */
+  confirmTwoFactor: (input: { challengeId: string; code: string }) =>
+    apiRequest<{ enabled: true; method: TwoFactorMethod; backupCodes: string[] }>(
+      "/account/2fa/confirm",
+      { method: "POST", body: input },
+    ),
+
+  /** Turning it off needs the password *and* a live code. */
+  disableTwoFactor: (input: { password: string; code: string }) =>
+    apiRequest<{ enabled: false }>("/account/2fa/disable", { method: "POST", body: input }),
+
+  regenerateBackupCodes: (input: { password: string }) =>
+    apiRequest<{ backupCodes: string[] }>("/account/2fa/backup-codes", {
+      method: "POST",
+      body: input,
+    }),
+
+  sessions: () => apiRequest<ActiveSession[]>("/account/sessions"),
+
+  revokeSession: (id: string) =>
+    apiRequest<{ id: string; revoked: boolean }>(`/account/sessions/${id}`, { method: "DELETE" }),
+
+  /** Forgets every remembered device, so 2FA is asked for everywhere again. */
+  forgetDevices: () =>
+    apiRequest<{ forgotten: number }>("/account/2fa/trusted-devices", { method: "DELETE" }),
+};
+
+// ---------------------------------------------------------------------------
+// Doctor applications — self-registration, reviewed by an administrator
+// ---------------------------------------------------------------------------
+
+export type ApplicationStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED";
+
+export type ApplicationDocumentKind =
+  | "REGISTRATION_CERTIFICATE"
+  | "DEGREE"
+  | "NATIONAL_ID"
+  | "PHOTO";
+
+export interface ApplicationDocument {
+  id: string;
+  kind: ApplicationDocumentKind;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedAt: string;
+  /** Ticked by the reviewing administrator, never by the applicant. */
+  verified: boolean;
+}
+
+/** Everything a doctor fills in, all optional until they submit. */
+export interface DoctorApplicationDraft {
+  fullName?: string;
+  phone?: string;
+  nationalId?: string;
+  address?: string;
+  registrationNumber?: string;
+  specialization?: string;
+  departmentId?: string | null;
+  qualifications?: string[];
+  yearsExperience?: number | null;
+  previousHospital?: string;
+  consultationFee?: number | null;
+  availability?: Array<{
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    slotMinutes: number;
+  }>;
+}
+
+export interface DoctorApplication extends DoctorApplicationDraft {
+  id: string;
+  status: ApplicationStatus;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  rejectionReason: string | null;
+  reviewNotes: string | null;
+  documents: ApplicationDocument[];
+  updatedAt: string;
+  /** Present on the administrator's view only. */
+  applicant?: { id: string; name: string; email: string; emailVerified: boolean };
+}
+
+export const doctorApplication = {
+  /** The signed-in doctor's own application, created on first read. */
+  mine: () => apiRequest<DoctorApplication>("/doctor/application"),
+
+  /** Saves a draft. Called on a debounce, so it must stay idempotent. */
+  save: (draft: DoctorApplicationDraft) =>
+    apiRequest<DoctorApplication>("/doctor/application", { method: "PUT", body: draft }),
+
+  submit: () => apiRequest<DoctorApplication>("/doctor/application/submit", { method: "POST" }),
+
+  uploadDocument: (input: { file: File; kind: ApplicationDocumentKind }) => {
+    const form = new FormData();
+    form.append("file", input.file);
+    form.append("kind", input.kind);
+    return apiMultipart<ApplicationDocument>("/doctor/application/documents", form);
+  },
+
+  removeDocument: (id: string) =>
+    apiRequest<{ id: string; removed: boolean }>(`/doctor/application/documents/${id}`, {
+      method: "DELETE",
+    }),
+
+  /** A short-lived link to view one uploaded document. */
+  documentUrl: (id: string) =>
+    apiRequest<{ url: string; expiresInSeconds: number; fileName: string; mimeType: string }>(
+      `/doctor/application/documents/${id}/download`,
+    ),
+};
+
+export const doctorRequests = {
+  list: (query?: { status?: ApplicationStatus; limit?: number }) =>
+    apiList<DoctorApplication, { pending: number }>("/admin/doctor-applications", query),
+
+  get: (id: string) => apiRequest<DoctorApplication>(`/admin/doctor-applications/${id}`),
+
+  /** Same signed-link shape as the applicant's own view. */
+  documentUrl: (applicationId: string, documentId: string) =>
+    apiRequest<{ url: string; expiresInSeconds: number; fileName: string; mimeType: string }>(
+      `/admin/doctor-applications/${applicationId}/documents/${documentId}/download`,
+    ),
+
+  setDocumentVerified: (applicationId: string, documentId: string, verified: boolean) =>
+    apiRequest<ApplicationDocument>(
+      `/admin/doctor-applications/${applicationId}/documents/${documentId}`,
+      { method: "PATCH", body: { verified } },
+    ),
+
+  approve: (id: string, input?: { notes?: string }) =>
+    apiRequest<DoctorApplication>(`/admin/doctor-applications/${id}/approve`, {
+      method: "POST",
+      body: input ?? {},
+    }),
+
+  reject: (id: string, input: { reason: string; notes?: string }) =>
+    apiRequest<DoctorApplication>(`/admin/doctor-applications/${id}/reject`, {
+      method: "POST",
+      body: input,
+    }),
 };

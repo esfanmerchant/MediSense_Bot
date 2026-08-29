@@ -1,15 +1,34 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+/**
+ * Sign in.
+ *
+ * Two decisions are worth naming. The first is that the role tabs are *copy*,
+ * not data: the server decides what an account is from the account, and a role
+ * a browser could assert would be a role a browser could claim. They change the
+ * words and nothing else, and nothing on this page sends them.
+ *
+ * The second is that every refusal here is a door rather than a wall. An
+ * unverified email, a doctor still awaiting approval, a half-finished profile —
+ * each of those is a real state with a real next step, so each gets a banner
+ * that carries the step instead of a sentence that ends the conversation.
+ */
+
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 
 import { AuthPanel } from "@/components/AuthPanel";
 import { Icon } from "@/components/Icon";
+import { AUTH_LINK, AuthHeading, AuthNotice, MarkBadge, PasswordField } from "@/components/auth/parts";
+import { Segmented } from "@/components/forms";
 import { Button, Field, Input, Loading, cx } from "@/components/ui";
-import { ApiError, type DeviceClass } from "@/lib/api";
+import { ApiError, auth, type DeviceClass } from "@/lib/api";
 import { useTr } from "@/lib/lang";
 import { homePathFor, useSession, useStoredDeviceClass } from "@/lib/session";
+
+/** Which words this visit gets. Never sent anywhere — see the note above. */
+type Audience = "PATIENT" | "DOCTOR" | "ADMIN";
 
 /**
  * Where the person is signing in from, as two cards rather than a dropdown.
@@ -43,7 +62,7 @@ function DeviceChoice({
 
   return (
     <fieldset>
-      <legend className="mb-1.5 block text-sm font-semibold text-strong">
+      <legend className="mb-2 block text-sm font-semibold text-strong">
         {tr("Where are you signing in from?", "Aap kahan se login kar rahe hain?")}
       </legend>
       <div className="grid gap-2 sm:grid-cols-2">
@@ -53,10 +72,10 @@ function DeviceChoice({
             <label
               key={option.value}
               className={cx(
-                "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-[border-color,background-color,box-shadow] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary",
+                "relative flex cursor-pointer items-start gap-3 rounded-xl p-3 transition-[border-color,background-color,box-shadow] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary",
                 active
-                  ? "border-primary bg-primary-soft/60 shadow-sm"
-                  : "border-line-strong bg-card hover:border-faint",
+                  ? "border-gradient-fill shadow-sm"
+                  : "border-[1.5px] border-line-strong bg-card hover:border-faint",
               )}
             >
               <input
@@ -71,7 +90,7 @@ function DeviceChoice({
                 aria-hidden
                 className={cx(
                   "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
-                  active ? "bg-primary text-white" : "bg-sunken text-muted",
+                  active ? "bg-gradient-brand text-white shadow-sm" : "bg-sunken text-muted",
                 )}
               >
                 <Icon name={option.icon} filled={active} className="text-[20px]" />
@@ -80,6 +99,14 @@ function DeviceChoice({
                 <span className="block text-sm font-semibold text-strong">{option.title}</span>
                 <span className="block text-xs text-muted">{option.hint}</span>
               </span>
+              {active && (
+                <span
+                  aria-hidden
+                  className="bg-gradient-brand pop-scale absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full text-white shadow-sm ring-2 ring-card"
+                >
+                  <Icon name="check" className="text-[13px]" />
+                </span>
+              )}
             </label>
           );
         })}
@@ -94,11 +121,12 @@ function LoginForm() {
   const { signIn, user, loading } = useSession();
   const tr = useTr();
 
+  const [audience, setAudience] = useState<Audience>("PATIENT");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
 
   // The remembered choice comes from an external store, so it needs no effect;
   // an explicit pick in the form overrides it.
@@ -120,6 +148,24 @@ function LoginForm() {
       "Your account is ready. Sign in to continue.",
       "Aap ka account tayyar hai. Jari rakhne ke liye login karein.",
     ),
+    reset: tr(
+      "Your password has been changed. Sign in with the new one.",
+      "Aap ka password badal diya gaya hai. Naye password se login karein.",
+    ),
+  };
+
+  const copy: Record<Audience, { subtitle: string; hint?: string }> = {
+    PATIENT: {
+      subtitle: tr("Sign in to your account.", "Apne account mein login karein."),
+    },
+    DOCTOR: {
+      subtitle: tr("Sign in to your clinical dashboard.", "Apne clinical dashboard mein login karein."),
+      hint: tr("You can only sign in once your account is approved.", "Account approval ke baad hi login hoga."),
+    },
+    ADMIN: {
+      subtitle: tr("Sign in to the administration console.", "Intezamia console mein login karein."),
+      hint: tr("Administrator accounts are created by the hospital.", "Intezamia ke accounts hospital banata hai."),
+    },
   };
 
   // Already signed in — do not show the form again.
@@ -127,13 +173,36 @@ function LoginForm() {
     if (!loading && user) router.replace(homePathFor(user.role));
   }, [user, loading, router]);
 
+  /** The way out of `EMAIL_NOT_VERIFIED`: a fresh code, then the code screen. */
+  async function sendVerificationCode() {
+    setResending(true);
+    try {
+      await auth.resendCode({ email: email.trim() });
+    } catch {
+      // A refused resend is not a reason to strand anyone: an earlier code may
+      // still be in the inbox, and the verify screen can ask for another.
+    } finally {
+      setResending(false);
+      router.push(`/verify-email?email=${encodeURIComponent(email.trim())}`);
+    }
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      const signedIn = await signIn(email, password, deviceClass);
-      router.replace(homePathFor(signedIn.role));
+      // Note what is *not* here: the audience tabs. The account decides the role.
+      const result = await signIn(email, password, deviceClass);
+      if (result.requires2FA) {
+        // Not a failure — the second factor is the rest of signing in.
+        router.push(
+          `/login/2fa?challenge=${encodeURIComponent(result.challengeId)}&method=${result.method}` +
+            (deviceClass === "SHARED_TERMINAL" ? "&shared=1" : ""),
+        );
+        return;
+      }
+      router.replace(homePathFor(result.user.role));
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -149,40 +218,121 @@ function LoginForm() {
 
   return (
     <div className="w-full">
-      <div className="mb-7">
-        <span
-          aria-hidden
-          className="bg-gradient-brand mb-4 grid h-12 w-12 place-items-center rounded-2xl text-white shadow-md"
-        >
-          <Icon name="waving_hand" filled className="text-[24px]" />
-        </span>
-        <h1 className="font-display text-3xl font-bold text-strong">
-          {tr("Welcome back", "Khush aamdeed")}
-        </h1>
-        <p className="mt-1.5 text-muted">
-          {tr("Sign in to your account.", "Apne account mein login karein.")}
-        </p>
-      </div>
+      <AuthHeading
+        badge={<MarkBadge />}
+        title={tr("Welcome back", "Khush aamdeed")}
+        subtitle={copy[audience].subtitle}
+      />
+
+      <Segmented<Audience>
+        className="mb-2 w-full"
+        label={tr("Who is signing in", "Kaun login kar raha hai")}
+        value={audience}
+        onChange={setAudience}
+        options={[
+          { value: "PATIENT", label: tr("Patient", "Mareez"), icon: "person" },
+          { value: "DOCTOR", label: tr("Doctor", "Doctor"), icon: "stethoscope" },
+          { value: "ADMIN", label: tr("Admin", "Admin"), icon: "admin_panel_settings" },
+        ]}
+      />
+      <p className="mb-5 min-h-5 px-1 text-xs text-muted">{copy[audience].hint}</p>
 
       {reason && reasons[reason] && (
-        <p
-          role="status"
-          className="pop-in mb-5 flex items-start gap-2 rounded-xl border border-warning/50 bg-warning-soft px-4 py-3 text-sm text-warning"
-        >
-          <Icon name="info" className="mt-px shrink-0 text-[18px]" />
+        <AuthNotice tone={reason === "reset" ? "success" : "warning"} live="status" icon="info">
           {reasons[reason]}
-        </p>
+        </AuthNotice>
       )}
 
-      {error && (
-        <p
-          role="alert"
-          className="pop-in mb-5 flex items-start gap-2 rounded-xl border border-critical/50 bg-critical-soft px-4 py-3 text-sm font-medium text-critical"
+      {error?.code === "EMAIL_NOT_VERIFIED" && (
+        <AuthNotice
+          tone="warning"
+          title={tr("This email is not verified yet", "Yeh email abhi tasdeeq nahi hui")}
+          action={
+            <Button type="button" variant="secondary" loading={resending} onClick={sendVerificationCode}>
+              {tr("Send a code", "Code bhejein")}
+            </Button>
+          }
         >
-          <Icon name="error" className="mt-px shrink-0 text-[18px]" />
-          {error.message}
-        </p>
+          {tr(
+            "We will send a fresh six-digit code to this address.",
+            "Hum is pate par naya chhe hindson ka code bhejenge.",
+          )}
+        </AuthNotice>
       )}
+
+      {(error?.code === "PENDING_APPROVAL" || error?.code === "APPLICATION_REJECTED") && (
+        <AuthNotice
+          tone={error.code === "PENDING_APPROVAL" ? "warning" : "critical"}
+          title={
+            error.code === "PENDING_APPROVAL"
+              ? tr("Your application is still being reviewed", "Aap ki darkhwast abhi zer-e-ghaur hai")
+              : tr("Your application was not approved", "Aap ki darkhwast manzoor nahi hui")
+          }
+          action={
+            <Link href="/doctor/pending" className={cx(AUTH_LINK, "inline-flex items-center gap-1")}>
+              {tr("See your application", "Apni darkhwast dekhein")}
+              <Icon name="arrow_forward" className="text-[16px]" />
+            </Link>
+          }
+        >
+          {error.code === "PENDING_APPROVAL"
+            ? tr(
+                "An administrator has to approve the account before it can sign in.",
+                "Login se pehle intezamia ko account manzoor karna hoga.",
+              )
+            : tr(
+                "The reason, and what to do next, are on your application page.",
+                "Wajah aur agla qadam aap ki darkhwast ke safhe par hai.",
+              )}
+        </AuthNotice>
+      )}
+
+      {error?.code === "PROFILE_INCOMPLETE" && (
+        <AuthNotice
+          tone="warning"
+          title={tr("Your profile is not finished", "Aap ki profile mukammal nahi hui")}
+          action={
+            <Link
+              href="/doctor/onboarding"
+              className={cx(AUTH_LINK, "inline-flex items-center gap-1")}
+            >
+              {tr("Finish your profile", "Profile mukammal karein")}
+              <Icon name="arrow_forward" className="text-[16px]" />
+            </Link>
+          }
+        >
+          {tr(
+            "Fill in the remaining details and the account goes for approval.",
+            "Baqi tafseelat bhar dein, phir account manzoori ke liye chala jayega.",
+          )}
+        </AuthNotice>
+      )}
+
+      {error?.code === "ACCOUNT_LOCKED" && (
+        <AuthNotice tone="critical" title={tr("This account is locked", "Yeh account band hai")}>
+          {tr(
+            "Too many failed attempts. Contact the hospital to have it unlocked.",
+            "Bohat zyada nakaam koshishein. Khulwane ke liye hospital se rabta karein.",
+          )}
+        </AuthNotice>
+      )}
+
+      {error?.code === "RATE_LIMITED" && (
+        <AuthNotice tone="warning" title={tr("Too many attempts", "Bohat zyada koshishein")}>
+          {tr("Wait a moment and try again.", "Thora intezaar karein aur dobara koshish karein.")}
+        </AuthNotice>
+      )}
+
+      {error?.code === "INVALID_CREDENTIALS" && (
+        <AuthNotice tone="critical">
+          {tr(
+            "That email and password do not match an account.",
+            "Yeh email aur password kisi account se nahi milte.",
+          )}
+        </AuthNotice>
+      )}
+
+      {error && !HANDLED.has(error.code) && <AuthNotice tone="critical">{error.message}</AuthNotice>}
 
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <Field label={tr("Email", "Email")} htmlFor="email" error={error?.fieldError("email")}>
@@ -198,36 +348,24 @@ function LoginForm() {
           />
         </Field>
 
-        <Field
-          label={tr("Password", "Password")}
-          htmlFor="password"
-          error={error?.fieldError("password")}
-        >
-          <Input
+        <div className="space-y-1.5">
+          <PasswordField
             id="password"
-            name="password"
-            type={showPassword ? "text" : "password"}
-            autoComplete="current-password"
-            required
+            label={tr("Password", "Password")}
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            invalid={Boolean(error?.fieldError("password"))}
-            className="pr-12"
+            onChange={setPassword}
+            error={error?.fieldError("password")}
           />
-          <button
-            type="button"
-            aria-label={showPassword ? tr("Hide password", "Password chhupayein") : tr("Show password", "Password dikhayein")}
-            aria-pressed={showPassword}
-            onClick={() => setShowPassword((current) => !current)}
-            className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-muted transition-colors hover:bg-sunken hover:text-strong focus-visible:outline-2 focus-visible:outline-primary"
-          >
-            <Icon name={showPassword ? "visibility_off" : "visibility"} className="text-[20px]" />
-          </button>
-        </Field>
+          <p className="text-right">
+            <Link href="/forgot-password" className={cx(AUTH_LINK, "text-sm")}>
+              {tr("Forgot your password?", "Password bhool gaye?")}
+            </Link>
+          </p>
+        </div>
 
         <DeviceChoice value={deviceClass} onChange={setChosen} />
 
-        <Button type="submit" size="lg" className="w-full" loading={submitting}>
+        <Button type="submit" size="lg" className="btn-shine w-full" loading={submitting}>
           {submitting ? tr("Signing in…", "Login ho raha hai…") : tr("Sign in", "Login karein")}
           {!submitting && <Icon name="arrow_forward" className="text-[20px]" />}
         </Button>
@@ -235,16 +373,25 @@ function LoginForm() {
 
       <p className="mt-6 text-center text-sm text-muted">
         {tr("New patient?", "Naye mareez hain?")}{" "}
-        <Link
-          href="/register"
-          className="font-semibold text-primary underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
+        <Link href="/register" className={AUTH_LINK}>
           {tr("Create an account", "Account banayein")}
         </Link>
       </p>
     </div>
   );
 }
+
+/** Codes that get their own banner above; anything else falls back to the
+    server's own message rather than being silently swallowed. */
+const HANDLED = new Set<ApiError["code"]>([
+  "EMAIL_NOT_VERIFIED",
+  "PENDING_APPROVAL",
+  "APPLICATION_REJECTED",
+  "PROFILE_INCOMPLETE",
+  "ACCOUNT_LOCKED",
+  "RATE_LIMITED",
+  "INVALID_CREDENTIALS",
+]);
 
 export default function LoginPage() {
   return (

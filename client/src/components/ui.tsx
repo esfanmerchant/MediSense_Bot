@@ -553,7 +553,11 @@ export function Input({
   invalid,
   placeholder,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }) {
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  invalid?: boolean;
+  /** React 19 passes refs as props; declaring it lets a form focus this field. */
+  ref?: React.Ref<HTMLInputElement>;
+}) {
   return (
     <input
       aria-invalid={invalid || undefined}
@@ -576,7 +580,10 @@ export function Textarea({
   invalid,
   placeholder,
   ...props
-}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean }) {
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  invalid?: boolean;
+  ref?: React.Ref<HTMLTextAreaElement>;
+}) {
   return (
     <textarea
       aria-invalid={invalid || undefined}
@@ -594,7 +601,10 @@ export function Select({
   invalid,
   children,
   ...props
-}: React.SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }) {
+}: React.SelectHTMLAttributes<HTMLSelectElement> & {
+  invalid?: boolean;
+  ref?: React.Ref<HTMLSelectElement>;
+}) {
   return (
     <span className="relative block">
       <select

@@ -64,6 +64,42 @@ Both connection strings are needed: the transaction pooler cannot run DDL, so
 migrations use the direct connection while runtime queries use the pool. A
 password containing `@` must be percent-encoded as `%40`.
 
+### Email delivery
+
+Verification codes, two-factor codes and the doctor-application notices all go
+out through one SMTP transport (`api/app/services/email.py`). Without these the
+application still runs: `EMAIL_ENABLED=false` makes every send a logged no-op,
+and the code is written to the API log instead — enough to develop against, and
+never enough for production.
+
+| Variable | Meaning |
+|---|---|
+| `EMAIL_ENABLED` | `false` disables delivery entirely; nothing is sent and nothing fails |
+| `SMTP_HOST` / `SMTP_PORT` | The relay. Gmail is `smtp.gmail.com` / `587` |
+| `SMTP_SECURE` | `true` for implicit TLS (port 465); `false` starts TLS on 587 |
+| `SMTP_USER` / `SMTP_PASSWORD` | For Gmail this must be an **app password**, not the account's own |
+| `SMTP_FROM` | The visible sender, e.g. `MediSense <no-reply@medisense.pk>` |
+
+Mail is never allowed to fail an operation: `send` returns a `Delivery` and
+raises nothing, so a slow relay cannot become a slow appointment booking.
+
+### Codes, sessions and the clinic clock
+
+| Variable | Meaning |
+|---|---|
+| `SESSION_SECRET` | Signs sessions **and** derives the key that seals TOTP secrets at rest — rotating it invalidates both |
+| `JWT_SECRET` | Signs access tokens |
+| `CLINIC_TIMEZONE` | The wall clock every schedule is written in. `Asia/Karachi` |
+
+Verification and two-factor codes are six digits, stored only as a hash, valid
+for ten minutes, and burned after five wrong attempts. A trusted device is a
+hashed token in an httpOnly cookie that lasts thirty days — and is refused
+outright when the sign-in declared a shared terminal.
+
+Uploaded application documents live in the same private Supabase Storage
+bucket the rest of the system uses; nothing is public, and every read is a
+short-lived signed URL.
+
 ### Demo accounts
 
 All fictional, all sharing the password `Demo@Pass123`.

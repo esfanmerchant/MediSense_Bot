@@ -17,9 +17,8 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { useState } from "react";
 
-import { AssistantChat } from "@/components/assistant";
+import { AssistantAvatar, AssistantChat } from "@/components/assistant";
 import { Icon } from "@/components/Icon";
-import { LogoMark } from "@/components/Logo";
 import { Button, ErrorState, Loading, cx } from "@/components/ui";
 import { assistant as assistantApi } from "@/lib/api";
 import { useTr } from "@/lib/lang";
@@ -45,7 +44,7 @@ function WidgetBody() {
   if (!status.data?.available) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <LogoMark className="h-12 w-auto" />
+        <AssistantAvatar className="h-14 w-14" />
         <p className="font-display font-bold text-strong">
           {tr("The assistant needs your consent first", "Assistant ko pehle aap ki ijazat chahiye")}
         </p>
@@ -94,19 +93,25 @@ export function AssistantWidget() {
             style={{ transformOrigin: "bottom right" }}
             className="glass fixed bottom-24 right-4 z-40 flex h-[min(600px,calc(100dvh-8rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl sm:right-6"
           >
+            {/* The same header the full page wears — avatar, purpose, status —
+                so the panel reads as the one assistant, not a second one. */}
             <div className="flex items-center gap-3 border-b border-line/70 px-4 py-3">
-              <span className="bg-gradient-soft grid h-9 w-9 place-items-center rounded-full border border-line/70">
-                <LogoMark className="h-5 w-auto" />
-              </span>
+              <AssistantAvatar />
               <div className="min-w-0 flex-1">
-                <p className="font-display text-sm font-bold text-strong">MediSense Assistant</p>
+                <p className="truncate font-display text-sm font-bold text-strong">
+                  MediSense Assistant
+                </p>
                 <p className="text-[11px] text-faint">{tr("Guidance, not diagnosis", "Rehnumai, tashkhees nahi")}</p>
               </div>
+              <span className="hidden items-center gap-1.5 rounded-full bg-stable-soft px-2 py-1 text-[10px] font-semibold text-stable min-[380px]:inline-flex">
+                <span aria-hidden className="animate-breathe h-1.5 w-1.5 rounded-full bg-stable" />
+                {tr("Online", "Online")}
+              </span>
               <Link
                 href="/patient/assistant"
                 aria-label={tr("Open full page", "Poora page kholein")}
                 title={tr("Open full page", "Poora page kholein")}
-                className="grid h-9 w-9 place-items-center rounded-full text-muted transition-colors hover:bg-gradient-soft hover:text-primary"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-sunken hover:text-primary"
               >
                 <Icon name="open_in_full" className="text-[18px]" />
               </Link>
@@ -114,7 +119,7 @@ export function AssistantWidget() {
                 type="button"
                 aria-label={tr("Minimize assistant", "Assistant chhota karein")}
                 onClick={toggle}
-                className="grid h-9 w-9 place-items-center rounded-full text-muted transition-[background-color,color,transform] hover:rotate-90 hover:bg-gradient-soft hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted transition-[background-color,color,transform] hover:rotate-90 hover:bg-sunken hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
               >
                 <Icon name="close" className="text-[20px]" />
               </button>

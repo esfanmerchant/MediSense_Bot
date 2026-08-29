@@ -37,15 +37,14 @@ import {
   type ReactNode,
 } from "react";
 
+import { Segmented } from "@/components/forms";
 import { Icon } from "@/components/Icon";
 import { LogoMark } from "@/components/Logo";
 import {
-  Badge,
   Button,
   Card,
   ErrorState,
   Field,
-  Input,
   Loading,
   cx,
 } from "@/components/ui";
@@ -71,19 +70,51 @@ function messageOf(caught: unknown, fallback: string): string {
   return caught instanceof ApiError ? caught.message : fallback;
 }
 
-const URGENCY_TONE: Record<Urgency, "critical" | "warning" | "info" | "neutral"> = {
-  EMERGENCY: "critical",
-  URGENT: "warning",
-  ROUTINE: "info",
-  INFORMATION: "neutral",
-};
-
 const URGENCY_LABEL: Record<Urgency, [string, string]> = {
-  EMERGENCY: ["Seek care now", "Foran ilaaj lein"],
-  URGENT: ["See a doctor today", "Aaj hi doctor ko dikhayein"],
-  ROUTINE: ["Routine", "Mamool ki baat"],
+  EMERGENCY: ["Seek care now", "Emergency"],
+  URGENT: ["See a doctor today", "Jald doctor se milein"],
+  ROUTINE: ["Routine", "Mamool"],
   INFORMATION: ["Information", "Ittila"],
 };
+
+/**
+ * How urgent this is, as one chip.
+ *
+ * Three things carry the meaning at once — a word, a tone, and a shape — so it
+ * survives a colour-blind reader and a bad monitor. Only the emergency dot
+ * pulses: a chip that always moves is a chip nobody looks at.
+ */
+function UrgencyChip({ urgency }: { urgency: Urgency }) {
+  const tr = useTr();
+  const shells: Record<Urgency, string> = {
+    EMERGENCY: "border-critical/45 bg-critical-soft text-critical",
+    URGENT: "border-warning/45 bg-warning-soft text-warning",
+    ROUTINE: "border-info/40 bg-info-soft text-info",
+    INFORMATION: "border-line bg-sunken text-muted",
+  };
+  const icons: Record<Urgency, string> = {
+    EMERGENCY: "emergency",
+    URGENT: "schedule",
+    ROUTINE: "check_circle",
+    INFORMATION: "info",
+  };
+
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+        shells[urgency],
+      )}
+    >
+      {urgency === "EMERGENCY" ? (
+        <span aria-hidden className="pulse-dot h-2 w-2 shrink-0 rounded-full bg-critical" />
+      ) : (
+        <Icon name={icons[urgency]} filled className="text-[15px]" />
+      )}
+      {tr(...URGENCY_LABEL[urgency])}
+    </span>
+  );
+}
 
 /** The marker the server writes into a recorded question when an image was
     attached. The image itself is never stored, so this is all history has. */
@@ -243,28 +274,89 @@ function StreamedText({
   );
 }
 
+/**
+ * The answer, when the provider was unreachable.
+ *
+ * The text inside is the server's own fallback — deterministic triage, written
+ * by the API, and it renders **verbatim**: not translated, not rewritten, not
+ * summarised. What this adds is the frame around it, so an outage does not read
+ * like ordinary advice: a warning tone, an icon, and the one control that is
+ * actually useful, which is asking the same question again.
+ */
+function OutageAnswer({
+  answer,
+  onRetry,
+}: {
+  answer: AssistantAnswer;
+  onRetry?: () => void;
+}) {
+  const tr = useTr();
+  return (
+    <div className="rounded-2xl border border-warning/45 bg-warning-soft/60 p-4">
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning-soft text-warning shadow-sm"
+        >
+          <Icon name="cloud_off" filled className="text-[20px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="mono-caps text-[10px] text-warning">
+            {tr("Assistant offline", "Assistant offline hai")}
+          </p>
+          {/* Server text. Rendered as sent — the chrome around it is ours. */}
+          <div className="mt-1">
+            <ChatMarkdown text={answer.answer} />
+          </div>
+        </div>
+      </div>
+      {onRetry && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-warning/30 pt-3">
+          <Button variant="secondary" onClick={onRetry}>
+            <Icon name="refresh" className="text-[20px]" />
+            {tr("Try again", "Dobara koshish karein")}
+          </Button>
+          <span className="text-xs text-muted">
+            {tr("Your question is sent again as it is.", "Aap ka sawal jyon ka tyon dobara bheja jayega.")}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnswerBody({
   answer,
   animate,
   onTick,
+  onRetry,
 }: {
   answer: AssistantAnswer;
   animate: boolean;
   onTick?: () => void;
+  /** Re-asks the same question. Only offered when the provider was down. */
+  onRetry?: () => void;
 }) {
   const tr = useTr();
-  const [revealed, setRevealed] = useState(!animate);
-  const finish = useCallback(() => setRevealed(true), []);
+  const [streamed, setStreamed] = useState(!animate);
+  const finish = useCallback(() => setStreamed(true), []);
+  const outage = answer.safetyInterventions.includes("provider_unavailable");
+  // An outage answer never streams, so it is complete the moment it renders.
+  const revealed = streamed || outage;
 
   return (
     <div className="space-y-3">
       {answer.emergency && <EmergencyBanner />}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={URGENCY_TONE[answer.urgency]}>{tr(...URGENCY_LABEL[answer.urgency])}</Badge>
+        <UrgencyChip urgency={answer.urgency} />
       </div>
 
-      <StreamedText text={answer.answer} animate={animate} onTick={onTick} onDone={finish} />
+      {outage ? (
+        <OutageAnswer answer={answer} onRetry={onRetry} />
+      ) : (
+        <StreamedText text={answer.answer} animate={animate} onTick={onTick} onDone={finish} />
+      )}
 
       {/* The suggestion, as its own card: what kind of care, and the way to
           it. Urgent answers wear the critical accent and a stronger call. */}
@@ -350,16 +442,34 @@ export function turnFromHistory(row: AssistantTurn, disclaimer: string): Turn {
   };
 }
 
-function AssistantAvatar({ className }: { className?: string }) {
+/**
+ * The assistant's face: the mark itself, inside a ring of the brand ramp.
+ *
+ * The ring is a 2px gradient border drawn as a padded wrapper rather than a
+ * `border-image`, so it follows the circle at every size the callers use. The
+ * pulse is the same one the "live" dots use, at the same slow tempo — present
+ * enough to read as awake, quiet enough to sit beside a page of text.
+ */
+export function AssistantAvatar({
+  className,
+  pulse = true,
+}: {
+  className?: string;
+  /** Off where several sit in one column, so the page does not throb. */
+  pulse?: boolean;
+}) {
   return (
     <span
       aria-hidden
       className={cx(
-        "bg-gradient-soft grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line/70 shadow-sm",
+        "bg-gradient-brand grid h-9 w-9 shrink-0 place-items-center rounded-full p-[2px] shadow-sm",
+        pulse && "pulse-dot-brand",
         className,
       )}
     >
-      <LogoMark className="h-5 w-auto" />
+      <span className="grid h-full w-full place-items-center rounded-full bg-card">
+        <LogoMark className="h-[55%] w-auto" />
+      </span>
     </span>
   );
 }
@@ -386,7 +496,9 @@ function UserMessage({ turn }: { turn: Turn }) {
             <span className="text-faint">· {tr("not stored", "save nahi hui")}</span>
           </p>
         )}
-        <p className="bg-gradient-brand whitespace-pre-line rounded-2xl rounded-br-md px-4 py-3 text-[15.5px] leading-relaxed text-white shadow-md">
+        {/* The corner nearest the sender is tightened, so the bubble points at
+            whoever said it without needing a tail. */}
+        <p className="bg-gradient-brand whitespace-pre-line rounded-2xl rounded-br-[6px] px-4 py-3 text-[15.5px] leading-relaxed text-white shadow-md">
           {turn.question}
         </p>
       </div>
@@ -394,12 +506,20 @@ function UserMessage({ turn }: { turn: Turn }) {
   );
 }
 
-function AssistantMessage({ turn, onTick }: { turn: Turn; onTick?: () => void }) {
+function AssistantMessage({
+  turn,
+  onTick,
+  onRetry,
+}: {
+  turn: Turn;
+  onTick?: () => void;
+  onRetry?: () => void;
+}) {
   return (
     <div className={cx("flex gap-3", turn.fresh && "pop-in")}>
-      <AssistantAvatar className="mt-1" />
-      <div className="glass min-w-0 flex-1 rounded-2xl rounded-tl-md px-4 py-3.5 !shadow-card sm:px-5">
-        <AnswerBody answer={turn.answer} animate={turn.fresh} onTick={onTick} />
+      <AssistantAvatar className="mt-1" pulse={false} />
+      <div className="min-w-0 flex-1 rounded-2xl rounded-tl-[6px] border border-line bg-card px-4 py-3.5 shadow-sm dark:bg-sunken sm:px-5">
+        <AnswerBody answer={turn.answer} animate={turn.fresh} onTick={onTick} onRetry={onRetry} />
       </div>
     </div>
   );
@@ -432,7 +552,7 @@ function Thinking({ withImage }: { withImage: boolean }) {
   return (
     <div className="pop-in flex items-center gap-3" role="status" aria-live="polite">
       <AssistantAvatar />
-      <div className="glass flex items-center gap-3 rounded-2xl rounded-tl-md px-4 py-3 !shadow-card">
+      <div className="flex items-center gap-3 rounded-2xl rounded-tl-[6px] border border-line bg-card px-4 py-3 shadow-sm dark:bg-sunken">
         <span className="flex items-center gap-1.5" aria-hidden>
           <span className="typing-dot bg-gradient-brand h-2 w-2 rounded-full" />
           <span className="typing-dot bg-gradient-brand h-2 w-2 rounded-full" />
@@ -463,7 +583,9 @@ function Welcome({ onSuggest }: { onSuggest: (text: string) => void }) {
           aria-hidden
           className="animate-breathe absolute inset-0 rounded-full bg-accent-bright/40 blur-2xl"
         />
-        <AssistantAvatar className="animate-float relative h-20 w-20 [&>svg]:h-11" />
+        {/* The halo behind it is already breathing; the mark floats instead of
+            pulsing, so only one animation owns the element. */}
+        <AssistantAvatar className="animate-float relative h-20 w-20" pulse={false} />
       </div>
       <h2 className="mt-6 font-display text-2xl font-bold text-strong">
         {tr("How can I help today?", "Aaj main kaise madad karun?")}
@@ -480,7 +602,7 @@ function Welcome({ onSuggest }: { onSuggest: (text: string) => void }) {
             <button
               type="button"
               onClick={() => onSuggest(tr(en, ur))}
-              className="group flex min-h-12 w-full items-center gap-2.5 rounded-full border border-line-strong bg-card px-4 py-2.5 text-left text-sm text-strong transition-[background-image,transform,box-shadow,border-color] duration-200 hover:bg-gradient-soft hover:border-primary/40 hover:scale-[1.02] hover:shadow-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="group flex min-h-12 w-full items-center gap-2.5 rounded-full border border-line-strong bg-card px-4 py-2.5 text-left text-sm text-strong transition-[background-color,transform,box-shadow,border-color] duration-200 hover:bg-sunken hover:border-primary/40 hover:scale-[1.02] hover:shadow-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Icon name="auto_awesome" className="icon-wiggle shrink-0 text-[18px] text-accent" />
               {tr(en, ur)}
@@ -495,6 +617,20 @@ function Welcome({ onSuggest }: { onSuggest: (text: string) => void }) {
 // ---------------------------------------------------------------------------
 // The composer
 // ---------------------------------------------------------------------------
+
+/**
+ * The three openers that sit above the box.
+ *
+ * Short and concrete — a symptom, a document, a booking — because the hard part
+ * of a blank assistant is not typing, it is knowing what it is for. They fill
+ * the composer rather than sending, so the person still edits and still presses
+ * send.
+ */
+const STARTERS: [string, string][] = [
+  ["I have a headache and a fever", "Sar dard aur bukhaar hai"],
+  ["Explain my last report", "Meri last report samjhayein"],
+  ["Book a cardiologist", "Cardiologist book karein"],
+];
 
 /**
  * The microphone from spec §20, as one round control in the composer.
@@ -551,7 +687,7 @@ function MicButton({
           "relative grid h-11 w-11 place-items-center rounded-full transition-[background-color,color,transform] duration-200 hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
           listening
             ? "listening-ring bg-critical text-white"
-            : "mic-idle text-muted hover:bg-gradient-soft hover:text-primary disabled:opacity-50 disabled:hover:scale-100",
+            : "mic-idle bg-sunken text-muted hover:bg-raised hover:text-primary disabled:opacity-50 disabled:hover:scale-100",
         )}
       >
         <Icon name={listening ? "stop" : "mic"} filled={listening} className="text-[22px]" />
@@ -671,14 +807,22 @@ export function AssistantChat({
     textarea.current?.focus();
   };
 
-  const send = async () => {
-    const message = question.trim();
+  /**
+   * The one path a question takes to the server.
+   *
+   * Both the composer and the outage card's "try again" land here, so a retry
+   * is the same request with the same provenance — not a second, subtly
+   * different code path that could drift from the first.
+   */
+  const ask = async (
+    message: string,
+    sent: { file: File; url: string } | null,
+    inputType: InputType,
+  ) => {
     if (!message || busy) return;
 
     setBusy(true);
     setError(null);
-    const sent = attachment;
-    const inputType: InputType = dictated ? "VOICE" : "TEXT";
     try {
       const answer = sent
         ? await assistantApi.chatWithImage({ message, image: sent.file, sessionId, inputType })
@@ -694,10 +838,7 @@ export function AssistantChat({
       setSessionId(answer.sessionId);
       setTurns((current) => [...current, turn]);
       onTurn(answer.sessionId, turn);
-      setQuestion("");
-      setDictated(false);
-      setAttachment(null);
-      requestAnimationFrame(fit);
+      return true;
     } catch (caught) {
       setError(
         messageOf(
@@ -705,9 +846,27 @@ export function AssistantChat({
           tr("Could not reach the assistant. Please try again.", "Assistant tak nahi pahunch saka. Dobara koshish karein."),
         ),
       );
+      return false;
     } finally {
       setBusy(false);
     }
+  };
+
+  const send = async () => {
+    const message = question.trim();
+    if (!message || busy) return;
+    const sent = attachment;
+    const ok = await ask(message, sent, dictated ? "VOICE" : "TEXT");
+    if (!ok) return;
+    setQuestion("");
+    setDictated(false);
+    setAttachment(null);
+    requestAnimationFrame(fit);
+  };
+
+  /** Asks the same question again, after the provider was unreachable. */
+  const retry = (message: string) => {
+    void ask(message, null, "TEXT");
   };
 
   const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -735,7 +894,11 @@ export function AssistantChat({
             {turns.map((turn) => (
               <li key={turn.id} className="space-y-4">
                 <UserMessage turn={turn} />
-                <AssistantMessage turn={turn} onTick={scrollToEnd} />
+                <AssistantMessage
+                  turn={turn}
+                  onTick={scrollToEnd}
+                  onRetry={() => retry(turn.question)}
+                />
               </li>
             ))}
             {busy && (
@@ -785,8 +948,32 @@ export function AssistantChat({
             </div>
           )}
 
+          {/* Three ways in, for someone who does not know what to ask next.
+              They fill the box rather than sending, so nothing leaves on one
+              stray tap — and they wait until the welcome screen is gone, so the
+              page never offers two rows of suggestions at once. */}
+          {turns.length > 0 && !question.trim() && !busy && (
+            <ul className="mb-2 flex flex-wrap gap-2">
+              {STARTERS.map(([en, ur]) => (
+                <li key={en}>
+                  <button
+                    type="button"
+                    onClick={() => suggest(tr(en, ur))}
+                    className="group inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line-strong bg-card px-3 text-[13px] font-medium text-strong transition-[background-color,border-color,transform,box-shadow] duration-200 hover:scale-[1.03] hover:border-primary/40 hover:bg-sunken hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  >
+                    <Icon
+                      name="bolt"
+                      className="icon-wiggle shrink-0 text-[16px] text-accent"
+                    />
+                    {tr(en, ur)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
           <form
-            className="glass relative flex items-end gap-1 rounded-2xl p-1.5 !shadow-card transition-[box-shadow,border-color] focus-within:border-primary focus-within:!shadow-float"
+            className="relative flex min-h-14 items-end gap-1.5 rounded-[28px] border border-line-strong bg-card p-1.5 shadow-card transition-[box-shadow,border-color] focus-within:border-primary focus-within:shadow-float"
             onSubmit={(event) => {
               event.preventDefault();
               void send();
@@ -808,7 +995,7 @@ export function AssistantChat({
               aria-label={tr("Attach a photo of a report", "Report ki tasveer lagayein")}
               title={tr("Attach a photo of a report", "Report ki tasveer lagayein")}
               onClick={() => fileInput.current?.click()}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-sunken hover:text-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-sunken text-muted transition-[background-color,color,transform] duration-200 hover:scale-105 hover:bg-raised hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:hover:scale-100"
             >
               <Icon name="add_photo_alternate" className="text-[22px]" />
             </button>
@@ -888,6 +1075,128 @@ function draftOf(symptom = ""): SymptomDraft {
   return { key: nextDraftKey, symptom, severity: "", duration: "" };
 }
 
+/** The three answers people actually give. Anything else is typed. */
+const SEVERITIES: [string, string][] = [
+  ["Mild", "Halki"],
+  ["Moderate", "Darmiyani"],
+  ["Severe", "Shadeed"],
+];
+
+/**
+ * One extracted symptom, as a card the patient corrects.
+ *
+ * A card rather than a table row because this is a *proposal*, and a table
+ * reads as a record — rows of a table look finished, which is exactly the wrong
+ * invitation on a screen whose whole purpose is being corrected before it is
+ * saved.
+ *
+ * Severity has two controls on purpose. The segmented picker is the fast path
+ * and covers what almost everyone means; the field beside it is the real value,
+ * still typable, because "sirf subah" is a severity too and a three-way choice
+ * would quietly discard it. Both write the same string, and the field is what
+ * is sent.
+ */
+function SymptomCard({
+  draft,
+  index,
+  onChange,
+  onRemove,
+}: {
+  draft: SymptomDraft;
+  index: number;
+  onChange: (patch: Partial<SymptomDraft>) => void;
+  onRemove: () => void;
+}) {
+  const tr = useTr();
+  const chip =
+    "input-base h-10 w-full rounded-full border border-line-strong bg-card pl-9 pr-3 text-sm text-strong placeholder:text-faint hover:border-faint";
+  const caption = "mono-caps block text-[10px] text-faint";
+  const options = SEVERITIES.map(([en, ur]) => ({ value: tr(en, ur), label: tr(en, ur) }));
+
+  return (
+    <li className="border-gradient flex flex-col rounded-2xl p-4 shadow-card transition-shadow duration-200 focus-within:shadow-overlay">
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="bg-gradient-brand mt-5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white shadow-sm"
+        >
+          {index + 1}
+        </span>
+        <div className="min-w-0 flex-1">
+          <label htmlFor={`symptom-${draft.key}`} className={caption}>
+            {tr("Symptom", "Takleef")}
+          </label>
+          <input
+            id={`symptom-${draft.key}`}
+            value={draft.symptom}
+            maxLength={200}
+            placeholder={tr("e.g. headache", "maslan sar dard")}
+            onChange={(event) => onChange({ symptom: event.target.value })}
+            className="input-base mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 font-display text-base font-bold text-strong placeholder:font-sans placeholder:font-normal placeholder:text-faint hover:border-faint"
+          />
+        </div>
+        <button
+          type="button"
+          aria-label={`Remove ${draft.symptom || `symptom ${index + 1}`}`}
+          title={tr("Remove", "Hatayein")}
+          onClick={onRemove}
+          className="mt-5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-[background-color,color,transform] duration-200 hover:scale-110 hover:bg-critical-soft hover:text-critical focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <Icon name="close" className="text-[18px]" />
+        </button>
+      </div>
+
+      <div className="mt-3.5 space-y-2">
+        <label htmlFor={`severity-${draft.key}`} className={caption}>
+          {tr("Severity", "Shiddat")}
+        </label>
+        <Segmented<string>
+          size="sm"
+          className="w-full"
+          label={tr("How bad is it?", "Kitni takleef hai?")}
+          options={options}
+          value={draft.severity}
+          onChange={(next) => onChange({ severity: next })}
+        />
+        <span className="relative block">
+          <Icon
+            name="edit"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-faint"
+          />
+          <input
+            id={`severity-${draft.key}`}
+            value={draft.severity}
+            maxLength={50}
+            placeholder={tr("or in your own words", "ya apne alfaz mein")}
+            onChange={(event) => onChange({ severity: event.target.value })}
+            className={chip}
+          />
+        </span>
+      </div>
+
+      <div className="mt-3.5 space-y-2">
+        <label htmlFor={`duration-${draft.key}`} className={caption}>
+          {tr("How long", "Kab se")}
+        </label>
+        <span className="relative block">
+          <Icon
+            name="schedule"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-faint"
+          />
+          <input
+            id={`duration-${draft.key}`}
+            value={draft.duration}
+            maxLength={100}
+            placeholder={tr("2 days", "2 din")}
+            onChange={(event) => onChange({ duration: event.target.value })}
+            className={chip}
+          />
+        </span>
+      </div>
+    </li>
+  );
+}
+
 /**
  * The spec's "[ 🎤 Speak your symptoms ]" — a large, labelled microphone for
  * the symptom form, where a full-width control suits the page better than the
@@ -935,8 +1244,16 @@ function VoiceInput({
           <Icon name={listening ? "stop" : "mic"} filled className="text-[36px]" />
         </button>
         <div className="min-w-0">
-          <p className="font-display text-base font-bold text-strong">
+          <p className="flex flex-wrap items-center gap-2 font-display text-base font-bold text-strong">
             {listening ? tr("Listening…", "Sun raha hai…") : label}
+            {listening && (
+              // Borrowed from a studio's on-air light, and it means the same
+              // thing: the microphone is open right now.
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-critical-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-critical">
+                <span aria-hidden className="pulse-dot h-1.5 w-1.5 rounded-full bg-critical" />
+                {tr("Live", "Live")}
+              </span>
+            )}
           </p>
           {listening ? (
             <span className="voice-bars mt-1" aria-hidden>
@@ -963,8 +1280,15 @@ function VoiceInput({
       </p>
 
       {speech.interim && (
+        // Word by word, each one arriving as it settles: the point is that the
+        // patient can see what was heard while there is still time to correct
+        // it. Keyed by position, so only the newest span mounts and animates.
         <p className="stream-cursor pop-in rounded-xl bg-gradient-soft px-3 py-2 text-sm italic text-strong">
-          {speech.interim}
+          {speech.interim.split(/\s+/).filter(Boolean).map((word, index) => (
+            <span key={index} className="pop-in mr-[0.28em] inline-block">
+              {word}
+            </span>
+          ))}
         </p>
       )}
 
@@ -1029,11 +1353,11 @@ export function SymptomReview() {
       setReviewing(true);
       // Seeded once here, from an event handler — from now on it is the
       // patient's list, and re-analysing is what replaces it.
-      setDrafts(
-        result.extractedSymptoms.length > 0
-          ? result.extractedSymptoms.map((symptom) => draftOf(symptom))
-          : [draftOf()],
-      );
+      //
+      // Nothing extracted means no card: an empty card presented as "what the
+      // assistant heard" claims a reading that was never made. The dashed card
+      // below is the way to add one by hand.
+      setDrafts(result.extractedSymptoms.map((symptom) => draftOf(symptom)));
     } catch (caught) {
       setError(
         messageOf(caught, "Could not read your description. You can still list your symptoms below."),
@@ -1162,8 +1486,19 @@ export function SymptomReview() {
             {proposal?.emergency && <EmergencyBanner />}
 
             <div>
-              <h3 className="font-semibold text-strong">
-                {proposal?.reviewPrompt ?? tr("List the symptoms you want to record.", "Jo takleef darj karni hai uski fehrist banayein.")}
+              {/*
+                The server writes the review prompt in English. Rather than
+                translate its sentence — server text is never rewritten here —
+                Roman Urdu gets *our* sentence saying the same thing, chosen by
+                the same `tr` every other label uses.
+              */}
+              <h3 className="font-display text-lg font-bold text-strong">
+                {proposal
+                  ? tr(
+                      proposal.reviewPrompt,
+                      "Kya yeh wahi takleef hai jo aap ne batayi? Jo ghalat ho usay durust kar lein.",
+                    )
+                  : tr("List the symptoms you want to record.", "Jo takleef darj karni hai uski fehrist banayein.")}
               </h3>
               <p className="mt-1 text-sm text-muted">
                 {proposal
@@ -1176,61 +1511,45 @@ export function SymptomReview() {
                       "Abhi kuchh save nahi hua. Har takleef ke liye ek qatar barhayein, aur jo darj nahi karni usay hata dein.",
                     )}
               </p>
+              {proposal && drafts.length === 0 && (
+                <p className="mt-2 flex items-start gap-1.5 rounded-xl border border-line bg-sunken/60 px-3 py-2 text-sm text-muted">
+                  <Icon name="search_off" className="mt-0.5 shrink-0 text-[18px] text-faint" />
+                  {tr(
+                    "No symptoms were picked out of what you wrote. Add them yourself below.",
+                    "Aap ne jo likha us mein se koi takleef nahi pehchani ja saki. Neeche khud likh lein.",
+                  )}
+                </p>
+              )}
             </div>
 
-            <ul className="space-y-3">
+            <ul className="stagger grid gap-3 sm:grid-cols-2">
               {drafts.map((draft, index) => (
-                <li
+                <SymptomCard
                   key={draft.key}
-                  className="grid gap-3 rounded-xl border border-line bg-sunken/60 p-3 sm:grid-cols-[2fr_1fr_1fr_auto]"
-                >
-                  <Field label={tr("Symptom", "Takleef")} htmlFor={`symptom-${draft.key}`}>
-                    <Input
-                      id={`symptom-${draft.key}`}
-                      value={draft.symptom}
-                      maxLength={200}
-                      onChange={(event) => update(draft.key, { symptom: event.target.value })}
-                    />
-                  </Field>
-                  <Field label={tr("Severity", "Shiddat")} htmlFor={`severity-${draft.key}`}>
-                    <Input
-                      id={`severity-${draft.key}`}
-                      value={draft.severity}
-                      maxLength={50}
-                      placeholder={tr("mild / severe", "halki / sakht")}
-                      onChange={(event) => update(draft.key, { severity: event.target.value })}
-                    />
-                  </Field>
-                  <Field label={tr("How long", "Kab se")} htmlFor={`duration-${draft.key}`}>
-                    <Input
-                      id={`duration-${draft.key}`}
-                      value={draft.duration}
-                      maxLength={100}
-                      placeholder={tr("2 days", "2 din")}
-                      onChange={(event) => update(draft.key, { duration: event.target.value })}
-                    />
-                  </Field>
-                  <div className="flex items-end">
-                    <Button
-                      variant="ghost"
-                      aria-label={`Remove ${draft.symptom || `symptom ${index + 1}`}`}
-                      onClick={() => remove(draft.key)}
-                    >
-                      {tr("Remove", "Hatayein")}
-                    </Button>
-                  </div>
-                </li>
+                  draft={draft}
+                  index={index}
+                  onChange={(patch) => update(draft.key, patch)}
+                  onRemove={() => remove(draft.key)}
+                />
               ))}
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setDrafts((current) => [...current, draftOf()])}
+                  className="flex h-full min-h-[8rem] w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line-strong bg-sunken/40 p-4 text-sm font-semibold text-muted transition-[border-color,color,background-color,transform] duration-200 hover:scale-[1.01] hover:border-primary hover:bg-raised hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                >
+                  <span
+                    aria-hidden
+                    className="bg-gradient-soft grid h-10 w-10 place-items-center rounded-full text-primary"
+                  >
+                    <Icon name="add" className="text-[22px]" />
+                  </span>
+                  {tr("Add a symptom", "Aur takleef likhein")}
+                </button>
+              </li>
             </ul>
 
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => setDrafts((current) => [...current, draftOf()])}
-              >
-                <Icon name="add" className="text-[20px]" />
-                {tr("Add a symptom", "Aur takleef likhein")}
-              </Button>
               <Button disabled={busy || !usable} loading={busy} onClick={() => void confirm()}>
                 {busy ? tr("Saving…", "Save ho raha hai…") : tr("This is correct — save it", "Yeh durust hai — save karein")}
               </Button>
@@ -1321,7 +1640,7 @@ function ConsentGate({ status, onGranted }: { status: AssistantStatus; onGranted
     <div className="mx-auto max-w-2xl">
       <Card className="card-thread">
         <div className="flex flex-col items-center text-center">
-          <AssistantAvatar className="h-16 w-16 [&>span]:text-[32px]" />
+          <AssistantAvatar className="h-16 w-16" />
           <h2 className="mt-4 font-display text-2xl font-bold text-strong">
             {tr("Turn on the health assistant", "Health assistant chalu karein")}
           </h2>
@@ -1360,6 +1679,26 @@ interface Conversation {
   turns: Turn[];
 }
 
+/**
+ * A conversation's name, from the first thing the patient said.
+ *
+ * Six words is about what fits a 288px rail without truncating mid-word, and
+ * it is enough to tell "sar dard aur bukhaar" from "meri report samjhayein".
+ * A question that is only an attachment leaves nothing to name it with, so
+ * that falls back to the day it happened rather than an empty row.
+ */
+function titleOf(question: string, iso: string, locale?: string): string {
+  const words = question.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (words.length === 0) {
+    const when = new Date(iso);
+    const stamp = Number.isNaN(when.getTime())
+      ? ""
+      : when.toLocaleDateString(locale, { day: "numeric", month: "short" });
+    return stamp ? `Chat · ${stamp}` : "Chat";
+  }
+  return words.length > 6 ? `${words.slice(0, 6).join(" ")}…` : words.join(" ");
+}
+
 /** History rows, grouped into conversations, newest first. */
 function groupConversations(rows: AssistantTurn[], disclaimer: string): Conversation[] {
   const byId = new Map<string, Conversation>();
@@ -1373,7 +1712,7 @@ function groupConversations(rows: AssistantTurn[], disclaimer: string): Conversa
     } else {
       byId.set(row.sessionId, {
         sessionId: row.sessionId,
-        title: turn.question,
+        title: titleOf(turn.question, row.createdAt),
         updatedAt: row.createdAt,
         turns: [turn],
       });
@@ -1391,6 +1730,178 @@ function whenLabel(iso: string, tr: (en: string, ur: string) => string): string 
   yesterday.setDate(today.getDate() - 1);
   if (then.toDateString() === yesterday.toDateString()) return tr("Yesterday", "Kal");
   return then.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+/**
+ * One row in the conversation rail, with the two things a rail needs: a name
+ * you can change, and a way to get a thread out of your way.
+ *
+ * **Both are local, and the row says so.** There is no rename endpoint and no
+ * delete endpoint on the assistant history, so a title typed here lives in this
+ * tab for this visit, and "hide" removes the row from this list and nothing
+ * else. That is why the menu item is worded *Hide from this list* with the
+ * consequence spelled out underneath — calling it "Delete" would promise the
+ * patient their conversation had been erased from their record, which is a lie
+ * a medical product must not tell.
+ */
+function ConversationRow({
+  conversation,
+  current,
+  onOpen,
+  onRename,
+  onHide,
+}: {
+  conversation: Conversation;
+  current: boolean;
+  onOpen: () => void;
+  onRename: (title: string) => void;
+  onHide: () => void;
+}) {
+  const tr = useTr();
+  const [menu, setMenu] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(conversation.title);
+  const shell = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const away = (event: Event) => {
+      if (!shell.current?.contains(event.target as Node)) setMenu(false);
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setMenu(false);
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [menu]);
+
+  const commit = () => {
+    const next = draft.replace(/\s+/g, " ").trim();
+    if (next) onRename(next.slice(0, 80));
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="rounded-lg bg-gradient-soft p-1.5">
+        <input
+          autoFocus
+          value={draft}
+          maxLength={80}
+          aria-label={tr("Conversation name", "Baat-cheet ka naam")}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit();
+            }
+            if (event.key === "Escape") {
+              setDraft(conversation.title);
+              setEditing(false);
+            }
+          }}
+          className="input-base h-9 w-full rounded-md border border-line-strong bg-card px-2 text-sm text-strong"
+        />
+        <p className="px-1 pt-1 text-[10px] text-faint">
+          {tr("Renamed on this device only", "Sirf isi device par naam badla jayega")}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={shell} className="group/row relative">
+      <button
+        type="button"
+        aria-current={current ? "true" : undefined}
+        onClick={onOpen}
+        className={cx(
+          "flex w-full items-start gap-2.5 rounded-lg py-2 pl-2.5 pr-9 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+          current ? "bg-gradient-soft" : "hover:bg-sunken/70",
+        )}
+      >
+        <Icon
+          name="chat_bubble"
+          filled={current}
+          className={cx("mt-0.5 shrink-0 text-[18px]", current ? "text-primary" : "text-faint")}
+        />
+        <span className="min-w-0 flex-1">
+          <span
+            className={cx(
+              "block truncate text-sm",
+              current ? "font-semibold text-primary" : "text-strong",
+            )}
+          >
+            {conversation.title}
+          </span>
+          <span className="block text-[11px] text-faint">
+            {whenLabel(conversation.updatedAt, tr)} · {conversation.turns.length}{" "}
+            {tr(
+              conversation.turns.length === 1 ? "message" : "messages",
+              conversation.turns.length === 1 ? "paigham" : "paighamat",
+            )}
+          </span>
+        </span>
+      </button>
+
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={menu}
+        aria-label={tr(`Options for ${conversation.title}`, `${conversation.title} ke options`)}
+        onClick={() => setMenu((open) => !open)}
+        className={cx(
+          "absolute right-1 top-1.5 grid h-8 w-8 place-items-center rounded-full text-faint transition-[opacity,background-color,color] duration-150 hover:bg-raised hover:text-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+          menu ? "opacity-100" : "opacity-0 focus-visible:opacity-100 group-hover/row:opacity-100",
+        )}
+      >
+        <Icon name="more_vert" className="text-[18px]" />
+      </button>
+
+      {menu && (
+        <div
+          role="menu"
+          className="glass pop-in absolute right-1 top-10 z-20 w-56 rounded-xl p-1"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setDraft(conversation.title);
+              setEditing(true);
+              setMenu(false);
+            }}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-sunken focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            <Icon name="edit" className="shrink-0 text-[18px] text-faint" />
+            {tr("Rename", "Naam badlein")}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenu(false);
+              onHide();
+            }}
+            className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-sunken focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            <Icon name="visibility_off" className="mt-0.5 shrink-0 text-[18px] text-faint" />
+            <span>
+              {tr("Hide from this list", "Is fehrist se chhupayein")}
+              <span className="block text-[11px] text-faint">
+                {tr("Nothing is deleted", "Kuchh delete nahi hota")}
+              </span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 type Mode = { kind: "chat"; sessionId: string | null } | { kind: "symptoms" };
@@ -1413,9 +1924,17 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
   const [added, setAdded] = useState<Record<string, { turns: Turn[]; updatedAt: string }>>({});
   const [mode, setMode] = useState<Mode>({ kind: "chat", sessionId: null });
   const [drawer, setDrawer] = useState(false);
+  /**
+   * Names the patient typed and rows they pushed out of the way, for this visit
+   * only. The API has no rename and no delete for assistant history, so neither
+   * of these is a request — they are how *this* list is arranged, and the rail
+   * says as much where the controls are.
+   */
+  const [renamed, setRenamed] = useState<Record<string, string>>({});
+  const [hidden, setHidden] = useState<string[]>([]);
 
   const loaded = history.data;
-  const conversations = useMemo<Conversation[] | null>(() => {
+  const grouped = useMemo<Conversation[] | null>(() => {
     if (!loaded && Object.keys(added).length === 0) return null;
     const base = loaded ? groupConversations(loaded, disclaimer) : [];
     for (const [sessionId, extra] of Object.entries(added)) {
@@ -1426,7 +1945,7 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
       } else {
         base.push({
           sessionId,
-          title: extra.turns[0]?.question ?? "",
+          title: titleOf(extra.turns[0]?.question ?? "", extra.updatedAt),
           updatedAt: extra.updatedAt,
           turns: extra.turns,
         });
@@ -1434,6 +1953,21 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
     }
     return base.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }, [loaded, added, disclaimer]);
+
+  // The rail's view of the same list: local names applied, hidden rows dropped.
+  const conversations = useMemo<Conversation[] | null>(
+    () =>
+      grouped === null
+        ? null
+        : grouped
+            .filter((conversation) => !hidden.includes(conversation.sessionId))
+            .map((conversation) =>
+              renamed[conversation.sessionId]
+                ? { ...conversation, title: renamed[conversation.sessionId] }
+                : conversation,
+            ),
+    [grouped, hidden, renamed],
+  );
 
   const onTurn = useCallback((sessionId: string, turn: Turn) => {
     const stamp = new Date().toISOString();
@@ -1491,7 +2025,7 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
             "flex min-h-11 w-full items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
             mode.kind === "symptoms"
               ? "border-gradient-thick text-primary"
-              : "border-line-strong bg-card text-strong hover:bg-gradient-soft",
+              : "border-line-strong bg-card text-strong hover:bg-sunken",
           )}
         >
           <Icon name="stethoscope" className="text-[20px]" />
@@ -1516,38 +2050,34 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
           </p>
         )}
         <ul className="space-y-0.5">
-          {conversations?.map((conversation) => {
-            const current = mode.kind === "chat" && mode.sessionId === conversation.sessionId;
-            return (
-              <li key={conversation.sessionId}>
-                <button
-                  type="button"
-                  aria-current={current ? "true" : undefined}
-                  onClick={() => openChat(conversation.sessionId)}
-                  className={cx(
-                    "flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-                    current ? "bg-gradient-soft" : "hover:bg-sunken/70",
-                  )}
-                >
-                  <Icon
-                    name="chat_bubble"
-                    filled={current}
-                    className={cx("mt-0.5 shrink-0 text-[18px]", current ? "text-primary" : "text-faint")}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className={cx("block truncate text-sm", current ? "font-semibold text-primary" : "text-strong")}>
-                      {conversation.title}
-                    </span>
-                    <span className="block text-[11px] text-faint">
-                      {whenLabel(conversation.updatedAt, tr)} · {conversation.turns.length}{" "}
-                      {tr(conversation.turns.length === 1 ? "message" : "messages", conversation.turns.length === 1 ? "paigham" : "paighamat")}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+          {conversations?.map((conversation) => (
+            <li key={conversation.sessionId}>
+              <ConversationRow
+                conversation={conversation}
+                current={mode.kind === "chat" && mode.sessionId === conversation.sessionId}
+                onOpen={() => openChat(conversation.sessionId)}
+                onRename={(title) =>
+                  setRenamed((current) => ({ ...current, [conversation.sessionId]: title }))
+                }
+                onHide={() => setHidden((current) => [...current, conversation.sessionId])}
+              />
+            </li>
+          ))}
         </ul>
+
+        {hidden.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setHidden([])}
+            className="mt-2 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-muted hover:bg-sunken/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <Icon name="visibility" className="shrink-0 text-[16px] text-faint" />
+            {tr(
+              `Show ${hidden.length} hidden`,
+              `${hidden.length} chhupai hui dikhayein`,
+            )}
+          </button>
+        )}
       </nav>
     </div>
   );

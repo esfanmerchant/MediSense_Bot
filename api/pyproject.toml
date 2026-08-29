@@ -22,6 +22,11 @@ dependencies = [
     # synchronous and would block the event loop, and a healthcare service is
     # better off with one less dependency in its tree.
     "httpx>=0.28",
+    # Two-factor authentication: TOTP codes, and the QR that enrols them.
+    # `segno` is pure Python and writes an SVG we can inline, so no image
+    # toolchain and nothing to fetch from a CDN.
+    "pyotp>=2.9",
+    "segno>=1.6",
 ]
 
 [project.optional-dependencies]

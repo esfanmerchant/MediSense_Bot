@@ -4,7 +4,7 @@ import json
 import uuid
 
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import select
 
 from app.core.security import AccessTokenPayload, sign_access_token
 from app.db.models import User
@@ -91,13 +91,18 @@ class TestRequestValidation:
         assert response.status_code == 422
 
     @requires_db
-    async def test_a_caller_cannot_choose_their_own_role(self, client: TestClient) -> None:
-        """Even when the field is sent it is ignored; the service forces PATIENT.
+    async def test_a_caller_cannot_choose_a_role_nobody_may_grant_themselves(
+        self, client: TestClient
+    ) -> None:
+        """Registration offers PATIENT and DOCTOR. ADMIN and NURSE it refuses.
 
-        The address is unique per run and the account is removed afterwards. A
-        fixed address made this test register once and then quietly do nothing
-        on every later run — the second attempt hit the duplicate-email guard,
-        so there was no user to assert against and the check was skipped.
+        DOCTOR is on the list because asking to be one creates an *application*
+        an administrator has to approve, not a credential. ADMIN and NURSE have
+        no such gate, so they stay accounts only an administrator creates.
+
+        The address is unique per run, and the point of the assertion below is
+        that nothing was created at all — a request refused at validation must
+        not leave a half-made account behind.
         """
         email = f"escalate-{uuid.uuid4()}@medisensetests.org"
         response = client.post(
@@ -109,14 +114,14 @@ class TestRequestValidation:
                 "role": "ADMIN",
             },
         )
-        assert response.status_code == 201, response.text
-        user = response.json()["data"]["user"]
-        try:
-            assert user["role"] == "PATIENT"
-        finally:
-            async with SessionFactory() as session:
-                await session.execute(delete(User).where(User.id == user["id"]))
-                await session.commit()
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+        async with SessionFactory() as session:
+            created = (
+                await session.execute(select(User.id).where(User.email == email))
+            ).scalar_one_or_none()
+        assert created is None
 
 
 class TestSecurityHeaders:

@@ -11,7 +11,14 @@ from fastapi import Depends, Request
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import forbidden, forbidden_resource, session_expired, unauthenticated
+from app.core.errors import (
+    AppError,
+    ErrorCode,
+    forbidden,
+    forbidden_resource,
+    session_expired,
+    unauthenticated,
+)
 from app.core.security import verify_access_token
 from app.core.session_policy import LAST_SEEN_WRITE_THROTTLE_SECONDS, check_idle
 from app.db.base import utcnow
@@ -19,6 +26,7 @@ from app.db.enums import (
     ENCOUNTER_STATUSES,
     AuditAction,
     AuditSeverity,
+    DoctorApplicationStatus,
     EmergencyAccessStatus,
     Role,
     UserStatus,
@@ -26,6 +34,7 @@ from app.db.enums import (
 from app.db.models import (
     Appointment,
     Doctor,
+    DoctorApplication,
     DoctorPatientAssignment,
     EmergencyAccess,
     Patient,
@@ -87,6 +96,87 @@ async def _revoke(db: AsyncSession, session_id: str, reason: str) -> None:
     await db.commit()
 
 
+#: What a doctor may still reach while their registration is not approved.
+#:
+#: Everything on this list is either the account itself or the application: who
+#: am I, sign out, refresh, change my password, my own security settings, my own
+#: registration form and its documents, and the department list that form has to
+#: populate. **Nothing clinical is here, and nothing may be added to it that
+#: is** — no patient, no record, no appointment, no document.
+#:
+#: Matched as prefixes: an entry covers itself and anything under it.
+ONBOARDING_PATHS: tuple[str, ...] = (
+    "/api/auth/me",
+    "/api/auth/logout",
+    "/api/auth/refresh",
+    "/api/auth/change-password",
+    "/api/account",
+    "/api/doctor/application",
+    "/api/departments",
+)
+
+
+def _is_onboarding_path(path: str) -> bool:
+    return any(path == allowed or path.startswith(f"{allowed}/") for allowed in ONBOARDING_PATHS)
+
+
+async def require_doctor_is_credentialed(
+    db: AsyncSession, request: Request, user_id: str, doctor_id: str | None
+) -> None:
+    """Hold an unapproved doctor inside their own onboarding.
+
+    **Which failure mode this chooses.** There are two ways to get this wrong.
+    Refuse the *login* and an applicant is locked out of the half-finished form
+    the refusal is telling them to go and finish — their only session was the one
+    email verification minted, and it expires in minutes. Refuse *nothing* and an
+    unapproved stranger who typed "DOCTOR" into a sign-up form is holding the
+    DOCTOR role against real patient data.
+
+    This refuses per request instead, which fails in the safe direction: the
+    worst case is a doctor who cannot reach a page they have no business on yet,
+    never a doctor who reaches a chart before anybody checked their licence.
+
+    **The credential is the check, not the application row.** ``approve`` is the
+    only thing that creates a ``Doctor`` row, so holding one *is* being approved
+    — which is also why a doctor an administrator created before self-
+    registration existed passes here without an application at all. That makes
+    the common path free: an approved doctor costs no query, because the id is
+    already on the join that authenticated them.
+    """
+    if doctor_id is not None or _is_onboarding_path(request.url.path):
+        return
+
+    status = (
+        await db.execute(
+            select(DoctorApplication.status).where(DoctorApplication.user_id == user_id)
+        )
+    ).scalar_one_or_none()
+
+    if status == DoctorApplicationStatus.APPROVED:
+        return
+
+    if status == DoctorApplicationStatus.SUBMITTED:
+        raise AppError(
+            403,
+            ErrorCode.PENDING_APPROVAL,
+            "Your registration is with our administrators. We will email you as soon as "
+            "it has been reviewed.",
+        )
+    if status == DoctorApplicationStatus.REJECTED:
+        raise AppError(
+            403,
+            ErrorCode.APPLICATION_REJECTED,
+            "Your registration was not approved. Check what needs changing, then submit "
+            "it again.",
+        )
+    # DRAFT, or no application at all.
+    raise AppError(
+        403,
+        ErrorCode.PROFILE_INCOMPLETE,
+        "Finish your registration and submit it for approval before using the portal.",
+    )
+
+
 async def get_current_auth(request: Request, db: DbSession) -> AuthContext:
     """Authenticate the request and enforce session expiry server-side.
 
@@ -146,6 +236,9 @@ async def get_current_auth(request: Request, db: DbSession) -> AuthContext:
     # authenticated user behind a hospital's shared NAT should get their own
     # budget instead of sharing one with the whole building.
     request.state.session_id = session.id
+
+    if user.role == Role.DOCTOR:
+        await require_doctor_is_credentialed(db, request, user.id, doctor_id)
 
     return AuthContext(
         user_id=user.id,

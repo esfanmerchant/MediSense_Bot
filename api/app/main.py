@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.core.errors import AppError, ErrorCode
 from app.core.logging import configure_logging, logger
 from app.db.session import check_database_connection, dispose_engine
+from app.modules.account.router import router as account_router
 from app.modules.appointments.router import router as appointments_router
 from app.modules.assistant.router import router as assistant_router
 from app.modules.audit.router import router as audit_router
@@ -27,6 +28,8 @@ from app.modules.auth.router import router as auth_router
 from app.modules.billing.router import router as billing_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.departments.router import router as departments_router
+from app.modules.doctor_applications.admin_router import router as doctor_applications_admin_router
+from app.modules.doctor_applications.router import router as doctor_application_router
 from app.modules.doctors.router import router as doctors_router
 from app.modules.documents.ocr_router import router as ocr_router
 from app.modules.documents.router import router as documents_router
@@ -113,9 +116,12 @@ def create_app() -> FastAPI:
 
     for module_router in (
         auth_router,
+        account_router,
         users_router,
         patients_router,
         doctors_router,
+        doctor_application_router,
+        doctor_applications_admin_router,
         departments_router,
         appointments_router,
         records_router,

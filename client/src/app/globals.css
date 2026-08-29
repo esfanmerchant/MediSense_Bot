@@ -3,132 +3,149 @@
 /**
  * MediSense design system.
  *
- * Brand blue → brand teal is the one gradient, drawn from the logo: a rounded
- * cross carrying an EKG trace, with circuit nodes branching off it. The trace
- * and the nodes are the only decorative motifs in the product, and they are
- * used as accents — a loading heartbeat, a timeline spine, a faint pattern at
- * the foot of the sidebar — never as wallpaper.
+ * The brand is the logo: a rounded medical cross carrying a white ECG pulse,
+ * with circuit traces and node dots leaving to the right, on a royal-blue →
+ * azure → teal 135° ramp. That ramp is the only gradient in the product, and
+ * the pulse and the nodes are the only decorative motifs — used as accents,
+ * never as wallpaper.
+ *
+ * **Two colour sets, on purpose.** The `--ms-*` values are the brand's, used
+ * for fills, gradients, borders and large type. Beside each sits a text-safe
+ * variant, darkened until it clears 4.5:1 on the surface it sits on. Teal at
+ * #0FA9B9 is right in a gradient and unreadable as 14px body text; shipping
+ * one value for both would mean choosing between the brand and the people
+ * reading it.
  *
  * **Status colour means status.** `critical` is for something a clinician must
  * act on — never for emphasis, never for a delete button. The moment red also
  * means "destructive", a ward stops reading red as urgent, which is how a
  * monitoring system quietly stops working.
+ *
+ * Dark mode is a class, not a media query: `next-themes` puts `.dark` on the
+ * root so a person can choose light, dark, or whatever their system says.
  */
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* Brand */
-  --brand-primary: #1b4fe0;
-  --brand-primary-hover: #1745c6;
-  --brand-primary-active: #0f2e8c;
-  --brand-primary-soft: #e4eafc;
+  /* ---- brand ramp ---- */
+  --ms-blue-900: #0a2e7a;
+  --ms-blue-700: #0b3fa8;
+  --ms-blue-500: #1462c4;
+  --ms-azure-400: #1a8fc7;
+  --ms-teal-500: #0fa9b9;
+  --ms-teal-300: #14c4c1;
+  --ms-gradient: linear-gradient(135deg, #0b3fa8 0%, #1a8fc7 55%, #14c4c1 100%);
+  --ms-gradient-soft: linear-gradient(135deg, rgb(11 63 168 / 0.08), rgb(20 196 193 / 0.1));
+
+  --brand-primary: var(--ms-blue-700);
+  --brand-primary-hover: var(--ms-blue-500);
+  --brand-primary-active: var(--ms-blue-900);
+  --brand-primary-soft: #e6eefb;
   --brand-primary-on: #ffffff;
-  --brand-navy-deep: #0f2e8c;
+  --brand-navy-deep: var(--ms-blue-900);
 
-  /* Teal. `accent` is the readable one for text on white; `bright` is the
-     logo's teal, for fills and for anything on a dark ground. */
-  --brand-accent: #0e9e98;
-  --brand-accent-bright: #14c7c0;
+  /* Teal: `bright` and `light` are the logo's; `accent` is the readable one. */
+  --brand-accent: #0b7f8b;
+  --brand-accent-bright: var(--ms-teal-300);
   --brand-accent-light: #5eead4;
-  --brand-accent-soft: #dcf7f5;
+  --brand-accent-soft: #dcf6f6;
 
-  --gradient-brand: linear-gradient(135deg, #1b4fe0 0%, #14c7c0 100%);
-  --gradient-soft: linear-gradient(135deg, rgb(27 79 224 / 0.12), rgb(20 199 192 / 0.12));
-
-  /* Surfaces */
+  /* ---- surfaces ---- */
   --surface-canvas: #f6f9fc;
   --surface-card: #ffffff;
-  --surface-sunken: #eef2f8;
-  --surface-raised: #e4eaf3;
+  --surface-sunken: #eef4fa;
+  --surface-raised: #e2ecf7;
   --surface-glass: rgb(255 255 255 / 0.72);
 
-  /* Text */
-  --text-strong: #0b1526;
-  --text-muted: #5b6b84;
-  --text-faint: #8a97ad;
+  /* ---- text ---- */
+  --text-strong: #0e1b33;
+  --text-muted: #5c6b85;
+  --text-faint: #93a1b8;
   --text-on-rail: #ffffff;
 
-  /* Lines */
-  --line: #e3e8f0;
-  --line-strong: #cbd4e1;
+  /* ---- lines ---- */
+  --line: #dce6f2;
+  --line-strong: #c2d1e6;
 
-  /* Status */
-  --status-stable: #1f9d55;
-  --status-stable-soft: #e3f8ec;
-  --status-warning: #b36f00;
+  /* ---- status: the brand value, then the text-safe variant ---- */
+  --ms-success: #12b981;
+  --ms-warning: #f59e0b;
+  --ms-critical: #e5484d;
+  --ms-info: #1a8fc7;
+
+  --status-stable: #0e9f6e;
+  --status-stable-soft: #e2f7ee;
+  --status-warning: #b45309;
   --status-warning-soft: #fef3dd;
-  --status-critical: #e5484d;
-  --status-critical-soft: #fde7e8;
-  --status-info: #3b82f6;
-  --status-info-soft: #e0ecfe;
+  --status-critical: #d13438;
+  --status-critical-soft: #fdeaea;
+  --status-info: #1173a3;
+  --status-info-soft: #e2f0fa;
 
-  /* Elevation — layered, never a single hard drop. */
-  --shadow-card:
-    0 1px 2px rgb(11 21 38 / 0.04),
-    0 4px 12px rgb(11 21 38 / 0.05),
-    0 12px 32px -12px rgb(27 79 224 / 0.08);
-  --shadow-overlay:
-    0 2px 4px rgb(11 21 38 / 0.05),
-    0 12px 28px rgb(11 21 38 / 0.1),
-    0 24px 48px -16px rgb(27 79 224 / 0.16);
-  --shadow-float: 0 24px 56px -16px rgb(27 79 224 / 0.28);
-  --ring-focus: 0 0 0 4px rgb(27 79 224 / 0.18);
+  /* ---- shape ---- */
+  --ms-radius-sm: 8px;
+  --ms-radius: 14px;
+  --ms-radius-lg: 22px;
 
-  /* Ambient glows behind the canvas. */
-  --glow-a: rgb(27 79 224 / 0.1);
-  --glow-b: rgb(20 199 192 / 0.12);
+  /* ---- elevation ---- */
+  --shadow-sm: 0 1px 2px rgb(10 46 122 / 0.06), 0 1px 3px rgb(10 46 122 / 0.08);
+  --shadow-card: 0 1px 2px rgb(10 46 122 / 0.06), 0 8px 24px -8px rgb(10 46 122 / 0.18);
+  --shadow-overlay: 0 2px 6px rgb(10 46 122 / 0.08), 0 16px 40px -12px rgb(10 46 122 / 0.28);
+  --shadow-float: 0 24px 56px -16px rgb(10 46 122 / 0.32);
+  --glow: 0 0 0 1px rgb(20 196 193 / 0.25), 0 12px 40px -12px rgb(20 196 193 / 0.45);
+  --ring-focus: 0 0 0 3px rgb(20 196 193 / 0.28), 0 0 0 1px var(--ms-blue-700);
+
+  /* Ambient mesh behind the canvas. */
+  --glow-a: rgb(20 98 196 / 0.12);
+  --glow-b: rgb(20 196 193 / 0.14);
 }
 
-/**
- * Night shift. Every semantic role is identical across the two — only what it
- * is painted on changes — so a critical alert is still the most urgent thing
- * on screen either way.
- */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --brand-primary: #6c8dff;
-    --brand-primary-hover: #8aa4ff;
-    --brand-primary-active: #1b4fe0;
-    --brand-primary-soft: #1a2a5c;
-    --brand-primary-on: #071033;
-    --brand-navy-deep: #060c1f;
+.dark {
+  --brand-primary: #6f9dff;
+  --brand-primary-hover: #8fb6ff;
+  --brand-primary-active: var(--ms-blue-700);
+  --brand-primary-soft: #16295c;
+  --brand-primary-on: #061024;
+  --brand-navy-deep: #050d20;
 
-    --brand-accent: #5eead4;
-    --brand-accent-bright: #14c7c0;
-    --brand-accent-light: #5eead4;
-    --brand-accent-soft: #0f3a3a;
+  --brand-accent: #5eead4;
+  --brand-accent-bright: var(--ms-teal-300);
+  --brand-accent-light: #8ff5e6;
+  --brand-accent-soft: #0d3742;
 
-    --gradient-soft: linear-gradient(135deg, rgb(108 141 255 / 0.16), rgb(94 234 212 / 0.14));
+  --ms-gradient-soft: linear-gradient(135deg, rgb(111 157 255 / 0.14), rgb(20 196 193 / 0.14));
 
-    --surface-canvas: #0a1128;
-    --surface-card: #111a33;
-    --surface-sunken: #182343;
-    --surface-raised: #1f2b4f;
-    --surface-glass: rgb(17 26 51 / 0.72);
+  --surface-canvas: #071129;
+  --surface-card: #0d1b3a;
+  --surface-sunken: #122349;
+  --surface-raised: #1a2e5c;
+  --surface-glass: rgb(13 27 58 / 0.72);
 
-    --text-strong: #e6ecf7;
-    --text-muted: #a9b6cc;
-    --text-faint: #7b8aa3;
+  --text-strong: #eaf1fb;
+  --text-muted: #9db0cc;
+  --text-faint: #6b7f9e;
 
-    --line: #223057;
-    --line-strong: #2e3d66;
+  --line: #1b2c52;
+  --line-strong: #2b4272;
 
-    --status-stable: #4ade80;
-    --status-stable-soft: #0f2e1e;
-    --status-warning: #fbbf24;
-    --status-warning-soft: #3a2a08;
-    --status-critical: #ff7b80;
-    --status-critical-soft: #4a1518;
-    --status-info: #7fb0ff;
-    --status-info-soft: #10254a;
+  --status-stable: #34d399;
+  --status-stable-soft: #0b2f24;
+  --status-warning: #fbbf24;
+  --status-warning-soft: #3a2a08;
+  --status-critical: #ff8085;
+  --status-critical-soft: #451418;
+  --status-info: #7cc0ea;
+  --status-info-soft: #0c2c44;
 
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.35);
-    --shadow-overlay: 0 12px 32px rgb(0 0 0 / 0.5);
-    --shadow-float: 0 24px 56px -16px rgb(0 0 0 / 0.7);
-    --ring-focus: 0 0 0 4px rgb(108 141 255 / 0.28);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+  --shadow-overlay: 0 16px 40px -12px rgb(0 0 0 / 0.7);
+  --shadow-float: 0 24px 56px -16px rgb(0 0 0 / 0.8);
+  --ring-focus: 0 0 0 3px rgb(20 196 193 / 0.3), 0 0 0 1px var(--ms-teal-300);
 
-    --glow-a: rgb(27 79 224 / 0.22);
-    --glow-b: rgb(20 199 192 / 0.12);
-  }
+  --glow-a: rgb(11 63 168 / 0.35);
+  --glow-b: rgb(20 196 193 / 0.16);
 }
 
 @theme inline {
@@ -170,13 +187,24 @@
   --color-info: var(--status-info);
   --color-info-soft: var(--status-info-soft);
 
+  /* The brand radii, mapped onto the utilities the components already use. */
+  --radius-sm: var(--ms-radius-sm);
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: var(--ms-radius);
+  --radius-2xl: var(--ms-radius-lg);
+  --radius-3xl: 28px;
+
+  --shadow-sm: var(--shadow-sm);
   --shadow-card: var(--shadow-card);
   --shadow-overlay: var(--shadow-overlay);
   --shadow-float: var(--shadow-float);
+  --shadow-glow: var(--glow);
   --shadow-focus: var(--ring-focus);
 
   --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: var(--font-display-face), var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, "SFMono-Regular", "Menlo", monospace;
 
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -195,6 +223,7 @@ body {
 h1,
 h2,
 h3 {
+  font-family: var(--font-display-face), var(--font-body), sans-serif;
   letter-spacing: -0.02em;
   text-wrap: balance;
 }
@@ -209,25 +238,41 @@ h3 {
   scrollbar-color: var(--line-strong) transparent;
 }
 
+/* Mono-caps: the label style for field names, IDs and timestamps. */
+.mono-caps {
+  font-family: var(--font-mono-face), ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+}
+
 /* ---------------------------------------------------------------------------
    Brand surfaces
    --------------------------------------------------------------------------- */
 
-.bg-gradient-brand {
-  background-image: var(--gradient-brand);
+/* Declared as utilities rather than plain classes: only a registered utility
+   can take a variant, and `hover:bg-gradient-soft` is exactly what a hover
+   state on a brand surface wants to say. */
+@utility bg-gradient-brand {
+  background-image: var(--ms-gradient);
 }
-.bg-gradient-soft {
-  background-image: var(--gradient-soft);
+@utility bg-gradient-soft {
+  background-image: var(--ms-gradient-soft);
 }
-.text-gradient-brand {
-  background: var(--gradient-brand);
+@utility text-gradient-brand {
+  background: var(--ms-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
-/* Kept for the dark hero, where the gradient runs light-on-navy. */
+.dark .text-gradient-brand {
+  background: linear-gradient(135deg, #8fb6ff 0%, #6ad6e6 55%, #5eead4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+/* For a coloured ground, where the ramp must run light. */
 .text-gradient-medical {
-  background: linear-gradient(92deg, #5eead4 0%, #8aa4ff 55%, #dbe4ff 100%);
+  background: linear-gradient(92deg, #5eead4 0%, #8fb6ff 55%, #dbe4ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -236,9 +281,26 @@ h3 {
 /* The navy gradient that carries a welcome banner or a brand panel. */
 .hero-navy {
   background:
-    radial-gradient(40rem 20rem at 85% -20%, rgb(27 79 224 / 0.9), transparent 60%),
-    radial-gradient(30rem 18rem at -10% 120%, rgb(20 199 192 / 0.55), transparent 60%),
-    linear-gradient(135deg, #0a1a4d 0%, #0f2e8c 55%, #1b4fe0 100%);
+    radial-gradient(40rem 20rem at 85% -20%, rgb(26 143 199 / 0.85), transparent 60%),
+    radial-gradient(30rem 18rem at -10% 120%, rgb(20 196 193 / 0.5), transparent 60%),
+    linear-gradient(135deg, #071129 0%, #0a2e7a 45%, #0b3fa8 100%);
+}
+
+/* The full brand ramp, for an auth panel or a hero band. */
+.brand-panel {
+  background: var(--ms-gradient);
+}
+
+/* A soft two-blob mesh, for a light hero. */
+.mesh-light {
+  background-image:
+    radial-gradient(32rem 24rem at 8% 6%, rgb(20 98 196 / 0.12), transparent 70%),
+    radial-gradient(30rem 22rem at 94% 92%, rgb(20 196 193 / 0.14), transparent 70%);
+}
+.dark .mesh-light {
+  background-image:
+    radial-gradient(32rem 24rem at 8% 6%, rgb(20 98 196 / 0.2), transparent 70%),
+    radial-gradient(30rem 22rem at 94% 92%, rgb(20 196 193 / 0.2), transparent 70%);
 }
 
 /* Glass: for anything that floats over content. */
@@ -249,16 +311,14 @@ h3 {
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
   box-shadow: var(--shadow-overlay);
 }
-@media (prefers-color-scheme: dark) {
-  .glass {
-    border-color: rgb(255 255 255 / 0.1);
-  }
+.dark .glass {
+  border-color: rgb(255 255 255 / 0.1);
 }
 .glass-dark {
-  background: rgb(255 255 255 / 0.06);
-  border: 1px solid rgb(255 255 255 / 0.14);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgb(255 255 255 / 0.1);
+  border: 1px solid rgb(255 255 255 / 0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 /* A 1px gradient border on any rounded box, via two stacked backgrounds. */
@@ -266,31 +326,43 @@ h3 {
   border: 1px solid transparent;
   background:
     linear-gradient(var(--surface-card), var(--surface-card)) padding-box,
-    var(--gradient-brand) border-box;
+    var(--ms-gradient) border-box;
 }
 .border-gradient-thick {
   border: 1.5px solid transparent;
   background:
     linear-gradient(var(--surface-card), var(--surface-card)) padding-box,
-    var(--gradient-brand) border-box;
+    var(--ms-gradient) border-box;
+}
+/* Same, but filled with the soft tint — for a selected card. */
+.border-gradient-fill {
+  border: 1.5px solid transparent;
+  background:
+    var(--ms-gradient-soft) padding-box,
+    var(--ms-gradient) border-box;
 }
 
-/* The circuit-node motif, as a faint repeating pattern. */
+/* The circuit motif as a flat repeating pattern, where a drawn field is too
+   much — the foot of a rail, the back of a banner. */
 .circuit-pattern {
   background-image:
     radial-gradient(circle at 8px 8px, rgb(255 255 255 / 0.35) 1.5px, transparent 2px),
     linear-gradient(90deg, rgb(255 255 255 / 0.12) 1px, transparent 1px),
     linear-gradient(0deg, rgb(255 255 255 / 0.12) 1px, transparent 1px);
-  background-size:
-    48px 48px,
-    48px 48px,
-    48px 48px;
-  background-position:
-    0 0,
-    8px 8px,
-    8px 8px;
+  background-size: 48px 48px, 48px 48px, 48px 48px;
+  background-position: 0 0, 8px 8px, 8px 8px;
   mask-image: linear-gradient(to top, rgb(0 0 0 / 0.9), transparent 85%);
   -webkit-mask-image: linear-gradient(to top, rgb(0 0 0 / 0.9), transparent 85%);
+}
+.circuit-pattern-light {
+  background-image:
+    radial-gradient(circle at 8px 8px, rgb(11 63 168 / 0.2) 1.5px, transparent 2px),
+    linear-gradient(90deg, rgb(20 196 193 / 0.14) 1px, transparent 1px),
+    linear-gradient(0deg, rgb(20 196 193 / 0.14) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px, 40px 40px;
+  background-position: 0 0, 8px 8px, 8px 8px;
+  mask-image: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent 90%);
+  -webkit-mask-image: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent 90%);
 }
 
 /* ---------------------------------------------------------------------------
@@ -328,7 +400,7 @@ h3 {
 .field-shell > * > :is(input, select, textarea) {
   padding-top: 1.55rem;
   padding-bottom: 0.5rem;
-  min-height: 3.5rem;
+  min-height: 3.25rem;
 }
 .field-shell > textarea,
 .field-shell > * > textarea {
@@ -362,19 +434,24 @@ h3 {
 .field-shell:has(input[type="time"]) .field-label,
 .field-shell:has(input[type="datetime-local"]) .field-label,
 .field-shell:has(input[type="file"]) .field-label {
-  top: 0.6rem;
+  top: 0.55rem;
   transform: none;
+  font-family: var(--font-mono-face), ui-monospace, monospace;
   font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  color: var(--ms-blue-700);
+}
+.dark .field-shell:has(:focus) .field-label,
+.dark .field-shell:has(:not(:placeholder-shown)) .field-label,
+.dark .field-shell:has(select) .field-label {
   color: var(--brand-primary);
 }
 .field-invalid .field-label,
 .field-invalid .field-shell:has(:focus) .field-label {
   color: var(--status-critical);
 }
-/* The placeholder waits until the label has moved out of its way. */
 .field-shell :is(input, textarea)::placeholder {
   color: transparent;
   transition: color 0.2s ease 0.1s;
@@ -383,7 +460,7 @@ h3 {
   color: var(--text-faint);
 }
 
-/* Focus: a soft brand glow instead of the browser outline. */
+/* Focus: a brand ring, drawn with box-shadow so it follows the radius. */
 .input-base {
   transition:
     border-color 0.2s ease,
@@ -392,36 +469,24 @@ h3 {
 }
 .input-base:focus {
   outline: none;
-  border-color: var(--brand-primary);
+  border-color: var(--ms-teal-300);
   box-shadow: var(--ring-focus);
 }
 .field-invalid .input-base {
   border-color: var(--status-critical);
 }
 .field-invalid .input-base:focus {
-  box-shadow: 0 0 0 4px rgb(229 72 77 / 0.18);
+  box-shadow: 0 0 0 3px rgb(229 72 77 / 0.22);
 }
 
 @keyframes shake {
-  10%,
-  90% {
-    transform: translateX(-1px);
-  }
-  20%,
-  80% {
-    transform: translateX(2px);
-  }
-  30%,
-  50%,
-  70% {
-    transform: translateX(-3px);
-  }
-  40%,
-  60% {
-    transform: translateX(3px);
-  }
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
 }
-.field-invalid .field-shell {
+.field-invalid .field-shell,
+.shake {
   animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
@@ -439,7 +504,6 @@ input:checked + .check-box .check-mark {
   animation: draw-check 0.25s ease-out 0.05s forwards;
 }
 
-/* Select chevron turns while the list is open (focused). */
 .select-chevron {
   transition: transform 0.2s var(--ease-out-soft);
 }
@@ -452,35 +516,56 @@ select:focus ~ .select-chevron {
    --------------------------------------------------------------------------- */
 
 .btn-gradient {
-  background-image: var(--gradient-brand);
-  background-size: 130% 130%;
+  background-image: var(--ms-gradient);
+  background-size: 150% 150%;
   background-position: 0% 0%;
   box-shadow:
-    0 2px 6px rgb(27 79 224 / 0.25),
-    0 8px 20px -8px rgb(20 199 192 / 0.5);
+    0 2px 6px rgb(11 63 168 / 0.25),
+    0 8px 20px -8px rgb(20 196 193 / 0.5);
   transition:
     transform 0.2s var(--ease-out-soft),
     box-shadow 0.25s ease,
-    background-position 0.4s ease,
+    background-position 0.45s ease,
     opacity 0.2s ease;
 }
 .btn-gradient:hover:not(:disabled) {
   transform: scale(1.03);
   background-position: 100% 100%;
   box-shadow:
-    0 4px 12px rgb(27 79 224 / 0.35),
-    0 14px 28px -8px rgb(20 199 192 / 0.6);
+    0 4px 12px rgb(11 63 168 / 0.32),
+    0 14px 30px -8px rgb(20 196 193 / 0.6);
 }
 .btn-gradient:active:not(:disabled) {
   transform: scale(0.97);
 }
 
+/* A diagonal shine that sweeps across on hover. */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  top: -60%;
+  bottom: -60%;
+  left: -30%;
+  width: 28%;
+  transform: rotate(18deg) translateX(-260%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
+  transition: transform 0.65s var(--ease-out-soft);
+  pointer-events: none;
+}
+.btn-shine:hover::after {
+  transform: rotate(18deg) translateX(420%);
+}
+
 .btn-outline {
-  color: var(--brand-primary);
+  color: var(--ms-blue-700);
   border: 1.5px solid transparent;
   background:
     linear-gradient(var(--surface-card), var(--surface-card)) padding-box,
-    var(--gradient-brand) border-box;
+    var(--ms-gradient) border-box;
   transition:
     transform 0.2s var(--ease-out-soft),
     box-shadow 0.25s ease,
@@ -489,30 +574,21 @@ select:focus ~ .select-chevron {
 .btn-outline:hover:not(:disabled) {
   transform: scale(1.02);
   background:
-    linear-gradient(rgb(27 79 224 / 0.08), rgb(20 199 192 / 0.1)) padding-box,
-    var(--gradient-brand) border-box;
+    var(--ms-gradient-soft) padding-box,
+    var(--ms-gradient) border-box;
   box-shadow: var(--shadow-card);
 }
 .btn-outline:active:not(:disabled) {
   transform: scale(0.98);
 }
-@media (prefers-color-scheme: dark) {
-  .btn-outline {
-    color: var(--brand-accent-light);
-  }
+.dark .btn-outline {
+  color: var(--brand-accent);
 }
 
 /* The loading blip: three bars taking turns, an EKG in miniature. */
 @keyframes ekg-bar {
-  0%,
-  100% {
-    transform: scaleY(0.35);
-    opacity: 0.6;
-  }
-  50% {
-    transform: scaleY(1);
-    opacity: 1;
-  }
+  0%, 100% { transform: scaleY(0.35); opacity: 0.6; }
+  50% { transform: scaleY(1); opacity: 1; }
 }
 .ekg-bars {
   display: inline-flex;
@@ -529,11 +605,39 @@ select:focus ~ .select-chevron {
   transform-origin: center;
   animation: ekg-bar 0.9s ease-in-out infinite;
 }
-.ekg-bars > span:nth-child(2) {
-  animation-delay: 0.15s;
+.ekg-bars > span:nth-child(2) { animation-delay: 0.15s; }
+.ekg-bars > span:nth-child(3) { animation-delay: 0.3s; }
+
+/* ---------------------------------------------------------------------------
+   The pulse and the nodes
+   --------------------------------------------------------------------------- */
+
+@keyframes ecg-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
 }
-.ekg-bars > span:nth-child(3) {
-  animation-delay: 0.3s;
+.ecg-draw-once {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ecg-draw 2.4s var(--ease-out-soft) forwards;
+}
+.ecg-draw-loop {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ecg-draw 2.4s linear infinite;
+}
+/* An empty state's flat line, which draws itself once and rests. */
+.ecg-beat {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ecg-draw 1.6s var(--ease-out-soft) forwards;
+}
+@keyframes circuit-node {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.circuit-node {
+  animation: circuit-node 4.5s ease-in-out infinite;
 }
 
 /* ---------------------------------------------------------------------------
@@ -541,13 +645,8 @@ select:focus ~ .select-chevron {
    --------------------------------------------------------------------------- */
 
 @keyframes breathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 .animate-breathe {
   animation: breathe 2.4s ease-in-out infinite;
@@ -567,14 +666,8 @@ select:focus ~ .select-chevron {
 }
 
 @keyframes page-enter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
 }
 .page-enter {
   animation: page-enter 0.35s var(--ease-out-soft) backwards;
@@ -596,66 +689,33 @@ select:focus ~ .select-chevron {
 .stagger > :nth-child(n + 9) { animation-delay: 480ms; }
 
 @keyframes pop-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
 }
 .pop-in {
   animation: pop-in 0.32s var(--ease-out-soft) backwards;
 }
 
 @keyframes drift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(2rem, -1.5rem, 0) scale(1.08);
-  }
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(2rem, -1.5rem, 0) scale(1.08); }
 }
-.animate-drift {
-  animation: drift 14s ease-in-out infinite;
-}
-.animate-drift-late {
-  animation: drift 18s ease-in-out infinite reverse;
-}
+.animate-drift { animation: drift 14s ease-in-out infinite; }
+.animate-drift-late { animation: drift 18s ease-in-out infinite reverse; }
 
 @keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-4px);
-  }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
-.animate-float {
-  animation: float 3.6s ease-in-out infinite;
-}
+.animate-float { animation: float 3.6s ease-in-out infinite; }
+.animate-float-slow { animation: float 6s ease-in-out infinite; }
 
-/* A hand wave, for a greeting. */
 @keyframes wave {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-  20% {
-    transform: rotate(14deg);
-  }
-  40% {
-    transform: rotate(-8deg);
-  }
-  60% {
-    transform: rotate(14deg);
-  }
-  80% {
-    transform: rotate(-4deg);
-  }
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(14deg); }
+  40% { transform: rotate(-8deg); }
+  60% { transform: rotate(14deg); }
+  80% { transform: rotate(-4deg); }
 }
 .animate-wave {
   display: inline-block;
@@ -663,105 +723,60 @@ select:focus ~ .select-chevron {
   animation: wave 2.2s ease-in-out 0.4s 2;
 }
 
-/* Icons that answer a hover: a small bounce on the parent's hover. */
 @keyframes icon-bounce {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0);
-  }
-  35% {
-    transform: translateY(-4px) rotate(-6deg);
-  }
-  70% {
-    transform: translateY(0) rotate(4deg);
-  }
+  0%, 100% { transform: translateY(0) rotate(0); }
+  35% { transform: translateY(-4px) rotate(-6deg); }
+  70% { transform: translateY(0) rotate(4deg); }
 }
-.group:hover .icon-bounce {
-  animation: icon-bounce 0.5s var(--ease-out-soft);
-}
-@keyframes icon-wiggle {
-  0%,
-  100% {
-    transform: scale(1) rotate(0);
-  }
-  30% {
-    transform: scale(1.15) rotate(-8deg);
-  }
-  60% {
-    transform: scale(1.1) rotate(6deg);
-  }
-}
-.group:hover .icon-wiggle {
-  animation: icon-wiggle 0.45s var(--ease-out-soft);
-}
+.group:hover .icon-bounce { animation: icon-bounce 0.5s var(--ease-out-soft); }
 
-/* The bell rings under the hand. */
+@keyframes icon-wiggle {
+  0%, 100% { transform: scale(1) rotate(0); }
+  30% { transform: scale(1.15) rotate(-8deg); }
+  60% { transform: scale(1.1) rotate(6deg); }
+}
+.group:hover .icon-wiggle { animation: icon-wiggle 0.45s var(--ease-out-soft); }
+
 @keyframes ring {
-  0%,
-  100% {
-    transform: rotate(0);
-  }
-  15% {
-    transform: rotate(14deg);
-  }
-  30% {
-    transform: rotate(-12deg);
-  }
-  45% {
-    transform: rotate(8deg);
-  }
-  60% {
-    transform: rotate(-4deg);
-  }
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(8deg); }
+  60% { transform: rotate(-4deg); }
 }
 .group:hover .icon-ring {
   transform-origin: 50% 10%;
   animation: ring 0.7s var(--ease-out-soft);
 }
 
-/* A dot that pulses softly: "there is something new". */
 @keyframes pulse-dot {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgb(229 72 77 / 0.55);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgb(229 72 77 / 0);
-  }
+  0%, 100% { box-shadow: 0 0 0 0 rgb(229 72 77 / 0.55); }
+  70% { box-shadow: 0 0 0 6px rgb(229 72 77 / 0); }
 }
-.pulse-dot {
-  animation: pulse-dot 1.8s ease-out infinite;
-}
+.pulse-dot { animation: pulse-dot 1.8s ease-out infinite; }
 
-/* A slow, attention-drawing halo around a floating button. */
+@keyframes pulse-dot-brand {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(20 196 193 / 0.6); }
+  70% { box-shadow: 0 0 0 6px rgb(20 196 193 / 0); }
+}
+.pulse-dot-brand { animation: pulse-dot-brand 1.8s ease-out infinite; }
+
 @keyframes halo {
-  0% {
-    box-shadow: 0 0 0 0 rgb(20 199 192 / 0.55);
-  }
-  100% {
-    box-shadow: 0 0 0 18px rgb(20 199 192 / 0);
-  }
+  0% { box-shadow: 0 0 0 0 rgb(20 196 193 / 0.55); }
+  100% { box-shadow: 0 0 0 18px rgb(20 196 193 / 0); }
 }
-.animate-halo {
-  animation: halo 2s ease-out infinite;
-}
+.animate-halo { animation: halo 2s ease-out infinite; }
 
-/* The ECG trace in the hero fallback. */
 @keyframes ecg-dash {
-  to {
-    stroke-dashoffset: -640;
-  }
+  to { stroke-dashoffset: -640; }
 }
 .animate-ecg {
   stroke-dasharray: 320 320;
   animation: ecg-dash 3.2s linear infinite;
 }
 
-/* The loading heartbeat: a bright segment travelling along a still trace. */
 @keyframes ecg-sweep {
-  to {
-    stroke-dashoffset: -260;
-  }
+  to { stroke-dashoffset: -260; }
 }
 .ecg-sweep {
   stroke-dasharray: 48 212;
@@ -769,27 +784,17 @@ select:focus ~ .select-chevron {
   animation: ecg-sweep 1.5s linear infinite;
 }
 
-/* A live waveform beside a reading — visually alive, not a measurement. */
 @keyframes wave-scroll {
-  to {
-    transform: translateX(-50%);
-  }
+  to { transform: translateX(-50%); }
 }
-.wave-live {
-  animation: wave-scroll 2.4s linear infinite;
-}
+.wave-live { animation: wave-scroll 2.4s linear infinite; }
 
-/* Skeleton shimmer. */
 @keyframes shimmer {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
 .skeleton {
-  border-radius: 0.5rem;
+  border-radius: var(--ms-radius-sm);
   background: linear-gradient(
     90deg,
     var(--surface-sunken) 25%,
@@ -800,41 +805,18 @@ select:focus ~ .select-chevron {
   animation: shimmer 1.7s ease-in-out infinite;
 }
 
-/* "The assistant is thinking": three dots, a heartbeat apart. */
 @keyframes heartbeat-dot {
-  0%,
-  60%,
-  100% {
-    transform: scale(1);
-    opacity: 0.35;
-  }
-  15% {
-    transform: scale(1.35);
-    opacity: 1;
-  }
-  30% {
-    transform: scale(1);
-    opacity: 0.6;
-  }
-  45% {
-    transform: scale(1.2);
-    opacity: 1;
-  }
+  0%, 60%, 100% { transform: scale(1); opacity: 0.35; }
+  15% { transform: scale(1.35); opacity: 1; }
+  30% { transform: scale(1); opacity: 0.6; }
+  45% { transform: scale(1.2); opacity: 1; }
 }
-.typing-dot {
-  animation: heartbeat-dot 1.4s ease-in-out infinite;
-}
-.typing-dot:nth-child(2) {
-  animation-delay: 0.18s;
-}
-.typing-dot:nth-child(3) {
-  animation-delay: 0.36s;
-}
+.typing-dot { animation: heartbeat-dot 1.4s ease-in-out infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.18s; }
+.typing-dot:nth-child(3) { animation-delay: 0.36s; }
 
 @keyframes blink {
-  50% {
-    opacity: 0;
-  }
+  50% { opacity: 0; }
 }
 .stream-cursor::after {
   content: "▍";
@@ -843,28 +825,15 @@ select:focus ~ .select-chevron {
   animation: blink 0.9s steps(2) infinite;
 }
 
-/* Microphone: a quiet pulse at rest, ripples while listening. */
 @keyframes mic-idle {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgb(27 79 224 / 0.25);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgb(27 79 224 / 0);
-  }
+  0%, 100% { box-shadow: 0 0 0 0 rgb(11 63 168 / 0.25); }
+  50% { box-shadow: 0 0 0 6px rgb(11 63 168 / 0); }
 }
-.mic-idle {
-  animation: mic-idle 2.6s ease-in-out infinite;
-}
+.mic-idle { animation: mic-idle 2.6s ease-in-out infinite; }
+
 @keyframes ripple {
-  from {
-    transform: scale(1);
-    opacity: 0.5;
-  }
-  to {
-    transform: scale(2.4);
-    opacity: 0;
-  }
+  from { transform: scale(1); opacity: 0.5; }
+  to { transform: scale(2.4); opacity: 0; }
 }
 .listening-ring::before,
 .listening-ring::after {
@@ -876,19 +845,11 @@ select:focus ~ .select-chevron {
   animation: ripple 1.6s ease-out infinite;
   z-index: -1;
 }
-.listening-ring::after {
-  animation-delay: 0.55s;
-}
+.listening-ring::after { animation-delay: 0.55s; }
 
-/* Waveform bars that dance while the microphone is live. */
 @keyframes voice-bar {
-  0%,
-  100% {
-    transform: scaleY(0.25);
-  }
-  50% {
-    transform: scaleY(1);
-  }
+  0%, 100% { transform: scaleY(0.25); }
+  50% { transform: scaleY(1); }
 }
 .voice-bars {
   display: inline-flex;
@@ -901,7 +862,7 @@ select:focus ~ .select-chevron {
   width: 3px;
   height: 100%;
   border-radius: 2px;
-  background: var(--gradient-brand);
+  background: var(--ms-gradient);
   transform-origin: center;
   animation: voice-bar 0.9s ease-in-out infinite;
 }
@@ -912,30 +873,22 @@ select:focus ~ .select-chevron {
 .voice-bars > span:nth-child(6) { animation-delay: 0.05s; animation-duration: 1.15s; }
 .voice-bars > span:nth-child(7) { animation-delay: 0.25s; animation-duration: 0.85s; }
 
-/* A scan line sweeping a document while it is read. */
 @keyframes scan {
-  0% {
-    top: 0;
-  }
-  100% {
-    top: calc(100% - 3px);
-  }
+  0% { top: 0; }
+  100% { top: calc(100% - 3px); }
 }
 .scan-line {
   position: absolute;
   left: 0;
   right: 0;
   height: 3px;
-  background: var(--gradient-brand);
-  box-shadow: 0 0 14px 3px rgb(20 199 192 / 0.6);
+  background: var(--ms-gradient);
+  box-shadow: 0 0 14px 3px rgb(20 196 193 / 0.6);
   animation: scan 1.8s ease-in-out infinite alternate;
 }
 
-/* A checkmark that draws itself, for a success moment. */
 @keyframes draw-stroke {
-  to {
-    stroke-dashoffset: 0;
-  }
+  to { stroke-dashoffset: 0; }
 }
 .draw-stroke {
   stroke-dasharray: 60;
@@ -943,51 +896,24 @@ select:focus ~ .select-chevron {
   animation: draw-stroke 0.5s ease-out 0.15s forwards;
 }
 @keyframes pop-scale {
-  0% {
-    transform: scale(0.6);
-    opacity: 0;
-  }
-  60% {
-    transform: scale(1.08);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-  }
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
 }
-.pop-scale {
-  animation: pop-scale 0.45s var(--ease-out-soft) both;
-}
+.pop-scale { animation: pop-scale 0.45s var(--ease-out-soft) backwards; }
 
-/* The pulsing left edge of an urgent banner. */
 @keyframes edge-pulse {
-  0%,
-  100% {
-    box-shadow: inset 4px 0 0 var(--status-critical);
-  }
-  50% {
-    box-shadow: inset 4px 0 0 rgb(229 72 77 / 0.35);
-  }
+  0%, 100% { box-shadow: inset 4px 0 0 var(--status-critical); }
+  50% { box-shadow: inset 4px 0 0 rgb(229 72 77 / 0.35); }
 }
-.edge-pulse {
-  animation: edge-pulse 1.6s ease-in-out infinite;
-}
+.edge-pulse { animation: edge-pulse 1.6s ease-in-out infinite; }
 
-/* Row glow for a breached threshold. */
 @keyframes glow-critical {
-  0%,
-  100% {
-    box-shadow: 0 0 0 1px rgb(229 72 77 / 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 1px rgb(229 72 77 / 0.7), 0 0 18px rgb(229 72 77 / 0.25);
-  }
+  0%, 100% { box-shadow: 0 0 0 1px rgb(229 72 77 / 0.35); }
+  50% { box-shadow: 0 0 0 1px rgb(229 72 77 / 0.7), 0 0 18px rgb(229 72 77 / 0.25); }
 }
-.glow-critical {
-  animation: glow-critical 1.8s ease-in-out infinite;
-}
+.glow-critical { animation: glow-critical 1.8s ease-in-out infinite; }
 
-/* Cards that respond to the hand. */
 .hover-lift {
   transition:
     transform 0.3s var(--ease-out-soft),
@@ -1008,7 +934,6 @@ select:focus ~ .select-chevron {
   box-shadow: var(--shadow-overlay);
 }
 
-/* Tilt cards: the transform comes from JS; this is the easing. */
 .tilt {
   transform-style: preserve-3d;
   transition:
@@ -1017,7 +942,6 @@ select:focus ~ .select-chevron {
   will-change: transform;
 }
 
-/* A faint accent thread along the top of a card. */
 .card-thread {
   position: relative;
   overflow: hidden;
@@ -1027,10 +951,9 @@ select:focus ~ .select-chevron {
   position: absolute;
   inset: 0 0 auto 0;
   height: 3px;
-  background: var(--gradient-brand);
+  background: var(--ms-gradient);
 }
 
-/* A decorative gradient blob in a card corner. */
 .blob-corner::after {
   content: "";
   position: absolute;
@@ -1039,7 +962,7 @@ select:focus ~ .select-chevron {
   width: 8rem;
   height: 8rem;
   border-radius: 9999px;
-  background: var(--gradient-soft);
+  background: var(--ms-gradient-soft);
   filter: blur(6px);
   pointer-events: none;
 }
@@ -1057,21 +980,22 @@ select:focus ~ .select-chevron {
 .table-modern thead th {
   background: var(--surface-sunken);
   color: var(--text-faint);
+  font-family: var(--font-mono-face), ui-monospace, monospace;
   font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 0.75rem 1rem;
   text-align: left;
   white-space: nowrap;
 }
 .table-modern thead th:first-child {
-  border-top-left-radius: 0.75rem;
-  border-bottom-left-radius: 0.75rem;
+  border-top-left-radius: var(--ms-radius-sm);
+  border-bottom-left-radius: var(--ms-radius-sm);
 }
 .table-modern thead th:last-child {
-  border-top-right-radius: 0.75rem;
-  border-bottom-right-radius: 0.75rem;
+  border-top-right-radius: var(--ms-radius-sm);
+  border-bottom-right-radius: var(--ms-radius-sm);
 }
 .table-modern tbody td {
   padding: 0.9rem 1rem;
@@ -1082,13 +1006,12 @@ select:focus ~ .select-chevron {
   transition: background-color 0.2s ease;
 }
 .table-modern tbody tr:hover {
-  background-image: var(--gradient-soft);
+  background-image: var(--ms-gradient-soft);
 }
 .table-modern tbody tr:last-child td {
   border-bottom: 0;
 }
 
-/* Timeline spine: a thin line the EKG motif rides along. */
 .timeline {
   position: relative;
   padding-left: 2rem;
@@ -1100,7 +1023,7 @@ select:focus ~ .select-chevron {
   top: 0.75rem;
   bottom: 0.75rem;
   width: 2px;
-  background: linear-gradient(to bottom, var(--brand-primary), var(--brand-accent-bright));
+  background: linear-gradient(to bottom, var(--ms-blue-700), var(--ms-teal-300));
   opacity: 0.5;
   border-radius: 2px;
 }
@@ -1115,30 +1038,16 @@ select:focus ~ .select-chevron {
   border: 2px solid var(--brand-primary);
   box-shadow: 0 0 0 4px var(--surface-canvas);
 }
-.timeline-node.is-accent {
-  border-color: var(--brand-accent-bright);
-}
-.timeline-node.is-critical {
-  border-color: var(--status-critical);
-}
+.timeline-node.is-accent { border-color: var(--brand-accent-bright); }
+.timeline-node.is-critical { border-color: var(--status-critical); }
 
 /* Assistant markdown. */
 .prose-chat p + p,
 .prose-chat p + ul,
-.prose-chat ul + p {
-  margin-top: 0.6em;
-}
-.prose-chat ul {
-  list-style: disc;
-  padding-left: 1.3rem;
-}
-.prose-chat li + li {
-  margin-top: 0.3em;
-}
-.prose-chat strong {
-  font-weight: 650;
-  color: var(--text-strong);
-}
+.prose-chat ul + p { margin-top: 0.6em; }
+.prose-chat ul { list-style: disc; padding-left: 1.3rem; }
+.prose-chat li + li { margin-top: 0.3em; }
+.prose-chat strong { font-weight: 650; color: var(--text-strong); }
 
 /* Nobody should have motion forced on them, least of all someone reading a
    vital sign. */
@@ -1151,19 +1060,8 @@ select:focus ~ .select-chevron {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .tilt {
-    transform: none !important;
-  }
-}
-
-/* The circuit motif on a light ground. */
-.circuit-pattern-light {
-  background-image:
-    radial-gradient(circle at 8px 8px, rgb(27 79 224 / 0.22) 1.5px, transparent 2px),
-    linear-gradient(90deg, rgb(20 199 192 / 0.14) 1px, transparent 1px),
-    linear-gradient(0deg, rgb(20 199 192 / 0.14) 1px, transparent 1px);
-  background-size: 40px 40px, 40px 40px, 40px 40px;
-  background-position: 0 0, 8px 8px, 8px 8px;
-  mask-image: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent 90%);
-  -webkit-mask-image: linear-gradient(to top, rgb(0 0 0 / 0.8), transparent 90%);
+  .tilt { transform: none !important; }
+  .ecg-draw-once,
+  .ecg-draw-loop,
+  .ecg-beat { stroke-dashoffset: 0 !important; }
 }

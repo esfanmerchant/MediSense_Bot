@@ -10,9 +10,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { CircuitNodes } from "@/components/brand/CircuitNodes";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -20,15 +21,25 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   EmptyState,
   ErrorState,
   QuickAction,
   SkeletonRows,
   SkeletonTiles,
   StatTile,
+  cx,
 } from "@/components/ui";
 import { VitalGauge } from "@/components/gauges";
-import { dashboard, vitals, type Vital, type VitalThreshold, type VitalType } from "@/lib/api";
+import {
+  dashboard,
+  documents,
+  vitals,
+  type MedicalDocument,
+  type Vital,
+  type VitalThreshold,
+  type VitalType,
+} from "@/lib/api";
 import { useLang, useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/useAsync";
@@ -54,6 +65,48 @@ function relativeDay(iso: string, tr: (en: string, ur: string) => string): strin
   if (days <= 0) return tr("Today", "Aaj");
   if (days === 1) return tr("Tomorrow", "Kal");
   return tr(`In ${days} days`, `${days} din mein`);
+}
+
+/**
+ * How long until an appointment, counted down live.
+ *
+ * Starts empty and fills in from an effect: the first paint happens on the
+ * server, where "in 3 hours" would be three hours out of date by the time
+ * anyone read it, and a mismatched first render is a hydration error.
+ *
+ * Minutes are the smallest unit shown. A visit is not a rocket launch, and a
+ * second-by-second counter next to a doctor's name reads as an alarm.
+ */
+function useCountdown(iso: string): string | null {
+  const tr = useTr();
+  const [label, setLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    const tick = () => {
+      const minutes = Math.round((new Date(iso).getTime() - Date.now()) / 60_000);
+      if (Number.isNaN(minutes)) return setLabel(null);
+      if (minutes <= 0) return setLabel(tr("Now", "Abhi"));
+      if (minutes < 60) return setLabel(tr(`In ${minutes} min`, `${minutes} minute mein`));
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) {
+        const rest = minutes % 60;
+        return setLabel(
+          rest
+            ? tr(`In ${hours}h ${rest}m`, `${hours} ghante ${rest} minute mein`)
+            : tr(`In ${hours}h`, `${hours} ghante mein`),
+        );
+      }
+      const days = Math.floor(hours / 24);
+      return setLabel(
+        tr(`In ${days}d ${hours % 24}h`, `${days} din ${hours % 24} ghante mein`),
+      );
+    };
+    tick();
+    const timer = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(timer);
+  }, [iso, tr]);
+
+  return label;
 }
 
 const VITALS: { key: keyof Vital; type: VitalType; unit: string; name: [string, string] }[] = [
@@ -129,6 +182,193 @@ function HealthSnapshot({ patientId }: { patientId: string }) {
   );
 }
 
+type UpcomingAppointment = {
+  id: string;
+  startTime: string;
+  status: string;
+  reason: string | null;
+  doctor: { id: string; name: string; specialization: string };
+};
+
+/**
+ * The very next visit, pulled out of the list and given the gradient border.
+ *
+ * One appointment is the answer to the question most people open this page
+ * with, and a row in a list of four is not an answer. The countdown beside it
+ * is the part a date alone cannot say: whether to leave now.
+ */
+function NextVisit({
+  appointment,
+  locale,
+}: {
+  appointment: UpcomingAppointment;
+  locale: string | undefined;
+}) {
+  const tr = useTr();
+  const countdown = useCountdown(appointment.startTime);
+
+  return (
+    <div className="border-gradient rounded-2xl p-4 shadow-card sm:p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mono-caps text-[10px] text-faint">{tr("Next visit", "Agli visit")}</span>
+        <span className="bg-gradient-brand inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
+          <Icon name="schedule" className="text-[13px]" />
+          {countdown ?? relativeDay(appointment.startTime, tr)}
+        </span>
+        <span className="ml-auto">
+          <Badge tone={appointment.status === "CONFIRMED" ? "good" : "info"}>
+            {appointment.status === "CONFIRMED"
+              ? tr("confirmed", "confirmed")
+              : tr("requested", "requested")}
+          </Badge>
+        </span>
+      </div>
+
+      <div className="mt-3 flex items-center gap-4">
+        <Avatar name={appointment.doctor.name} size="lg" ring="active" />
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-lg font-bold text-strong">{appointment.doctor.name}</p>
+          <p className="truncate text-sm text-muted">
+            {appointment.doctor.specialization}
+            {appointment.reason ? ` · ${appointment.reason}` : ""}
+          </p>
+          <p className="mt-1 text-sm font-semibold tabular-nums text-strong">
+            {formatDateTime(appointment.startTime, locale)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The latest uploaded report, with one button on it: ask what it says.
+ *
+ * The question is composed here and carried to the assistant as `?q=`, so the
+ * patient lands on the composer with it already typed rather than having to
+ * describe the document they were just looking at.
+ */
+function ExplainLatestReport({ patientId }: { patientId: string }) {
+  const tr = useTr();
+  const lang = useLang();
+  const list = useAsync(() => documents.list({ patientId, limit: 10 }), [patientId]);
+
+  const latest: MedicalDocument | undefined = (list.data?.data ?? []).find(
+    (document) => document.documentType !== "PROFILE_IMAGE",
+  );
+  if (list.loading || !latest) return null;
+
+  const name = latest.title ?? latest.fileName;
+  const question =
+    lang === "ur"
+      ? `Meri report "${name}" mein kya likha hai? Aasan alfaz mein samjhayein.`
+      : `What does my report "${name}" say? Please explain it in plain words.`;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-card p-3 shadow-card">
+      <span
+        aria-hidden
+        className="bg-gradient-soft grid h-10 w-10 shrink-0 place-items-center rounded-xl text-primary"
+      >
+        <Icon name="description" className="text-[22px]" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="mono-caps text-[10px] text-faint">{tr("Latest report", "Taaza report")}</p>
+        <p className="truncate text-sm font-semibold text-strong">{name}</p>
+      </div>
+      <Link
+        href={`/patient/assistant?q=${encodeURIComponent(question)}`}
+        className="btn-outline inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
+        <Icon name="auto_awesome" className="text-[18px]" />
+        {tr("Explain", "Samjhayein")}
+      </Link>
+    </div>
+  );
+}
+
+type ActivePrescription = {
+  id: string;
+  medication: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  prescribedBy: string;
+};
+
+/**
+ * Today's medication, with a box to tick beside each one.
+ *
+ * **The ticks are a reminder, not a record.** Nothing is sent anywhere, nothing
+ * is stored, and they are gone on reload — so the panel says exactly that above
+ * the list. A checkbox in a medical portal that silently looked like adherence
+ * data would be worse than no checkbox: a doctor could read it as evidence a
+ * dose was taken, when all it ever was is a person keeping their place.
+ */
+function MedicationChecklist({ prescriptions }: { prescriptions: ActivePrescription[] }) {
+  const tr = useTr();
+  const [taken, setTaken] = useState<string[]>([]);
+
+  const toggle = (id: string) =>
+    setTaken((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
+    );
+
+  return (
+    <>
+      <p className="mb-3 flex items-start gap-1.5 rounded-xl bg-sunken/70 px-3 py-2 text-xs text-muted">
+        <Icon name="lock" className="mt-px shrink-0 text-[14px] text-faint" />
+        {tr(
+          `Tick these off as you go — a checklist for you alone. Nothing is sent or saved, and it clears when you leave. ${taken.length} of ${prescriptions.length} ticked today.`,
+          `Jaise jaise lein, tick karte jayein — yeh sirf aap ke liye hai. Kuchh bheja ya save nahi hota, aur page chhorte hi khali ho jata hai. Aaj ${prescriptions.length} mein se ${taken.length} tick hue.`,
+        )}
+      </p>
+      <ul className="stagger space-y-3">
+        {prescriptions.map((prescription) => {
+          const ticked = taken.includes(prescription.id);
+          return (
+            <li
+              key={prescription.id}
+              className={cx(
+                "flex items-start gap-3 rounded-xl border p-3 transition-[background-color,border-color,opacity] duration-200",
+                ticked ? "border-stable/40 bg-stable-soft/50" : "border-line bg-sunken/60",
+              )}
+            >
+              <span
+                aria-hidden
+                className={cx(
+                  "grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors",
+                  ticked ? "bg-stable-soft text-stable" : "bg-accent-soft text-accent",
+                )}
+              >
+                <Icon name={ticked ? "check" : "medication"} filled className="text-[22px]" />
+              </span>
+              <div className={cx("min-w-0 flex-1", ticked && "opacity-70")}>
+                <Checkbox
+                  checked={ticked}
+                  onChange={() => toggle(prescription.id)}
+                  label={
+                    <span className={cx("font-semibold text-strong", ticked && "line-through")}>
+                      {prescription.medication}{" "}
+                      <span className="font-normal text-muted">· {prescription.dosage}</span>
+                    </span>
+                  }
+                />
+                <p className="mt-0.5 pl-8 text-sm text-muted">
+                  {prescription.frequency} · {prescription.duration}
+                </p>
+                <p className="mt-0.5 pl-8 text-xs text-faint">
+                  {tr("Prescribed by", "Tajweez kardah")} {prescription.prescribedBy}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
 function greeting(tr: (en: string, ur: string) => string): string {
   const hour = new Date().getHours();
   if (hour < 12) return tr("Good morning", "Subah bakhair");
@@ -157,7 +397,15 @@ function Welcome({
   };
 
   return (
-    <section className="hero-navy relative overflow-hidden rounded-3xl p-6 text-white shadow-float sm:p-8">
+    <section className="bg-gradient-brand relative overflow-hidden rounded-3xl p-6 text-white shadow-float sm:p-8">
+      {/* The logo's circuit traces, faint, fading out of the top-right corner:
+          an accent on the brand ground, not wallpaper across it. */}
+      <CircuitNodes
+        density="low"
+        tone="white"
+        className="[mask-image:radial-gradient(65%_70%_at_88%_12%,black,transparent)]"
+      />
+
       {/* A quiet ECG trace along the bottom edge — the building's own pulse. */}
       <svg
         aria-hidden
@@ -165,7 +413,7 @@ function Welcome({
         preserveAspectRatio="none"
         className="pointer-events-none absolute inset-x-0 bottom-0 h-14 w-full opacity-30"
         fill="none"
-        stroke="#5EEAD4"
+        stroke="#FFFFFF"
         strokeWidth="1.5"
         strokeLinejoin="round"
       >
@@ -328,6 +576,7 @@ export default function PatientDashboard() {
             </div>
 
             {user?.patientId && <HealthSnapshot patientId={user.patientId} />}
+            {user?.patientId && <ExplainLatestReport patientId={user.patientId} />}
 
             <div className="grid gap-6 lg:grid-cols-2">
               <Card
@@ -351,38 +600,38 @@ export default function PatientDashboard() {
                     }
                   />
                 ) : (
-                  <ul className="stagger divide-y divide-line">
-                    {data.upcomingAppointments.map((appointment, index) => (
-                      <li key={appointment.id} className="flex items-center gap-4 py-3.5">
-                        <Avatar name={appointment.doctor.name} />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-strong">{appointment.doctor.name}</p>
-                          <p className="truncate text-sm text-muted">
-                            {appointment.doctor.specialization}
-                            {appointment.reason ? ` · ${appointment.reason}` : ""}
-                          </p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-sm font-semibold tabular-nums text-strong">
-                            {formatDateTime(appointment.startTime, locale)}
-                          </p>
-                          <div className="mt-1 flex items-center justify-end gap-1.5">
-                            {index === 0 && (
-                              <span className="bg-gradient-brand inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
-                                <Icon name="schedule" className="text-[13px]" />
-                                {relativeDay(appointment.startTime, tr)}
-                              </span>
-                            )}
-                            <Badge tone={appointment.status === "CONFIRMED" ? "good" : "info"}>
-                              {appointment.status === "CONFIRMED"
-                                ? tr("confirmed", "confirmed")
-                                : tr("requested", "requested")}
-                            </Badge>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="space-y-4">
+                    <NextVisit appointment={data.upcomingAppointments[0]} locale={locale} />
+
+                    {data.upcomingAppointments.length > 1 && (
+                      <ul className="stagger divide-y divide-line border-t border-line">
+                        {data.upcomingAppointments.slice(1).map((appointment) => (
+                          <li key={appointment.id} className="flex items-center gap-4 py-3.5">
+                            <Avatar name={appointment.doctor.name} />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-strong">{appointment.doctor.name}</p>
+                              <p className="truncate text-sm text-muted">
+                                {appointment.doctor.specialization}
+                                {appointment.reason ? ` · ${appointment.reason}` : ""}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-semibold tabular-nums text-strong">
+                                {formatDateTime(appointment.startTime, locale)}
+                              </p>
+                              <div className="mt-1 flex items-center justify-end gap-1.5">
+                                <Badge tone={appointment.status === "CONFIRMED" ? "good" : "info"}>
+                                  {appointment.status === "CONFIRMED"
+                                    ? tr("confirmed", "confirmed")
+                                    : tr("requested", "requested")}
+                                </Badge>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 )}
               </Card>
 
@@ -400,33 +649,7 @@ export default function PatientDashboard() {
                     title={tr("No active prescriptions", "Koi chalu nuskha nahi")}
                   />
                 ) : (
-                  <ul className="stagger space-y-3">
-                    {data.activePrescriptions.map((prescription) => (
-                      <li
-                        key={prescription.id}
-                        className="flex items-start gap-3 rounded-xl border border-line bg-sunken/60 p-3"
-                      >
-                        <span
-                          aria-hidden
-                          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"
-                        >
-                          <Icon name="medication" filled className="text-[22px]" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-strong">
-                            {prescription.medication}{" "}
-                            <span className="font-normal text-muted">· {prescription.dosage}</span>
-                          </p>
-                          <p className="mt-0.5 text-sm text-muted">
-                            {prescription.frequency} · {prescription.duration}
-                          </p>
-                          <p className="mt-0.5 text-xs text-faint">
-                            {tr("Prescribed by", "Tajweez kardah")} {prescription.prescribedBy}
-                          </p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <MedicationChecklist prescriptions={data.activePrescriptions} />
                 )}
               </Card>
             </div>

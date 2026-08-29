@@ -10,7 +10,7 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
@@ -403,6 +403,12 @@ function Booking({
   const direction = tracked.direction;
 
   const chosenDoctor = (directory.data?.data ?? []).find((doctor) => doctor.id === doctorId);
+  // Only from the directory, and only when it is a real number: an invented or
+  // stale price on a confirmation screen is a promise nobody made.
+  const fee =
+    typeof chosenDoctor?.consultationFee === "number" && chosenDoctor.consultationFee > 0
+      ? chosenDoctor.consultationFee
+      : null;
   const doctorName = chosenDoctor?.name ?? moving?.doctorName ?? tr("Your doctor", "Aap ka doctor");
   const doctorSpecialization = chosenDoctor?.specialization ?? moving?.specialization ?? null;
   const chosenDay = days.find((entry) => entry.date === day) ?? null;
@@ -578,34 +584,14 @@ function Booking({
                 title={tr("What time?", "Kis waqt?")}
                 hint={formatDay(chosenDay.date)}
               >
-                <div role="group" aria-label={formatDay(chosenDay.date)} className="flex flex-wrap gap-2.5">
-                  {chosenDay.slots.map((option) => {
-                    const selected = slot === option.startTime;
-                    return (
-                      <button
-                        key={option.startTime}
-                        type="button"
-                        disabled={!option.available}
-                        aria-pressed={selected}
-                        onClick={() => {
-                          setSlot(option.startTime);
-                          setVisited("confirm");
-                        }}
-                        className={cx(
-                          "min-h-11 rounded-full px-5 text-sm font-semibold tabular-nums transition-[transform,background-color,color,border-color,box-shadow] duration-200 ease-out",
-                          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-                          selected
-                            ? "scale-105 border border-transparent bg-gradient-brand text-white shadow-md"
-                            : option.available
-                              ? "border border-line-strong bg-card text-strong hover:scale-105 hover:border-primary hover:text-primary hover:shadow-card"
-                              : "cursor-not-allowed border border-line bg-sunken text-faint line-through",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                <SlotGroups
+                  day={chosenDay}
+                  selected={slot}
+                  onSelect={(startTime) => {
+                    setSlot(startTime);
+                    setVisited("confirm");
+                  }}
+                />
               </StepFrame>
             )}
 
@@ -639,12 +625,28 @@ function Booking({
                       <SummaryItem icon="schedule" label={tr("Time", "Waqt")}>
                         {chosenSlot.label}
                       </SummaryItem>
+                      {/* The timezone is the API's, never this file's: the
+                          clinic decides what "10:30" means, not the browser. */}
                       {slots.data && (
                         <SummaryItem icon="public" label={tr("Clinic time", "Clinic ka waqt")}>
                           {slots.data.timezone}
                         </SummaryItem>
                       )}
+                      {fee !== null && (
+                        <SummaryItem icon="payments" label={tr("Consultation fee", "Consultation fees")}>
+                          PKR {fee.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </SummaryItem>
+                      )}
                     </dl>
+                    {fee !== null && (
+                      <p className="mt-4 flex items-start gap-1.5 border-t border-line pt-3 text-xs text-muted">
+                        <Icon name="info" className="mt-px shrink-0 text-[14px]" />
+                        {tr(
+                          "The doctor's listed fee. Nothing is charged now — you are invoiced after the visit.",
+                          "Doctor ki darj shuda fees. Abhi kuchh charge nahi hota — visit ke baad invoice aata hai.",
+                        )}
+                      </p>
+                    )}
                   </div>
 
                   {!moving && (
@@ -832,6 +834,95 @@ function Stepper({
   );
 }
 
+/**
+ * A day's free times, split into the three parts of a day people plan around.
+ *
+ * The hour comes off the server's own `label`, which is clinic wall time in
+ * `HH:MM`. Reading it from `startTime` instead would use the *browser's*
+ * timezone, and a patient abroad would see a 9am clinic slot filed under
+ * "evening" — the heading and the number under it disagreeing.
+ */
+function SlotGroups({
+  day,
+  selected,
+  onSelect,
+}: {
+  day: AvailabilityDay;
+  selected: string | null;
+  onSelect: (startTime: string) => void;
+}) {
+  const tr = useTr();
+  const parts: { key: string; heading: string; icon: string; slots: AvailabilityDay["slots"] }[] = [
+    {
+      key: "morning",
+      heading: tr("Morning", "Subah"),
+      icon: "wb_twilight",
+      slots: day.slots.filter((option) => Number(option.label.slice(0, 2)) < 12),
+    },
+    {
+      key: "afternoon",
+      heading: tr("Afternoon", "Dopahar"),
+      icon: "light_mode",
+      slots: day.slots.filter((option) => {
+        const hour = Number(option.label.slice(0, 2));
+        return hour >= 12 && hour < 17;
+      }),
+    },
+    {
+      key: "evening",
+      heading: tr("Evening", "Shaam"),
+      icon: "bedtime",
+      slots: day.slots.filter((option) => Number(option.label.slice(0, 2)) >= 17),
+    },
+  ];
+
+  return (
+    <div role="group" aria-label={formatDay(day.date)} className="space-y-5">
+      {parts
+        .filter((part) => part.slots.length > 0)
+        .map((part) => {
+          const free = part.slots.filter((option) => option.available).length;
+          return (
+            <section key={part.key}>
+              <h4 className="flex items-center gap-2">
+                <Icon name={part.icon} className="text-[18px] text-accent" />
+                <span className="mono-caps text-[11px] text-faint">{part.heading}</span>
+                <span className="text-[11px] tabular-nums text-faint">
+                  {free > 0 ? tr(`${free} free`, `${free} khali`) : tr("Full", "Full")}
+                </span>
+              </h4>
+              <div className="mt-2.5 flex flex-wrap gap-2.5">
+                {part.slots.map((option) => {
+                  const active = selected === option.startTime;
+                  return (
+                    <button
+                      key={option.startTime}
+                      type="button"
+                      disabled={!option.available}
+                      aria-pressed={active}
+                      onClick={() => onSelect(option.startTime)}
+                      className={cx(
+                        "min-h-11 rounded-full px-5 text-sm font-semibold tabular-nums transition-[transform,background-color,color,border-color,box-shadow] duration-200 ease-out",
+                        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                        active
+                          ? "scale-105 border border-transparent bg-gradient-brand text-white shadow-md"
+                          : option.available
+                            ? "border border-line-strong bg-card text-strong hover:scale-105 hover:border-primary hover:text-primary hover:shadow-card"
+                            : "cursor-not-allowed border border-line bg-sunken text-faint line-through",
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+    </div>
+  );
+}
+
 /** The next two weeks as day tiles: today ringed, full days muted. */
 function DayGrid({
   days,
@@ -847,53 +938,73 @@ function DayGrid({
 
   return (
     <div role="radiogroup" aria-label={tr("Date", "Tareekh")} className="stagger grid grid-cols-4 gap-2 sm:grid-cols-7">
-      {days.map((day) => {
+      {days.map((day, index) => {
         const date = new Date(`${day.date}T00:00:00Z`);
         const weekday = date.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
         const month = date.toLocaleDateString(undefined, { month: "short", timeZone: "UTC" });
         const available = day.availableCount > 0;
         const active = day.date === selected;
         const isToday = day.date === today;
+        // A fortnight can straddle a month end, and "1" following "31" with no
+        // marker reads as a mistake. The divider names the month it opens.
+        const previous = index > 0 ? days[index - 1].date.slice(0, 7) : day.date.slice(0, 7);
+        const newMonth = index > 0 && previous !== day.date.slice(0, 7);
         return (
-          <button
-            key={day.date}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            aria-label={`${formatDay(day.date)}${available ? "" : ` — ${tr("fully booked", "koi waqt khali nahi")}`}`}
-            disabled={!available}
-            onClick={() => onSelect(day.date)}
-            className={cx(
-              "flex flex-col items-center rounded-xl border px-1 py-2.5 transition-[transform,background-color,color,border-color,box-shadow] duration-200 ease-out",
-              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-              active
-                ? "scale-[1.04] border-transparent bg-gradient-brand text-white shadow-md"
-                : available
-                  ? "border-line bg-card text-strong hover:-translate-y-0.5 hover:border-primary hover:shadow-card"
-                  : "cursor-not-allowed border-line bg-sunken text-faint opacity-70",
-              isToday && !active && "ring-2 ring-accent-bright ring-offset-2 ring-offset-card",
+          <Fragment key={`group-${day.date}`}>
+            {newMonth && (
+              <p
+                aria-hidden
+                className="col-span-full mt-2 flex items-center gap-3 first:mt-0"
+              >
+                <span className="mono-caps whitespace-nowrap text-[10px] text-faint">
+                  {date.toLocaleDateString(undefined, {
+                    month: "short",
+                    year: "numeric",
+                    timeZone: "UTC",
+                  })}
+                </span>
+                <span className="h-px flex-1 bg-line" />
+              </p>
             )}
-          >
-            <span className={cx("text-[11px] font-semibold uppercase tracking-wider", active ? "text-white/85" : "text-faint")}>
-              {weekday}
-            </span>
-            <span className="font-display text-2xl font-bold leading-tight tabular-nums">
-              {date.getUTCDate()}
-            </span>
-            <span className={cx("text-[11px]", active ? "text-white/85" : "text-muted")}>{month}</span>
-            <span
+            <button
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={`${formatDay(day.date)}${available ? "" : ` — ${tr("fully booked", "koi waqt khali nahi")}`}`}
+              disabled={!available}
+              onClick={() => onSelect(day.date)}
               className={cx(
-                "mt-1.5 rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums",
-                active ? "bg-white/20 text-white" : available ? "bg-accent-soft text-accent" : "text-faint",
+                "flex flex-col items-center rounded-xl border px-1 py-2.5 transition-[transform,background-color,color,border-color,box-shadow] duration-200 ease-out",
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                active
+                  ? "scale-[1.04] border-transparent bg-gradient-brand text-white shadow-md"
+                  : available
+                    ? "border-line bg-card text-strong hover:-translate-y-0.5 hover:border-primary hover:shadow-card"
+                    : "cursor-not-allowed border-line bg-sunken text-faint opacity-70",
+                isToday && !active && "ring-2 ring-accent-bright ring-offset-2 ring-offset-card",
               )}
             >
-              {isToday
-                ? tr("Today", "Aaj")
-                : available
-                  ? tr(`${day.availableCount} free`, `${day.availableCount} khali`)
-                  : tr("Full", "Full")}
-            </span>
-          </button>
+              <span className={cx("text-[11px] font-semibold uppercase tracking-wider", active ? "text-white/85" : "text-faint")}>
+                {weekday}
+              </span>
+              <span className="font-display text-2xl font-bold leading-tight tabular-nums">
+                {date.getUTCDate()}
+              </span>
+              <span className={cx("text-[11px]", active ? "text-white/85" : "text-muted")}>{month}</span>
+              <span
+                className={cx(
+                  "mt-1.5 rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums",
+                  active ? "bg-white/20 text-white" : available ? "bg-accent-soft text-accent" : "text-faint",
+                )}
+              >
+                {isToday
+                  ? tr("Today", "Aaj")
+                  : available
+                    ? tr(`${day.availableCount} free`, `${day.availableCount} khali`)
+                    : tr("Full", "Full")}
+              </span>
+            </button>
+          </Fragment>
         );
       })}
     </div>

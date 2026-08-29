@@ -73,6 +73,16 @@ class Permission(StrEnum):
     AI_CHAT = "ai:chat"
     OCR_SUBMIT = "ocr:submit"
 
+    # Doctor registration
+    #: Held by a doctor over their *own* application only — the handlers scope
+    #: every read and write to the caller's user id. It exists so submitting a
+    #: registration is a capability that can be named and withdrawn, rather than
+    #: something every signed-in account can do.
+    DOCTOR_APPLICATION_SUBMIT = "doctor:application:submit"
+    #: Approving a colleague is an administrative act, not a clinical one, which
+    #: is why it sits beside user management rather than beside chart access.
+    DOCTOR_APPLICATION_REVIEW = "doctor:application:review"
+
     # Safety & compliance
     EMERGENCY_REQUEST = "emergency:request"
     EMERGENCY_REVIEW = "emergency:review"
@@ -112,6 +122,7 @@ _DOCTOR: frozenset[Permission] = frozenset(
         Permission.THRESHOLD_MANAGE,
         Permission.ALERT_READ_ASSIGNED,
         Permission.ALERT_MANAGE,
+        Permission.DOCTOR_APPLICATION_SUBMIT,
     }
 )
 
@@ -121,6 +132,7 @@ _ADMIN: frozenset[Permission] = frozenset(
     {
         Permission.USER_READ_ANY,
         Permission.USER_MANAGE,
+        Permission.DOCTOR_APPLICATION_REVIEW,
         Permission.DEPARTMENT_MANAGE,
         Permission.CONFIG_MANAGE,
         Permission.ANALYTICS_READ,

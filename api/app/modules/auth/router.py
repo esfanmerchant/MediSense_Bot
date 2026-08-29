@@ -1,4 +1,12 @@
-"""Authentication routes."""
+"""Authentication routes.
+
+Four of these carry no session and cannot: registering, proving an address,
+asking for another code, and answering a second-factor challenge all happen
+*before* there is anything to authenticate with. Each one carries its own
+credential instead — a password, a six-digit code that expires, or a challenge
+id that is single-use — and each is rate limited, because an endpoint anybody
+can reach is an endpoint anybody can hammer.
+"""
 
 from __future__ import annotations
 
@@ -13,16 +21,23 @@ from app.core.logging import logger
 from app.core.ratelimit import limit
 from app.modules.auth import service
 from app.modules.auth.schemas import (
+    ChallengeRequest,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
     RegisterRequest,
+    ResendCodeRequest,
     ResetPasswordRequest,
+    TwoFactorVerifyRequest,
+    VerifyEmailRequest,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 REFRESH_COOKIE_PATH = "/api/auth"
+#: Sent on every request rather than only to /auth, because login has to read it
+#: before deciding whether a second factor is owed.
+TRUSTED_DEVICE_COOKIE = "ms_td"
 
 
 def _ctx(request: Request) -> service.RequestContext:
@@ -39,6 +54,15 @@ def _ctx(request: Request) -> service.RequestContext:
 #: lockout alone never sees. Ten a minute leaves room for a mistyped password
 #: and none for a wordlist.
 LoginRateLimit = Annotated[None, Depends(limit(times=10, seconds=60, scope="login"))]
+
+#: Guessing a six-digit code is bounded by the per-code attempt counter in the
+#: database, which counts correctly however many workers are running. This is
+#: the cheaper outer layer: it stops one client working through many accounts.
+VerifyRateLimit = Annotated[None, Depends(limit(times=10, seconds=60, scope="verify_code"))]
+#: Each accepted resend costs an email to a real person. The per-address
+#: throttle in the service is the real control; this bounds the requests before
+#: they get that far.
+ResendRateLimit = Annotated[None, Depends(limit(times=5, seconds=300, scope="resend_code"))]
 
 
 def _set_auth_cookies(response: Response, tokens: service.SessionTokens) -> None:
@@ -74,6 +98,24 @@ def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH)
 
 
+def _set_trusted_device_cookie(response: Response, token: str, max_age: int) -> None:
+    """A month-long marker saying this browser has already passed a second factor.
+
+    httpOnly like the session cookies, and only ever a pointer: the row it names
+    is checked on every login, so forgetting a device works immediately rather
+    than in thirty days' time.
+    """
+    response.set_cookie(
+        TRUSTED_DEVICE_COOKIE,
+        token,
+        max_age=max_age,
+        httponly=True,
+        secure=settings.is_production,
+        samesite="lax",
+        path="/",
+    )
+
+
 def _user_payload(user: service.AuthenticatedUser) -> dict[str, Any]:
     return {
         "id": user.id,
@@ -97,10 +139,65 @@ def _session_payload(tokens: service.SessionTokens) -> dict[str, Any]:
     }
 
 
+def _signed_in_payload(response: Response, result: service.SignedIn) -> dict[str, Any]:
+    _set_auth_cookies(response, result.tokens)
+    if result.trusted_device_token and result.trusted_device_expires_in_seconds:
+        _set_trusted_device_cookie(
+            response, result.trusted_device_token, result.trusted_device_expires_in_seconds
+        )
+    return {
+        "user": _user_payload(result.user),
+        "session": _session_payload(result.tokens),
+        "redirectTo": result.redirect_to,
+    }
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, request: Request, db: DbSession) -> dict[str, Any]:
-    user = await service.register_patient(db, payload, _ctx(request))
-    return {"success": True, "data": {"user": _user_payload(user)}}
+    """Create an account and email it a code. No session is issued here.
+
+    Nothing usable exists until the address is proved, which is what stops a
+    stranger typing somebody else's address from creating anything that person
+    then has to deal with.
+    """
+    pending = await service.register(db, payload, _ctx(request))
+    return {
+        "success": True,
+        "data": {
+            "pendingVerification": True,
+            "email": pending.email,
+            "resendAfterSeconds": pending.resend_after_seconds,
+        },
+    }
+
+
+@router.post("/verify-email")
+async def verify_email(
+    payload: VerifyEmailRequest,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    _: VerifyRateLimit,
+) -> dict[str, Any]:
+    result = await service.verify_email(
+        db, str(payload.email), payload.code, str(payload.device_class), _ctx(request)
+    )
+    return {"success": True, "data": _signed_in_payload(response, result)}
+
+
+@router.post("/resend-code")
+async def resend_code(
+    payload: ResendCodeRequest, db: DbSession, _: ResendRateLimit
+) -> dict[str, Any]:
+    """Ask for another verification code.
+
+    The response never varies. An address with no account, one already verified
+    and one that asked ten seconds ago all get the same body as one that gets a
+    code — otherwise this becomes a way to find out which addresses are
+    registered, which is precisely what ``forgot-password`` refuses to be.
+    """
+    cooldown = await service.resend_verification_code(db, str(payload.email))
+    return {"success": True, "data": {"sent": True, "resendAfterSeconds": cooldown}}
 
 
 @router.post("/login")
@@ -111,9 +208,49 @@ async def login(
     db: DbSession,
     _: LoginRateLimit,
 ) -> dict[str, Any]:
-    user, tokens = await service.login(db, payload, _ctx(request))
-    _set_auth_cookies(response, tokens)
-    return {"success": True, "data": {"user": _user_payload(user), "session": _session_payload(tokens)}}
+    result = await service.login(
+        db, payload, _ctx(request), request.cookies.get(TRUSTED_DEVICE_COOKIE)
+    )
+
+    if isinstance(result, service.PendingTwoFactor):
+        return {
+            "success": True,
+            "data": {
+                "requires2FA": True,
+                "challengeId": result.challenge_id,
+                "method": str(result.method),
+                # Masked. Enough for the owner to recognise their own address,
+                # not enough for somebody holding only a password to learn one.
+                "sentTo": result.sent_to,
+            },
+        }
+
+    return {
+        "success": True,
+        "data": {"requires2FA": False, **_signed_in_payload(response, result)},
+    }
+
+
+@router.post("/2fa/verify")
+async def verify_two_factor(
+    payload: TwoFactorVerifyRequest,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    _: VerifyRateLimit,
+) -> dict[str, Any]:
+    result = await service.verify_two_factor(
+        db, payload.challenge_id, payload.code, payload.remember_device, _ctx(request)
+    )
+    return {"success": True, "data": _signed_in_payload(response, result)}
+
+
+@router.post("/2fa/resend")
+async def resend_two_factor(
+    payload: ChallengeRequest, db: DbSession, _: ResendRateLimit
+) -> dict[str, Any]:
+    cooldown = await service.resend_two_factor_code(db, payload.challenge_id)
+    return {"success": True, "data": {"sent": True, "resendAfterSeconds": cooldown}}
 
 
 @router.post("/refresh")

@@ -59,11 +59,114 @@ class User(Base):
     failed_login_count: Mapped[int] = mapped_column("failedLoginCount", Integer, default=0, nullable=False)
     locked_until: Mapped[datetime | None] = mapped_column("lockedUntil", DateTime)
 
+    #: The six-digit sign-up code, hashed the same way a password is. Only the
+    #: hash is stored, so a database dump cannot be used to verify somebody
+    #: else's address.
+    email_verification_code_hash: Mapped[str | None] = mapped_column("emailVerificationCodeHash", Text)
+    email_verification_expires_at: Mapped[datetime | None] = mapped_column(
+        "emailVerificationExpiresAt", DateTime
+    )
+    #: Guesses against the current code. At the limit the code is burned rather
+    #: than the account locked — the person who cannot get in is usually the
+    #: legitimate owner mistyping, and a fresh code costs them one click.
+    email_verification_attempts: Mapped[int] = mapped_column(
+        "emailVerificationAttempts", Integer, default=0, nullable=False
+    )
+    #: Drives resend throttling, which is enforced here rather than only in the
+    #: IP-based limiter: the cost of a resend is an email to a real person, and
+    #: that has to be bounded per address however many clients ask for it.
+    email_verification_sent_at: Mapped[datetime | None] = mapped_column(
+        "emailVerificationSentAt", DateTime
+    )
+    email_verification_send_count: Mapped[int] = mapped_column(
+        "emailVerificationSendCount", Integer, default=0, nullable=False
+    )
+
+    two_factor_enabled: Mapped[bool] = mapped_column(
+        "twoFactorEnabled", Boolean, default=False, nullable=False
+    )
+    two_factor_method: Mapped[enums.TwoFactorMethod | None] = mapped_column(
+        "twoFactorMethod", pg_enum(enums.TwoFactorMethod, "TwoFactorMethod")
+    )
+    #: Sealed, not hashed: verifying a TOTP code needs the secret back. See
+    #: ``core.security.seal_secret`` for the construction and why it exists.
+    two_factor_secret: Mapped[str | None] = mapped_column("twoFactorSecret", Text)
+    #: Hashes of unused single-use codes. A used code is removed from the array,
+    #: which is what makes "single use" a property of the data rather than a
+    #: flag somebody has to remember to set.
+    two_factor_backup_codes: Mapped[list[str]] = mapped_column(
+        "twoFactorBackupCodes", JSONB, default=list, nullable=False
+    )
+    two_factor_enabled_at: Mapped[datetime | None] = mapped_column("twoFactorEnabledAt", DateTime)
+
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 
     patient: Mapped[Patient | None] = relationship(back_populates="user", uselist=False)
     doctor: Mapped[Doctor | None] = relationship(back_populates="user", uselist=False)
+
+
+class TwoFactorChallenge(Base):
+    """A half-finished authentication, waiting on the second factor.
+
+    It exists because the password has already been accepted but no session may
+    be issued yet. Keeping that state in a row rather than in a token means the
+    server decides when it expires, how many guesses it has had, and whether it
+    has already been spent — none of which a client can be trusted to report.
+    """
+
+    __tablename__ = "two_factor_challenges"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    #: ``LOGIN`` or ``ENROLMENT``. Plain text rather than a Postgres enum,
+    #: matching ``Session.deviceClass``: it is an internal distinction between
+    #: two code paths, not a value any client sends or reads.
+    purpose: Mapped[str] = mapped_column(Text, default="LOGIN", nullable=False)
+    method: Mapped[enums.TwoFactorMethod] = mapped_column(
+        pg_enum(enums.TwoFactorMethod, "TwoFactorMethod"), nullable=False
+    )
+    #: NULL for a TOTP challenge — there is no code to send, the authenticator
+    #: already has the secret.
+    code_hash: Mapped[str | None] = mapped_column("codeHash", Text)
+    #: A TOTP secret being enrolled, sealed, held here until the first correct
+    #: code proves the authenticator actually took it. Writing it onto the user
+    #: at ``start`` would leave an account claiming a second factor its owner
+    #: never managed to scan.
+    pending_secret: Mapped[str | None] = mapped_column("pendingSecret", Text)
+    #: The device class the sign-in asked for, carried across so the session
+    #: issued after verification gets the timeout tier it would have had — and
+    #: so "remember this device" can be refused on a shared terminal.
+    device_class: Mapped[str] = mapped_column("deviceClass", Text, default="PERSONAL", nullable=False)
+    expires_at: Mapped[datetime] = mapped_column("expiresAt", DateTime, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column("consumedAt", DateTime)
+    sent_at: Mapped[datetime | None] = mapped_column("sentAt", DateTime)
+    created_at: Mapped[datetime] = _created()
+
+
+class TrustedDevice(Base):
+    """A browser that has already passed a second factor.
+
+    Only the hash of the cookie value is stored, so a database dump does not
+    hand anybody a working skip-2FA token. The row is what makes revocation
+    real: deleting it locks the device out on its next request, whatever cookie
+    it still holds.
+    """
+
+    __tablename__ = "trusted_devices"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column("tokenHash", Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column("expiresAt", DateTime, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column("lastUsedAt", DateTime)
+    user_agent: Mapped[str | None] = mapped_column("userAgent", Text)
+    created_at: Mapped[datetime] = _created()
 
 
 class Session(Base):
@@ -183,6 +286,103 @@ class DoctorTimeOff(Base):
     starts_at: Mapped[datetime] = mapped_column("startsAt", DateTime, nullable=False)
     ends_at: Mapped[datetime] = mapped_column("endsAt", DateTime, nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)
+
+
+class DoctorApplication(Base):
+    """A doctor's request to practise here, and the record of who decided.
+
+    Kept apart from ``Doctor`` on purpose. A ``Doctor`` row is a credentialed
+    clinician — it authorizes prescribing, appears in the booking directory, and
+    is what a care relationship points at. An application is a claim somebody
+    made about themselves, which is a different kind of fact and must not be
+    able to become the first one without a named administrator deciding so.
+
+    That separation is also what keeps the trail: approving copies the fields
+    across, and the application stays behind saying what was claimed, who
+    checked it and when.
+    """
+
+    __tablename__ = "doctor_applications"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    status: Mapped[enums.DoctorApplicationStatus] = mapped_column(
+        pg_enum(enums.DoctorApplicationStatus, "DoctorApplicationStatus"),
+        default=enums.DoctorApplicationStatus.DRAFT,
+        nullable=False,
+    )
+
+    # --- The claim ---------------------------------------------------------
+    full_name: Mapped[str | None] = mapped_column("fullName", Text)
+    phone: Mapped[str | None] = mapped_column(Text)
+    national_id: Mapped[str | None] = mapped_column("nationalId", Text)
+    address: Mapped[str | None] = mapped_column(Text)
+    registration_number: Mapped[str | None] = mapped_column("registrationNumber", Text)
+    specialization: Mapped[str | None] = mapped_column(Text)
+    department_id: Mapped[str | None] = mapped_column(
+        "departmentId", Text, ForeignKey("departments.id", ondelete="SET NULL", onupdate="CASCADE")
+    )
+    #: A list of strings. ``Doctor.qualifications`` is free text because that is
+    #: what the original schema had; an application collects them one at a time
+    #: so the review screen can show them as a list, and they are joined on
+    #: approval.
+    qualifications: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    years_experience: Mapped[int | None] = mapped_column("yearsExperience", Integer)
+    previous_hospital: Mapped[str | None] = mapped_column("previousHospital", Text)
+    consultation_fee: Mapped[Decimal | None] = mapped_column("consultationFee", Numeric(10, 2))
+    #: Same shape as ``Doctor.availability`` — validated on the way in, so an
+    #: approval copies it across without having to re-check it.
+    availability: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
+
+    # --- The decision ------------------------------------------------------
+    submitted_at: Mapped[datetime | None] = mapped_column("submittedAt", DateTime)
+    reviewed_at: Mapped[datetime | None] = mapped_column("reviewedAt", DateTime)
+    reviewed_by_id: Mapped[str | None] = mapped_column("reviewedById", Text)
+    #: Shown to the applicant verbatim, so they know what to fix.
+    rejection_reason: Mapped[str | None] = mapped_column("rejectionReason", Text)
+    #: Internal. Never returned on the applicant's own endpoints.
+    review_notes: Mapped[str | None] = mapped_column("reviewNotes", Text)
+
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+class DoctorApplicationDocument(Base):
+    """A credential file attached to an application.
+
+    Stored in its own private bucket and reached only through a signed URL minted
+    after the access check — the same rule medical documents follow, for the same
+    reason: a national ID scan is not less sensitive than a lab report.
+    """
+
+    __tablename__ = "doctor_application_documents"
+
+    id: Mapped[str] = _id()
+    application_id: Mapped[str] = mapped_column(
+        "applicationId",
+        Text,
+        ForeignKey("doctor_applications.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+    )
+    kind: Mapped[enums.DoctorDocumentKind] = mapped_column(
+        pg_enum(enums.DoctorDocumentKind, "DoctorDocumentKind"), nullable=False
+    )
+    storage_bucket: Mapped[str] = mapped_column(
+        "storageBucket", Text, default="doctor-credentials", nullable=False
+    )
+    storage_path: Mapped[str] = mapped_column("storagePath", Text, nullable=False)
+    file_name: Mapped[str] = mapped_column("fileName", Text, nullable=False)
+    mime_type: Mapped[str] = mapped_column("mimeType", Text, nullable=False)
+    file_size: Mapped[int] = mapped_column("fileSize", Integer, nullable=False)
+    checksum_sha256: Mapped[str | None] = mapped_column("checksumSha256", Text)
+    #: An administrator has looked at this file and accepted it. Per document
+    #: rather than per application, because a reviewer checks a licence and a
+    #: degree separately and may need to come back to one of them.
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    verified_by_id: Mapped[str | None] = mapped_column("verifiedById", Text)
+    uploaded_at: Mapped[datetime] = mapped_column("uploadedAt", DateTime, default=utcnow, nullable=False)
 
 
 class Patient(Base):
@@ -758,6 +958,20 @@ Index("refresh_tokens_sessionId_idx", RefreshToken.session_id)
 Index("refresh_tokens_userId_idx", RefreshToken.user_id)
 Index("password_reset_tokens_userId_idx", PasswordResetToken.user_id)
 
+# Both are swept for expiry as well as read by owner.
+Index("two_factor_challenges_userId_idx", TwoFactorChallenge.user_id)
+Index("two_factor_challenges_expiresAt_idx", TwoFactorChallenge.expires_at)
+Index("trusted_devices_userId_idx", TrustedDevice.user_id)
+Index("trusted_devices_expiresAt_idx", TrustedDevice.expires_at)
+
+# The admin queue reads by status and oldest-first, so the wait is fair.
+Index(
+    "doctor_applications_status_submittedAt_idx",
+    DoctorApplication.status,
+    DoctorApplication.submitted_at,
+)
+Index("doctor_application_documents_applicationId_idx", DoctorApplicationDocument.application_id)
+
 Index("doctors_departmentId_idx", Doctor.department_id)
 Index("doctors_specialization_idx", Doctor.specialization)
 Index("doctor_time_off_doctorId_startsAt_idx", DoctorTimeOff.doctor_id, DoctorTimeOff.starts_at)
@@ -839,6 +1053,15 @@ Index("audit_logs_severity_timestamp_idx", AuditLog.severity, AuditLog.timestamp
 Index("users_email_key", User.email, unique=True)
 Index("refresh_tokens_tokenHash_key", RefreshToken.token_hash, unique=True)
 Index("password_reset_tokens_tokenHash_key", PasswordResetToken.token_hash, unique=True)
+Index("trusted_devices_tokenHash_key", TrustedDevice.token_hash, unique=True)
+# One application per user: a second row would let somebody hold a rejected
+# claim and an approved one at the same time.
+Index("doctor_applications_userId_key", DoctorApplication.user_id, unique=True)
+Index(
+    "doctor_application_documents_storagePath_key",
+    DoctorApplicationDocument.storage_path,
+    unique=True,
+)
 Index("departments_name_key", Department.name, unique=True)
 Index("departments_code_key", Department.code, unique=True)
 Index("doctors_userId_key", Doctor.user_id, unique=True)

@@ -1,57 +1,86 @@
 "use client";
 
 /**
- * Patient registration — the page the landing CTA pointed at before it existed.
+ * Registration — for patients, and now for doctors applying to join.
  *
- * The API's register endpoint creates the account but issues no session, so the
- * flow is register → sign in with the same credentials → straight to the
- * dashboard. If the automatic sign-in fails for any reason, the account still
- * exists — the fallback is the login page with an honest "your account is
- * ready" notice, never a dead end.
+ * The endpoint creates the account but issues no session, deliberately: an
+ * address has to be proved before it can receive anything, so the next screen
+ * is always the code we just emailed rather than a dashboard.
  *
- * Only patients self-register. Doctors and administrators are created by an
- * administrator, because a role is a grant, not a checkbox on a signup form.
+ * The role tab here is real — unlike the one on the sign-in screen it *is*
+ * sent — but it grants nothing. `DOCTOR` creates an application, not a doctor;
+ * an administrator is still what turns it into one. That is why the doctor tab
+ * asks for less rather than more: the credentials, the registration number and
+ * the certificates all belong in the review that follows, not in a signup form
+ * that anyone can fill in.
  */
 
-import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { AuthPanel } from "@/components/AuthPanel";
 import { Icon } from "@/components/Icon";
-import { Button, Field, Input } from "@/components/ui";
-import { ApiError, apiRequest } from "@/lib/api";
+import {
+  AUTH_LINK,
+  AuthHeading,
+  AuthNotice,
+  IconBadge,
+  PasswordField,
+  PhoneField,
+} from "@/components/auth/parts";
+import { PasswordStrength, Segmented, strengthOf } from "@/components/forms";
+import { Button, Checkbox, Field, Input } from "@/components/ui";
+import { ApiError, auth } from "@/lib/api";
 import { useTr } from "@/lib/lang";
-import { homePathFor, useSession } from "@/lib/session";
+
+type Role = "PATIENT" | "DOCTOR";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { signIn } = useSession();
   const tr = useTr();
 
+  const [role, setRole] = useState<Role>("PATIENT");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [confirm, setConfirm] = useState("");
+  const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [blocked, setBlocked] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const mismatch = confirm.length > 0 && confirm !== password;
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (mismatch) return;
+    if (!accepted) {
+      setBlocked(
+        tr(
+          "Please agree to the terms before creating your account.",
+          "Account banane se pehle shara-it se ittefaq karein.",
+        ),
+      );
+      return;
+    }
+
+    setBlocked(null);
     setSubmitting(true);
     setError(null);
     try {
-      await apiRequest("/auth/register", {
-        method: "POST",
-        body: { name: name.trim(), email: email.trim(), password },
+      const digits = phone.replace(/^0+/, "");
+      await auth.register({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        role,
+        // Only patients are asked for a number, and a blank one is left out
+        // entirely rather than sent as an empty string.
+        ...(role === "PATIENT" && digits ? { phone: `+92${digits}` } : {}),
       });
-      try {
-        const signedIn = await signIn(email.trim(), password, "PERSONAL");
-        router.replace(homePathFor(signedIn.role));
-      } catch {
-        // The account exists; only the automatic sign-in failed.
-        router.replace("/login?reason=registered");
-      }
+      router.replace(`/verify-email?email=${encodeURIComponent(email.trim())}`);
     } catch (caught) {
       setError(
         caught instanceof ApiError
@@ -65,33 +94,53 @@ export default function RegisterPage() {
 
   return (
     <AuthPanel>
-      <div className="page-enter w-full max-w-md">
-        <div className="mb-7">
-          <span
-            aria-hidden
-            className="bg-gradient-brand mb-4 grid h-12 w-12 place-items-center rounded-2xl text-white shadow-md"
+      <div className="w-full">
+        <AuthHeading
+          badge={<IconBadge name="person_add" />}
+          title={tr("Create your account", "Apna account banayein")}
+          subtitle={
+            role === "PATIENT"
+              ? tr(
+                  "A few details, then we verify your email.",
+                  "Chand tafseelat, phir hum aap ki email tasdeeq karte hain.",
+                )
+              : tr(
+                  "Name, email, a password — nothing else.",
+                  "Naam, email aur ek password — bas itna hi.",
+                )
+          }
+        />
+
+        <Segmented<Role>
+          className="mb-5 w-full"
+          label={tr("Account type", "Account ki qisam")}
+          value={role}
+          onChange={(next) => {
+            setRole(next);
+            setBlocked(null);
+          }}
+          options={[
+            { value: "PATIENT", label: tr("Patient", "Mareez"), icon: "person" },
+            { value: "DOCTOR", label: tr("Doctor", "Doctor"), icon: "stethoscope" },
+          ]}
+        />
+
+        {role === "DOCTOR" && (
+          <AuthNotice
+            tone="info"
+            live="status"
+            icon="how_to_reg"
+            title={tr("An administrator approves doctor accounts", "Doctor ke account ko intezamia manzoor karti hai")}
           >
-            <Icon name="person_add" filled className="text-[24px]" />
-          </span>
-          <h1 className="font-display text-3xl font-bold text-strong">
-            {tr("Create your account", "Apna account banayein")}
-          </h1>
-          <p className="mt-1.5 text-muted">
             {tr(
-              "Name, email, a password — nothing else.",
-              "Naam, email aur ek password — bas itna hi.",
+              "Sign up with just a name, email and password. Your registration number, documents and availability come afterwards, on the application page.",
+              "Sirf naam, email aur password se account banayein. Registration number, dastavezaat aur availability baad mein darkhwast ke safhe par.",
             )}
-          </p>
-        </div>
+          </AuthNotice>
+        )}
 
         {error && (
-          <p
-            role="alert"
-            className="pop-in mb-5 flex items-start gap-2 rounded-xl border border-critical/50 bg-critical-soft px-4 py-3 text-sm font-medium text-critical"
-          >
-            <Icon name="error" className="mt-px shrink-0 text-[18px]" />
-            {error.message}
-          </p>
+          <AuthNotice tone="critical">{error.message}</AuthNotice>
         )}
 
         <form onSubmit={onSubmit} className="space-y-5" noValidate>
@@ -124,60 +173,111 @@ export default function RegisterPage() {
             />
           </Field>
 
-          <Field
-            label={tr("Password", "Password")}
-            htmlFor="password"
-            error={error?.fieldError("password")}
-            hint={tr(
-              "At least 8 characters, with letters and a number.",
-              "Kam az kam 8 huroof — letters aur ek number ke saath.",
-            )}
-          >
-            <Input
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              invalid={Boolean(error?.fieldError("password"))}
-              className="pr-12"
+          {role === "PATIENT" && (
+            <PhoneField
+              id="phone"
+              label={tr("Phone (optional)", "Phone (ikhtiyari)")}
+              hint={tr(
+                "Mobile number, without the leading zero.",
+                "Mobile number, shuru ke sifar ke baghair.",
+              )}
+              value={phone}
+              onChange={setPhone}
+              error={error?.fieldError("phone")}
             />
-            <button
-              type="button"
-              aria-label={showPassword ? tr("Hide password", "Password chhupayein") : tr("Show password", "Password dikhayein")}
-              aria-pressed={showPassword}
-              onClick={() => setShowPassword((current) => !current)}
-              className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-muted transition-colors hover:bg-sunken hover:text-strong focus-visible:outline-2 focus-visible:outline-primary"
-            >
-              <Icon name={showPassword ? "visibility_off" : "visibility"} className="text-[20px]" />
-            </button>
-          </Field>
+          )}
 
-          <Button type="submit" size="lg" className="w-full" disabled={submitting} loading={submitting}>
-            {submitting ? tr("Creating your account…", "Account ban raha hai…")
+          <div className="space-y-2">
+            <PasswordField
+              id="password"
+              label={tr("Password", "Password")}
+              autoComplete="new-password"
+              value={password}
+              onChange={setPassword}
+              error={error?.fieldError("password")}
+              // Kept visible while typing, not swapped out for the meter: the
+              // rule is what tells someone *how* to get off "Weak".
+              hint={tr(
+                "At least 8 characters, with letters and a number.",
+                "Kam az kam 8 huroof — letters aur ek number ke saath.",
+              )}
+            />
+            {password && (
+              <PasswordStrength
+                value={password}
+                labels={[
+                  tr("Weak", "Kamzor"),
+                  tr("Fair", "Theek-thaak"),
+                  tr("Good", "Achha"),
+                  tr("Strong", "Mazboot"),
+                ]}
+              />
+            )}
+          </div>
+
+          <PasswordField
+            id="confirm"
+            label={tr("Confirm password", "Password dobara likhein")}
+            autoComplete="new-password"
+            value={confirm}
+            onChange={setConfirm}
+            error={
+              mismatch
+                ? tr("The two passwords do not match.", "Dono password aik jaise nahi hain.")
+                : undefined
+            }
+          />
+
+          <Checkbox
+            checked={accepted}
+            onChange={(event) => {
+              setAccepted(event.target.checked);
+              if (event.target.checked) setBlocked(null);
+            }}
+            label={tr(
+              "I agree that MediSense may store my health information to provide and record my care.",
+              "Main ittefaq karta hoon ke MediSense meri sehat ki maloomat ilaj aur record ke liye mehfooz rakhe.",
+            )}
+          />
+
+          {blocked && (
+            <p role="alert" className="pop-in px-1 text-sm font-medium text-critical">
+              {blocked}
+            </p>
+          )}
+
+          <Button
+            type="submit"
+            size="lg"
+            className="btn-shine w-full"
+            loading={submitting}
+            disabled={mismatch || strengthOf(password) === 0}
+          >
+            {submitting
+              ? tr("Creating your account…", "Account ban raha hai…")
               : tr("Create account", "Account banayein")}
             {!submitting && <Icon name="arrow_forward" className="text-[20px]" />}
           </Button>
         </form>
 
-        <p className="mt-6 text-sm text-muted">
+        <p className="mt-6 text-center text-sm text-muted">
           {tr("Already have an account?", "Pehle se account hai?")}{" "}
-          <Link
-            href="/login"
-            className="font-semibold text-primary underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
+          <Link href="/login" className={AUTH_LINK}>
             {tr("Sign in", "Login karein")}
           </Link>
         </p>
 
         <p className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-faint">
           <Icon name="shield_person" className="mt-px shrink-0 text-[16px]" />
-          {tr(
-            "Patient accounts only. Doctors and administrators are added by the hospital.",
-            "Sirf mareez ka account. Doctors aur intezamia hospital ki taraf se shamil kiye jate hain.",
-          )}
+          {role === "PATIENT"
+            ? tr(
+                "Only you and the clinicians treating you can read your record. Every access is logged.",
+                "Aap ka record sirf aap aur aap ka ilaj karne wale hi parh sakte hain. Har rasai darj hoti hai.",
+              )
+            : tr(
+                "Administrator accounts are created by the hospital, never here.",
+                "Intezamia ke accounts hospital banata hai, yahan se kabhi nahi.",
+              )}
         </p>
       </div>
     </AuthPanel>

@@ -1,31 +1,38 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
+import { Inter, JetBrains_Mono, Sora } from "next/font/google";
 import type { ReactNode } from "react";
 
-import { SessionProvider } from "@/lib/session";
+import { Providers } from "@/components/Providers";
 import "./globals.css";
 
 /**
- * Plus Jakarta Sans for everything you read, Space Grotesk for everything
- * that announces itself.
+ * Three faces, three jobs.
  *
- * Jakarta is the body and UI face: open counters, even rhythm, and a tabular
- * figure set that keeps a column of doses and times aligned. Space Grotesk
- * carries headings and the wordmark — its squared, slightly technical cuts
- * echo the circuit nodes in the logo without turning a clinical screen into
- * a poster.
+ * **Sora** carries headings — its squared, slightly technical cuts echo the
+ * circuit nodes in the logo. **Inter** is the body and UI face, chosen for
+ * legibility in the data-heavy screens that make up most of this application.
+ * **JetBrains Mono** takes everything that must line up or be read character by
+ * character: vitals, record numbers, timestamps, and the OTP digits people
+ * copy from an email.
  */
-const body = Plus_Jakarta_Sans({
+const display = Sora({
+  subsets: ["latin"],
+  variable: "--font-display-face",
+  display: "swap",
+  weight: ["500", "600", "700"],
+});
+
+const body = Inter({
   subsets: ["latin"],
   variable: "--font-body",
   display: "swap",
 });
 
-const display = Space_Grotesk({
+const mono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-display-face",
+  variable: "--font-mono-face",
   display: "swap",
-  weight: ["500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
 });
 
 /**
@@ -48,7 +55,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ur-Latn" className={`${body.variable} ${display.variable}`} suppressHydrationWarning>
+    <html
+      lang="ur-Latn"
+      className={`${body.variable} ${display.variable} ${mono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -77,7 +88,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         >
           Skip to content
         </a>
-        <SessionProvider>{children}</SessionProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

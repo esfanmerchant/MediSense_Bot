@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from app.api.deps import ONBOARDING_PATHS
 from app.db.enums import Role
 from app.main import app
 from app.modules.auth.rbac import ROLE_PERMISSIONS, Permission
@@ -32,6 +33,26 @@ from app.modules.auth.rbac import ROLE_PERMISSIONS, Permission
 #: recover a password would be a locked door with the key inside. Each carries
 #: its own credential instead: a password, a refresh cookie, or a single-use
 #: expiring reset token.
+#:
+#: The four sign-up and second-factor routes are here for the same reason and
+#: are worth spelling out, because "unauthenticated" reads alarming next to a
+#: 2FA endpoint:
+#:
+#: * `/auth/verify-email` and `/auth/resend-code` run *before* the account may
+#:   sign in at all — registration issues no session, so demanding one here
+#:   would mean nobody could ever finish registering. The credential is a
+#:   six-digit code that expires in ten minutes, is stored only as a scrypt
+#:   hash, and is burned after five wrong guesses. `resend-code` additionally
+#:   answers identically for every address, so it cannot be used to discover
+#:   which ones exist.
+#: * `/auth/2fa/verify` and `/auth/2fa/resend` are the *second half* of a login.
+#:   The password has already been checked and no session exists yet — that is
+#:   the entire point of a challenge. The credential is a single-use challenge
+#:   id bound to one user, expiring in five minutes, with its own attempt
+#:   ceiling in the database.
+#:
+#: All four are rate limited, and every one of them refuses on a counter that
+#: lives in Postgres rather than in this process.
 PUBLIC_PATHS = {
     "/api/health",
     "/api/health/ready",
@@ -40,6 +61,12 @@ PUBLIC_PATHS = {
     "/api/auth/register",
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
+    # Proving an address, and asking for another code to prove it with.
+    "/api/auth/verify-email",
+    "/api/auth/resend-code",
+    # The second half of a login, before any session exists.
+    "/api/auth/2fa/verify",
+    "/api/auth/2fa/resend",
     # Reads the refresh cookie directly rather than an access token.
     "/api/auth/refresh",
     # Authenticates best-effort inside a try/except so an already-expired
@@ -56,10 +83,34 @@ AUTH_ENTRY_PATHS = {
     "/api/auth/refresh",
     "/api/auth/me",
     "/api/auth/register",
+    # The rest of the way in. Each carries its own expiring, single-use
+    # credential — see the note on PUBLIC_PATHS above.
+    "/api/auth/verify-email",
+    "/api/auth/resend-code",
+    "/api/auth/2fa/verify",
+    "/api/auth/2fa/resend",
     # Password recovery cannot require a session: you are locked out. The reset
     # token *is* the credential, and it is single-use and expiring.
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
+}
+
+
+#: What ``deps.ONBOARDING_PATHS`` is allowed to contain.
+#:
+#: A doctor whose registration is not yet approved holds the DOCTOR role without
+#: having been credentialed, so the role must buy them nothing clinical. These
+#: prefixes are the exception: the account itself, their own application, and
+#: the department list that form needs. A new entry belongs here deliberately,
+#: with a reason — not because somebody widened a prefix elsewhere.
+EXPECTED_ONBOARDING_PATHS = {
+    "/api/auth/me",
+    "/api/auth/logout",
+    "/api/auth/refresh",
+    "/api/auth/change-password",
+    "/api/account",
+    "/api/doctor/application",
+    "/api/departments",
 }
 
 
@@ -172,6 +223,50 @@ class TestEverythingIsGuarded:
                 weak.append(f"{','.join(methods)} {path}")
 
         assert weak == [], f"mutating endpoints with only authentication: {weak}"
+
+
+class TestTheOnboardingDoctorExemption:
+    """A doctor whose registration is not approved holds the DOCTOR role.
+
+    They have not been credentialed, so the role must not yet buy them anything
+    clinical. ``deps.ONBOARDING_PATHS`` is the list of what it *does* buy, and
+    the whole safety of that arrangement is that the list stays tiny and stays
+    free of anything to do with a patient. This is the same bargain
+    ``PUBLIC_PATHS`` strikes: the exemption is allowed to exist because it is
+    written down and checked.
+    """
+
+    def test_the_exemption_list_is_exactly_what_was_agreed(self) -> None:
+        assert set(ONBOARDING_PATHS) == EXPECTED_ONBOARDING_PATHS
+
+    @pytest.mark.parametrize(
+        "word", ["patient", "record", "appointment", "prescription", "vital", "document", "audit"]
+    )
+    def test_nothing_clinical_is_exempt(self, word: str) -> None:
+        """The failure this exists for: a prefix that quietly grows to cover a chart."""
+        offenders = [path for path in ONBOARDING_PATHS if word in path]
+        # `/api/doctor/application` contains none of these; a hit means somebody
+        # added a route an uncredentialed doctor must not reach.
+        assert offenders == [], f"onboarding exemption reaches {word} routes: {offenders}"
+
+    def test_every_exempt_prefix_matches_a_real_route(self) -> None:
+        """A prefix matching nothing is either a typo or a route that moved."""
+        paths = [path for _, path, _ in api_routes()]
+        unmatched = [
+            prefix
+            for prefix in ONBOARDING_PATHS
+            if not any(path == prefix or path.startswith(f"{prefix}/") for path in paths)
+        ]
+        assert unmatched == [], f"exempt prefixes matching no route: {unmatched}"
+
+    def test_the_exemption_is_narrower_than_the_doctor_surface(self) -> None:
+        """It must exempt a small corner, not most of the API."""
+        exempt = [
+            path
+            for _, path, _ in api_routes()
+            if any(path == p or path.startswith(f"{p}/") for p in ONBOARDING_PATHS)
+        ]
+        assert len(exempt) < len(api_routes()) / 4
 
 
 class TestPermissionCatalogue:

@@ -18,6 +18,18 @@ class ErrorCode(StrEnum):
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
     ACCOUNT_LOCKED = "ACCOUNT_LOCKED"
     ACCOUNT_INACTIVE = "ACCOUNT_INACTIVE"
+    #: Sign-up succeeded but the address has not been proved yet. Distinct from
+    #: ACCOUNT_INACTIVE because the remedy is different and the client routes on
+    #: it: "check your inbox", not "contact an administrator".
+    EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED"
+    INVALID_CODE = "INVALID_CODE"
+    CODE_EXPIRED = "CODE_EXPIRED"
+    #: The three states a doctor's registration can be in that are not "cleared
+    #: to work". Separate codes rather than one refusal, because each has a
+    #: different next step and the client shows a different screen for each.
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    APPLICATION_REJECTED = "APPLICATION_REJECTED"
+    PROFILE_INCOMPLETE = "PROFILE_INCOMPLETE"
     UNAUTHORIZED = "UNAUTHORIZED"
     FORBIDDEN_RESOURCE = "FORBIDDEN_RESOURCE"
     NOT_FOUND = "NOT_FOUND"

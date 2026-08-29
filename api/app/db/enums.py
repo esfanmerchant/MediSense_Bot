@@ -26,6 +26,40 @@ class UserStatus(StrEnum):
     DEACTIVATED = "DEACTIVATED"
 
 
+class TwoFactorMethod(StrEnum):
+    """How a second factor reaches its owner.
+
+    EMAIL needs nothing installed, which matters for a clinic where staff share
+    ward machines and cannot all be assumed to carry a configured phone. TOTP is
+    stronger — it never crosses a mail server — and is what a doctor or an
+    administrator should use.
+    """
+
+    EMAIL = "EMAIL"
+    TOTP = "TOTP"
+
+
+class DoctorApplicationStatus(StrEnum):
+    """Where a doctor's registration has reached.
+
+    DRAFT is saved but unsent, so an applicant can leave and come back.
+    SUBMITTED is awaiting a human; REJECTED returns to the applicant to correct
+    and send again. Only APPROVED creates a ``Doctor`` row and lets them work.
+    """
+
+    DRAFT = "DRAFT"
+    SUBMITTED = "SUBMITTED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class DoctorDocumentKind(StrEnum):
+    REGISTRATION_CERTIFICATE = "REGISTRATION_CERTIFICATE"
+    DEGREE = "DEGREE"
+    NATIONAL_ID = "NATIONAL_ID"
+    PHOTO = "PHOTO"
+
+
 class Gender(StrEnum):
     MALE = "MALE"
     FEMALE = "FEMALE"
@@ -161,6 +195,10 @@ class NotificationType(StrEnum):
     VITAL_ALERT = "VITAL_ALERT"
     EMERGENCY_ACCESS = "EMERGENCY_ACCESS"
     ACCOUNT_SECURITY = "ACCOUNT_SECURITY"
+    #: A doctor's registration moved — submitted, approved or rejected. Its own
+    #: type rather than ACCOUNT_SECURITY because it is a queue an administrator
+    #: works through, and filing it under security events would bury it.
+    DOCTOR_APPLICATION = "DOCTOR_APPLICATION"
 
 
 class NotificationChannel(StrEnum):
@@ -188,6 +226,17 @@ class AuditAction(StrEnum):
     SESSION_EXPIRED = "SESSION_EXPIRED"
     PASSWORD_RESET_REQUESTED = "PASSWORD_RESET_REQUESTED"
     PASSWORD_CHANGED = "PASSWORD_CHANGED"
+    EMAIL_VERIFIED = "EMAIL_VERIFIED"
+    #: Turning a second factor on or off, and reissuing the codes that bypass
+    #: it, each change what it takes to become this user. Recording them as
+    #: USER_UPDATED would file the most security-relevant change an account can
+    #: undergo under the same heading as editing a phone number.
+    TWO_FACTOR_ENABLED = "TWO_FACTOR_ENABLED"
+    TWO_FACTOR_DISABLED = "TWO_FACTOR_DISABLED"
+    BACKUP_CODES_REGENERATED = "BACKUP_CODES_REGENERATED"
+    DOCTOR_APPLICATION_SUBMITTED = "DOCTOR_APPLICATION_SUBMITTED"
+    DOCTOR_APPLICATION_APPROVED = "DOCTOR_APPLICATION_APPROVED"
+    DOCTOR_APPLICATION_REJECTED = "DOCTOR_APPLICATION_REJECTED"
     USER_CREATED = "USER_CREATED"
     USER_UPDATED = "USER_UPDATED"
     USER_STATUS_CHANGED = "USER_STATUS_CHANGED"
@@ -235,6 +284,9 @@ class AuditSeverity(StrEnum):
 PG_ENUM_TYPES: dict[str, type[StrEnum]] = {
     "Role": Role,
     "UserStatus": UserStatus,
+    "TwoFactorMethod": TwoFactorMethod,
+    "DoctorApplicationStatus": DoctorApplicationStatus,
+    "DoctorDocumentKind": DoctorDocumentKind,
     "Gender": Gender,
     "AppointmentStatus": AppointmentStatus,
     "InvoiceStatus": InvoiceStatus,

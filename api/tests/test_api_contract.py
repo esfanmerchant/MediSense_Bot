@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+import uuid
 
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
 
 from app.core.security import AccessTokenPayload, sign_access_token
+from app.db.models import User
+from app.db.session import SessionFactory
+from tests.conftest import requires_db
 
 
 class TestHealth:
@@ -85,20 +90,33 @@ class TestRequestValidation:
         )
         assert response.status_code == 422
 
-    def test_a_caller_cannot_choose_their_own_role(self, client: TestClient) -> None:
-        # Even when the field is sent it is ignored; the service forces PATIENT.
+    @requires_db
+    async def test_a_caller_cannot_choose_their_own_role(self, client: TestClient) -> None:
+        """Even when the field is sent it is ignored; the service forces PATIENT.
+
+        The address is unique per run and the account is removed afterwards. A
+        fixed address made this test register once and then quietly do nothing
+        on every later run — the second attempt hit the duplicate-email guard,
+        so there was no user to assert against and the check was skipped.
+        """
+        email = f"escalate-{uuid.uuid4()}@medisensetests.org"
         response = client.post(
             "/api/auth/register",
             json={
                 "name": "Role Escalation",
-                "email": "escalate@medisensetests.org",
+                "email": email,
                 "password": "ValidPass123",
                 "role": "ADMIN",
             },
         )
-        user = response.json().get("data", {}).get("user")
-        if user is not None:
-            assert user["role"] != "ADMIN"
+        assert response.status_code == 201, response.text
+        user = response.json()["data"]["user"]
+        try:
+            assert user["role"] == "PATIENT"
+        finally:
+            async with SessionFactory() as session:
+                await session.execute(delete(User).where(User.id == user["id"]))
+                await session.commit()
 
 
 class TestSecurityHeaders:

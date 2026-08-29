@@ -799,6 +799,16 @@ Index(
     VitalThreshold.patient_id,
     unique=True,
 )
+# ...which is exactly why the hospital default needs its own partial index. The
+# unique index above cannot constrain the NULL rows, so without this a second
+# hospital default for the same vital would be accepted and "which rule governs
+# this patient" would depend on row order.
+Index(
+    "vital_thresholds_hospital_default_key",
+    VitalThreshold.vital_type,
+    unique=True,
+    postgresql_where=VitalThreshold.patient_id.is_(None),
+)
 
 Index("alerts_patientId_status_idx", Alert.patient_id, Alert.status)
 Index("alerts_doctorId_status_idx", Alert.doctor_id, Alert.status)

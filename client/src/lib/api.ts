@@ -796,6 +796,91 @@ export const ocr = {
     }),
 };
 
+// ---------------------------------------------------------------------------
+// Health assistant — guidance, never diagnosis
+// ---------------------------------------------------------------------------
+
+export type Urgency = "EMERGENCY" | "URGENT" | "ROUTINE" | "INFORMATION";
+
+export type InputType = "TEXT" | "VOICE";
+
+/**
+ * One answer from the assistant.
+ *
+ * `disclaimer` is never optional and never absent — the server sends it with
+ * every answer precisely so that no client can render guidance without it
+ * (spec §19). Treat it as part of the answer, not as decoration.
+ */
+export interface AssistantAnswer {
+  sessionId: string;
+  answer: string;
+  urgency: Urgency;
+  emergency: boolean;
+  suggestedDepartment: string | null;
+  extractedSymptoms: string[];
+  disclaimer: string;
+  /** What the safety layer had to correct in the model's reply. */
+  safetyInterventions: string[];
+}
+
+/** A proposal for the patient to correct. Nothing has been stored yet. */
+export interface SymptomProposal extends AssistantAnswer {
+  saved: false;
+  reviewPrompt: string;
+}
+
+export interface AssistantStatus {
+  available: boolean;
+  providerConfigured: boolean;
+  consentGranted: boolean;
+  reason: string | null;
+  disclaimer: string;
+}
+
+export interface AssistantTurn {
+  id: string;
+  sessionId: string;
+  input: string;
+  inputType: InputType;
+  response: string;
+  urgency: Urgency;
+  emergency: boolean;
+  suggestedDepartment: string | null;
+  extractedSymptoms: string[];
+  createdAt: string;
+}
+
+export interface ConfirmedSymptom {
+  symptom: string;
+  severity?: string;
+  duration?: string;
+}
+
+export const assistant = {
+  status: () => apiRequest<AssistantStatus>("/assistant/status"),
+
+  chat: (body: { message: string; sessionId?: string; inputType?: InputType }) =>
+    apiRequest<AssistantAnswer>("/assistant/chat", { method: "POST", body }),
+
+  history: (query?: { sessionId?: string; limit?: number }) =>
+    apiRequest<AssistantTurn[]>("/assistant/history", { query }),
+
+  /** Extracts symptoms for review. Writes nothing. */
+  analyseSymptoms: (body: { text: string; inputType?: InputType }) =>
+    apiRequest<SymptomProposal>("/assistant/symptoms", { method: "POST", body }),
+
+  /** Stores the patient's *corrected* list as patient-reported information. */
+  confirmSymptoms: (body: {
+    symptoms: ConfirmedSymptom[];
+    inputType?: InputType;
+    rawText?: string;
+  }) =>
+    apiRequest<{ saved: number; source: string; note: string }>("/assistant/symptoms/confirm", {
+      method: "POST",
+      body,
+    }),
+};
+
 export interface Notification {
   id: string;
   type: string;
@@ -814,4 +899,192 @@ export const notifications = {
     apiRequest<{ id: string; read: boolean }>(`/notifications/${id}/read`, { method: "POST" }),
   markAllRead: () =>
     apiRequest<{ markedRead: number }>("/notifications/read-all", { method: "POST" }),
+};
+
+// ---------------------------------------------------------------------------
+// Vitals, thresholds and alerts
+// ---------------------------------------------------------------------------
+
+export type VitalType =
+  | "HEART_RATE"
+  | "SYSTOLIC_BP"
+  | "DIASTOLIC_BP"
+  | "OXYGEN_SATURATION"
+  | "TEMPERATURE"
+  | "RESPIRATORY_RATE";
+
+export type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
+
+export type AlertStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED" | "ESCALATED";
+
+export interface Vital {
+  id: string;
+  patientId: string;
+  recordedById: string | null;
+  source: string;
+  deviceId: string | null;
+  heartRate: number | null;
+  systolicBp: number | null;
+  diastolicBp: number | null;
+  oxygenSaturation: number | null;
+  temperature: number | null;
+  respiratoryRate: number | null;
+  recordedAt: string;
+}
+
+export interface Alert {
+  id: string;
+  patientId: string;
+  vitalId: string | null;
+  doctorId: string | null;
+  vitalType: VitalType;
+  measuredValue: number;
+  thresholdMin: number | null;
+  thresholdMax: number | null;
+  severity: AlertSeverity;
+  status: AlertStatus;
+  message: string;
+  acknowledgedById: string | null;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+  escalationLevel: number;
+  createdAt: string;
+}
+
+export interface VitalThreshold {
+  id: string;
+  vitalType: VitalType;
+  patientId: string | null;
+  /** HOSPITAL is the default; PATIENT is an override that beats it. */
+  scope: "HOSPITAL" | "PATIENT";
+  minValue: number | null;
+  maxValue: number | null;
+  severity: AlertSeverity;
+  enabled: boolean;
+  sustainedReadings: number;
+  unit: string;
+  label: string;
+}
+
+/** A reading with any alerts it raised, as returned by the record endpoint. */
+export interface RecordedVital extends Vital {
+  alerts: Alert[];
+}
+
+export const vitals = {
+  record: (body: {
+    patientId: string;
+    heartRate?: number;
+    systolicBp?: number;
+    diastolicBp?: number;
+    oxygenSaturation?: number;
+    temperature?: number;
+    respiratoryRate?: number;
+    recordedAt?: string;
+    source?: string;
+    deviceId?: string;
+  }) => apiRequest<RecordedVital>("/vitals", { method: "POST", body }),
+
+  list: (patientId: string, query?: { limit?: number; offset?: number }) =>
+    apiList<Vital>(`/vitals/${patientId}`, query),
+
+  /** The rules that actually govern this patient, and where each came from. */
+  thresholds: (patientId: string) =>
+    apiRequest<{ thresholds: VitalThreshold[]; unconfigured: VitalType[] }>(
+      `/vitals/${patientId}/thresholds`,
+    ),
+
+  setThreshold: (body: {
+    vitalType: VitalType;
+    patientId?: string | null;
+    minValue?: number | null;
+    maxValue?: number | null;
+    severity?: AlertSeverity;
+    enabled?: boolean;
+    sustainedReadings?: number;
+  }) => apiRequest<VitalThreshold>("/vitals/thresholds", { method: "PUT", body }),
+};
+
+export const alerts = {
+  list: (query?: {
+    status?: AlertStatus;
+    severity?: AlertSeverity;
+    patientId?: string;
+    limit?: number;
+    offset?: number;
+  }) => apiList<Alert>("/alerts", query),
+
+  acknowledge: (id: string) =>
+    apiRequest<Alert>(`/alerts/${id}/acknowledge`, { method: "POST" }),
+
+  resolve: (id: string) => apiRequest<Alert>(`/alerts/${id}/resolve`, { method: "POST" }),
+
+  /**
+   * Live feed URL for `EventSource` (spec §16: not a frontend timer).
+   *
+   * `EventSource` sends cookies only with `withCredentials`, and the API is on
+   * a different origin in development — so the caller must pass that option.
+   */
+  streamUrl: () => `${API_URL}/alerts/stream`,
+};
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+export type InvoiceStatus = "DRAFT" | "ISSUED" | "PAID" | "VOID" | "REFUNDED" | "OVERDUE";
+
+export interface InvoiceLine {
+  description: string;
+  quantity: number;
+  unitPrice: string;
+  amount: string;
+}
+
+export interface Invoice {
+  id: string;
+  patientId: string;
+  appointmentId: string | null;
+  invoiceNumber: string;
+  /**
+   * Money arrives as a string, deliberately. 0.1 + 0.2 is not 0.3 in binary
+   * floating point, so a currency amount parsed into a JS number is a rounding
+   * error waiting for a total. Format it; do not do arithmetic on it.
+   */
+  amount: string;
+  taxAmount: string;
+  totalAmount: string;
+  currency: string;
+  status: InvoiceStatus;
+  lineItems: InvoiceLine[];
+  notes: string | null;
+  issuedAt: string | null;
+  dueAt: string | null;
+  paidAt: string | null;
+  voidedAt: string | null;
+  /** Set on a credit note: the invoice this one corrects. */
+  amendsInvoiceId: string | null;
+  createdAt: string;
+}
+
+export const invoices = {
+  list: (query?: {
+    status?: InvoiceStatus;
+    patientId?: string;
+    limit?: number;
+    offset?: number;
+  }) => apiList<Invoice, { outstanding: string }>("/invoices", query),
+
+  get: (id: string) => apiRequest<Invoice>(`/invoices/${id}`),
+
+  pay: (id: string) => apiRequest<Invoice>(`/invoices/${id}/pay`, { method: "POST" }),
+
+  void: (id: string, reason: string) =>
+    apiRequest<Invoice>(`/invoices/${id}/void`, { method: "POST", body: { reason } }),
+
+  creditNote: (id: string, reason: string) =>
+    apiRequest<{ creditNote: Invoice; original: Invoice }>(`/invoices/${id}/credit-note`, {
+      method: "POST",
+      body: { reason },
+    }),
 };

@@ -16,6 +16,7 @@ import { useParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { DocumentsCard } from "@/components/DocumentsCard";
 import { PrescriptionRow, RecordTimeline } from "@/components/records";
+import { RecordVitals, ThresholdsPanel, VitalsTable } from "@/components/vitals";
 import {
   Button,
   Card,
@@ -165,6 +166,12 @@ export default function PatientChart() {
             </Card>
 
             <NewPrescriptionForm patientId={patientId} onSaved={reloadAll} />
+
+            {/* Observations sit with the chart because that is where a doctor
+                reads a trend — beside the history that explains it. */}
+            <RecordVitals patientId={patientId} onRecorded={reloadAll} />
+            <VitalsTable key={`vitals-${refresh}`} patientId={patientId} />
+            <ThresholdsPanel patientId={patientId} />
 
             <DocumentsCard
               patientId={patientId}

@@ -643,9 +643,10 @@ async def change_status(
     appointment.status = target
     if target == AppointmentStatus.COMPLETED:
         appointment.completed_at = utcnow()
-        # Completing a consultation is what triggers invoice generation (R4).
-        # That arrives in Phase 11; the unique `Invoice.appointmentId` already
-        # waiting in the schema is what will make the trigger idempotent.
+        # Invoice generation hangs off this transition (R4) and is done by the
+        # router, in the same transaction. It is deliberately not done here:
+        # this function is the state machine, and billing is a consequence of a
+        # state change rather than part of deciding whether one is legal.
 
     # The slot is deliberately *not* released here. Completing or marking a
     # no-show still leaves the doctor's time spent, and releasing it would let a

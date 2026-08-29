@@ -146,8 +146,10 @@ async def generate_json(
     if not candidates:
         # A blocked prompt returns no candidate. Say so plainly rather than
         # producing an empty result that looks like "nothing found".
-        reason = (body.get("promptFeedback") or {}).get("blockReason")
-        logger.warning("ai_no_candidate", reason=reason)
+        # A separate name: `reason` above holds the availability message, and
+        # reusing it here made two unrelated strings share one variable.
+        block_reason = (body.get("promptFeedback") or {}).get("blockReason")
+        logger.warning("ai_no_candidate", reason=block_reason)
         raise AiUnavailableError("The AI service could not process that document.")
 
     try:

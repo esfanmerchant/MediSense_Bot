@@ -74,5 +74,7 @@ disallow_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["paddleocr.*", "paddle.*"]
+# Third-party packages that ship no type information. Listed explicitly rather
+# than globally ignored, so a genuinely missing import is still an error.
+module = ["paddleocr.*", "paddle.*", "pypdfium2.*"]
 ignore_missing_imports = true

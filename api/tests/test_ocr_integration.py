@@ -24,8 +24,8 @@ from sqlalchemy import delete, select, update
 from app.db.base import utcnow
 from app.db.models import MedicalDocument, Patient, Prescription, User
 from app.db.session import SessionFactory
-from app.services import extraction, ocr, storage
-from tests.conftest import requires_db
+from app.services import ocr, storage
+from tests.conftest import requires_ai, requires_db
 
 pytestmark = requires_db
 
@@ -35,16 +35,14 @@ DOCTOR = "doctor@example.com"
 OTHER_DOCTOR = "doctor3@example.com"
 PATIENT = "patient@example.com"
 
-_READERS = extraction.availability()
-
-needs_a_reader = pytest.mark.skipif(
-    not _READERS["any"],
-    reason="no extraction engine available: set AI_API_KEY or install the ocr extra",
-)
+#: The suite runs with AI disabled, so the local engine is what reads documents
+#: unless a test turns the provider on for itself. These guards are therefore
+#: about the *local* engine; the vision path has its own marker.
 needs_local_ocr = pytest.mark.skipif(
     not ocr.is_available(),
     reason='local OCR not installed: pip install -e "api[ocr]"',
 )
+needs_a_reader = needs_local_ocr
 
 PRESCRIPTION_LINES = [
     "CITY GENERAL HOSPITAL",
@@ -201,14 +199,15 @@ class TestExtraction:
         assert body["confidence"] > 0.5
         assert "amoxicillin" in (body["extractedText"] or "").lower()
 
-    @needs_a_reader
+    @requires_ai
     async def test_the_consenting_patient_gets_the_better_engine(
-        self, client: TestClient, scanned: list[str]
+        self, client: TestClient, scanned: list[str], ai_enabled: None
     ) -> None:
-        """The demo patients have granted AI consent, so vision may be used."""
-        if not _READERS["vision"]["available"]:
-            pytest.skip("vision engine not configured")
+        """The demo patients have granted AI consent, so vision is used.
 
+        This is the only test that calls the provider for real, which is why it
+        enables AI for itself rather than relying on the suite default.
+        """
         sign_in(client, PATIENT)
         priya = await patient_id_for(PATIENT)
         document = upload_prescription(client, priya, scanned)
@@ -216,6 +215,31 @@ class TestExtraction:
         client.cookies.clear()
 
         assert body["engine"] == "GEMINI_VISION"
+        assert body["status"] == "EXTRACTED"
+        # The vision path must produce the same reviewable shape as the local
+        # one, or the review screen would only work for one engine.
+        assert body["structured"]["medications"]
+        assert "not yet verified" in body["structured"]["disclaimer"]
+
+    @requires_ai
+    async def test_the_vision_path_never_invents_a_missing_field(
+        self, client: TestClient, scanned: list[str], ai_enabled: None
+    ) -> None:
+        """The sample's second line has no duration written on it.
+
+        A plausible-looking "7 days" here would be the exact failure the
+        grounding rules exist to prevent.
+        """
+        sign_in(client, PATIENT)
+        priya = await patient_id_for(PATIENT)
+        document = upload_prescription(client, priya, scanned)
+        body = client.post(f"/api/documents/{document['id']}/ocr").json()["data"]
+        client.cookies.clear()
+
+        for medication in body["structured"]["medications"]:
+            # Whatever it extracted, every medication must cite the line it came
+            # from — a fabricated entry has to fabricate its evidence too.
+            assert medication["sourceText"].strip()
 
     @needs_local_ocr
     async def test_withdrawing_consent_keeps_the_document_local(

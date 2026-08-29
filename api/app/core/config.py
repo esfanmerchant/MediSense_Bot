@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import field_validator
+from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The repo keeps one .env at the root, shared by the API and the tooling.
@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     #: at the boundary. An IANA name; an unknown one falls back to UTC rather
     #: than taking booking offline.
     CLINIC_TIMEZONE: str = "Asia/Kolkata"
+
+    # --- Billing ---------------------------------------------------------
+    INVOICE_CURRENCY: str = "INR"
+    #: Tax applied to a consultation fee, as a percentage. Configuration rather
+    #: than a literal: rates differ by jurisdiction and change, and a number
+    #: compiled into the billing code is one nobody can correct without a
+    #: deployment. Zero means the fee is billed and nothing else — an honest
+    #: default for a deployment that has not been told its local rate.
+    INVOICE_TAX_PERCENT: float = 0.0
 
     # --- Database --------------------------------------------------------
     DATABASE_URL: str = ""
@@ -134,7 +143,7 @@ class Settings(BaseSettings):
 
     @field_validator("JWT_SECRET", "SESSION_SECRET")
     @classmethod
-    def _secret_long_enough(cls, value: str, info) -> str:
+    def _secret_long_enough(cls, value: str, info: ValidationInfo) -> str:
         # Tests supply their own; only a real run must have a real secret.
         import os
 

@@ -163,7 +163,7 @@ def to_structured(payload: dict[str, Any]) -> dict[str, Any]:
     medications = []
     for item in payload.get("medications") or []:
         confidence = _confidence_for(item)
-        entry = {
+        entry: dict[str, Any] = {
             "medication": _field(item, "medication", confidence),
             "dosage": _field(item, "dosage", confidence),
             "frequency": _field(item, "frequency", confidence),

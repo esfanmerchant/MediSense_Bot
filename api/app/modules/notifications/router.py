@@ -6,10 +6,10 @@ another user, so the endpoints cannot be pointed at someone else's inbox.
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select, update
+from sqlalchemy import CursorResult, func, select, update
 
 from app.api.deps import CurrentAuth, DbSession
 from app.api.responses import Page, ok, pagination
@@ -76,7 +76,9 @@ async def mark_read(notification_id: str, auth: CurrentAuth, db: DbSession) -> d
         )
         .values(read_at=utcnow(), status=NotificationStatus.READ)
     )
-    if result.rowcount == 0:
+    # `execute` is typed as returning `Result`, but a DML statement returns a
+    # `CursorResult`, which is where `rowcount` lives.
+    if cast("CursorResult[Any]", result).rowcount == 0:
         # Either it does not exist, is not theirs, or was already read. Confirm
         # it is theirs before deciding which — without revealing the others.
         exists = (
@@ -98,4 +100,4 @@ async def mark_all_read(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
         .where(Notification.user_id == auth.user_id, Notification.read_at.is_(None))
         .values(read_at=utcnow(), status=NotificationStatus.READ)
     )
-    return ok({"markedRead": result.rowcount})
+    return ok({"markedRead": cast("CursorResult[Any]", result).rowcount})

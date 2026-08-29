@@ -13,7 +13,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import Row, func, or_, select
 
 from app.api.deps import (
     CurrentAuth,
@@ -97,7 +97,7 @@ def _serialize(patient: Patient, user: User, include_clinical: bool = True) -> d
     return payload
 
 
-async def _load(db: DbSession, patient_id: str) -> tuple[Patient, User]:
+async def _load(db: DbSession, patient_id: str) -> Row[tuple[Patient, User]]:
     row = (
         await db.execute(
             select(Patient, User).join(User, User.id == Patient.user_id).where(Patient.id == patient_id)

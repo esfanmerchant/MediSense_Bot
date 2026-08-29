@@ -17,9 +17,9 @@ interface NavItem {
 /**
  * Only routes that exist.
  *
- * Later phases add Documents, Billing, the AI assistant, alerts and the admin
- * user/audit screens; their links go in when the pages do. A nav item that
- * leads to a 404 reads as a broken product, not as a roadmap.
+ * Later phases add the admin user and audit screens; their links go in when the
+ * pages do. A nav item that leads to a 404 reads as a broken product, not as a
+ * roadmap.
  */
 const NAV: Record<Role, NavItem[]> = {
   PATIENT: [
@@ -27,15 +27,20 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/patient/appointments", label: "Appointments" },
     { href: "/patient/records", label: "Medical history" },
     { href: "/patient/documents", label: "Documents" },
+    { href: "/patient/vitals", label: "Vitals" },
+    { href: "/patient/billing", label: "Billing" },
+    { href: "/patient/assistant", label: "Health assistant" },
   ],
   DOCTOR: [
     { href: "/doctor", label: "Overview" },
     { href: "/doctor/patients", label: "My patients" },
     { href: "/doctor/appointments", label: "Appointments" },
+    { href: "/doctor/alerts", label: "Alerts" },
   ],
   ADMIN: [
     { href: "/admin", label: "Overview" },
     { href: "/admin/appointments", label: "Appointments" },
+    { href: "/admin/billing", label: "Billing" },
   ],
   NURSE: [{ href: "/no-dashboard", label: "Emergency access" }],
 };

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import MutableMapping
 from typing import Any
 
 import structlog
@@ -46,7 +47,14 @@ REDACTED_KEYS = frozenset(
 _CENSOR = "[redacted]"
 
 
-def _redact(_logger: Any, _name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+def _redact(
+    _logger: Any, _name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Strip secrets from every log line, whatever produced it.
+
+    The signature is structlog's processor contract — a *mutable mapping*, not a
+    dict — so this composes in the processor chain without a cast.
+    """
     def scrub(value: Any, depth: int = 0) -> Any:
         if depth > 4:
             return value
@@ -59,7 +67,8 @@ def _redact(_logger: Any, _name: str, event_dict: dict[str, Any]) -> dict[str, A
             return [scrub(v, depth + 1) for v in value[:50]]
         return value
 
-    return scrub(event_dict)  # type: ignore[return-value]
+    scrubbed: MutableMapping[str, Any] = scrub(event_dict)
+    return scrubbed
 
 
 def configure_logging() -> None:

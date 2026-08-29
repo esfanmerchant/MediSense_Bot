@@ -96,14 +96,17 @@ api/
     │   ├── records/           # clinical history + the clinical access gate
     │   ├── prescriptions/     # medication, discontinued never deleted
     │   ├── documents/         # upload, metadata, signed retrieval
+    │   ├── assistant/         # health assistant, symptom review
+    │   ├── vitals/            # readings, threshold engine, alerts, SSE
+    │   ├── billing/           # invoices, credit notes
     │   ├── notifications/     # in-app; email delivery in Phase 12
     │   └── dashboard/         # one summary per role
-    ├── services/              # storage, upload validation, extraction engines
+    ├── services/              # storage, upload validation, extraction, AI safety
     └── main.py
 client/src/
 ├── app/                       # login, patient, doctor, admin
-├── components/                # AppShell, UI primitives
-└── lib/                       # api client, session + inactivity timer
+├── components/                # AppShell, UI primitives, assistant
+└── lib/                       # api client, session + inactivity timer, speech
 ocr/                           # PaddleOCR feasibility harness
 ```
 
@@ -216,6 +219,98 @@ plausible default. Nothing reaches a chart without a doctor confirming it, and
 even a confirmed reading is not a prescription: a doctor still writes that
 (conflict C7).
 
+**The health assistant (§18-21).** A language model sits in the middle of a
+safety path, so it is bracketed by two layers it cannot argue with. **Before**
+the provider is called, [`triage.py`](api/app/services/triage.py) classifies
+urgency from the patient's own words with regular expressions and nothing else.
+**After** it replies, [`assistant.py`](api/app/services/assistant.py) reconciles
+the two — and the rule is one-directional: the model may *raise* urgency, never
+lower it. A model that decides crushing chest pain sounds like indigestion
+cannot turn an escalation into reassurance, which is what "do not provide false
+reassurance" has to mean in code.
+
+The same pass removes what the model must not say. Diagnosis phrasings ("you
+have X") are rewritten into "a doctor would need to assess whether…"; a
+medication named in the answer that is not on the patient's own prescription
+list is stripped outright, because that is the one output that could directly
+cause harm if acted on. Every answer carries the disclaimer as a required field,
+so no client can render guidance without it. Each intervention is recorded, so
+the rate of model misbehaviour is measurable rather than invisible.
+
+Losing the provider does not lose the safety net: an outage falls back to the
+deterministic result, and an emergency is still escalated. That path runs on
+every test run, because it is the one that has to hold when things go wrong.
+
+Symptoms the patient describes are a **proposal until they correct it** (§20).
+`POST /assistant/symptoms` writes nothing; `POST /assistant/symptoms/confirm`
+stores the corrected list as `ReportedSymptom` rows carrying their provenance —
+`PATIENT_REPORTED` when typed, `AI_ASSISTED` when transcribed. Those rows are
+staged patient-reported information, not a medical record: there is no code path
+from this module into `medical_records`, and only a doctor's promotion gives a
+statement a clinical author (conflict C7).
+
+**Voice symptom input (§20).** Speech-to-text runs in the patient's **browser**,
+not on the server. The audio never reaches MediSense, is never stored, and never
+passes through the AI provider key; only the transcript — text the patient can
+read and correct — leaves the device. Uploading recordings for server-side
+transcription would have meant holding patient audio and paying per call, for
+strictly worse privacy.
+
+The transcript lands in the same field the patient types into, which makes the
+spec's two review points structural rather than optional:
+
+    microphone -> transcript -> [edit] -> extraction -> [edit] -> analysis
+
+Whether speech was involved travels with the result, because it changes what the
+stored row means: a dictated symptom is `AI_ASSISTED` (a recogniser stood between
+the patient's words and the text on file), a typed one is `PATIENT_REPORTED`.
+Editing a transcript afterwards does not downgrade it to typed.
+
+Recognition is a draft standard that Firefox does not implement, and this feature
+exists for people who have difficulty typing — so an unsupported browser is told
+so plainly rather than shown a microphone button that does nothing.
+
+**Vital monitoring (§16-17).** The spec's pipeline — validate, save, evaluate,
+alert, notify — runs in that order, and the order carries a guarantee: the
+reading is persisted *before* it is judged, so a fault in the threshold
+configuration can cost an alert but never a measurement.
+
+Validation asks whether a number could be a measurement at all, which is a
+different question from whether it is concerning. The plausibility bounds in
+[`thresholds.py`](api/app/modules/vitals/thresholds.py) are deliberately far
+wider than any alerting limit: a heart rate of 250 is a genuine emergency and is
+stored and alerted on, while 900 is a sensor fault and is refused before it
+reaches the chart.
+
+Thresholds are rows, never literals. A patient's own rule beats the hospital
+default, which is what stops a COPD patient's ordinary saturation alarming the
+ward every reading (conflict C9). Two partial unique indexes make "which rule
+governs this patient" a database guarantee rather than a query ordering: one
+hospital default per vital, one override per patient per vital. The plain unique
+index cannot do this alone, because Postgres permits any number of NULLs under
+it — which is exactly the hole the second, partial index closes.
+
+**An ongoing problem is one alert, not one per reading.** A patient whose
+saturation sits below its floor breaches on every measurement; opening a new
+alert each time would bury a ward in duplicates of a situation somebody is
+already handling. An open alert therefore suppresses new ones — while a
+*worsening* breach escalates the existing alert rather than being swallowed,
+since the reason nobody has acted may be that it did not look urgent.
+
+**Recording a vital is not reading a chart**, and the permission split is what
+makes the nurse role coherent (conflict C1): `vital:write` lets a nurse record
+what they just measured on the patient in front of them, and they still get 403
+on that patient's history. Reads go through the same clinical gate as records,
+so an administrator is refused here exactly as they are on a diagnosis.
+
+Live updates are server-sent events rather than a frontend timer. Scope is
+resolved once per connection from the same clinical rules, so a client is never
+sent an event about a patient it would be refused on a GET. The fan-out is
+in-process: a multi-worker deployment would need a shared bus, and Postgres
+LISTEN/NOTIFY is unavailable here because the Supabase transaction pooler does
+not carry notifications. The dashboard refetches on reconnect, so the gap costs
+latency rather than correctness.
+
 **Logging.** structlog with a central redaction list. Passwords, tokens, API
 keys, cookies and extracted document text never reach a log sink. The Supabase
 service role key bypasses row-level security, so it appears only in
@@ -232,18 +327,22 @@ explicit `Z` alongside a pre-formatted clinic-local label.
 
 | Req | Status | Where |
 |---|---|---|
-| R1 real-time vitals + alerts | schema + dashboard surface | `Vital`, `VitalThreshold`, `Alert` — engine in Phase 10 |
+| R1 real-time vitals + alerts | **done** | `modules/vitals/` — threshold engine, alert lifecycle, SSE |
 | R2 encryption + role-based access | **done (access control)** | `rbac.py`, `deps.py`; at-rest field encryption Phase 13 |
 | R3 emergency override | schema + guard | break-glass path in `deps.py` — request flow Phase 13 |
-| R4 automated billing | schema only | `Invoice.appointmentId` unique — Phase 11 |
+| R4 automated billing | **done** | `modules/billing/` — unique `appointmentId` is the idempotency guarantee |
 | R5 doctor record updates | **done** | `modules/records/` — author-only amendment, audited by field |
 | R6 append-only audit | **done** | `modules/audit/service.py` |
-| R7 patient portal | overview, appointments, history | `client/src/app/patient` — billing Phase 11 |
+| R7 patient portal | **done** | `client/src/app/patient` — appointments, history, documents, vitals, billing, assistant |
 | R8 2-minute timeout | **done** | `session_policy.py`, `deps.py`, client countdown |
 | §13 medical records | **done** | `modules/records/`, `modules/prescriptions/` |
 | §14 appointments | **done** | `modules/appointments/`, unique `slotKey` index |
 | §25-27 documents | **done** | `modules/documents/`, `services/storage.py` — no malware scanner |
 | §23-24 OCR + review | **done** | `services/extraction.py`, vision + local engines, doctor confirms |
+| §18-19 AI assistant | **done** | `services/triage.py`, `services/assistant.py`, `modules/assistant/` |
+| §20-21 voice + symptom review | **done** | `lib/useSpeechRecognition.ts`, `components/assistant.tsx`, `ReportedSymptom` provenance |
+| §16-17 vitals + thresholds | **done** | `modules/vitals/`, `components/vitals.tsx` — engine, alert lifecycle, SSE |
+| §15 automated billing | **done** | `modules/billing/`, `components/billing.tsx` — invoice per completed consultation |
 
 Nothing is marked complete on the strength of a UI existing — a feature counts
 only with API, database, authorization, validation, error handling, audit and
@@ -259,6 +358,9 @@ passing tests behind it.
 5. ~~Medical records — history, diagnoses, treatment plans, prescriptions~~
 6. ~~Documents + Supabase Storage — upload, validation, signed retrieval~~
 7. ~~OCR — vision extraction with a local fallback, and the review gate~~
-8. AI assistant ← next
-9. Voice input · 10. Vitals · 11. Billing · 12. Notification delivery (email)
+8. ~~AI assistant — deterministic triage, grounded answers, symptom review~~
+9. ~~Voice input — browser speech-to-text, editable transcript, provenance~~
+10. ~~Vitals — threshold engine, alerts, live updates~~
+11. ~~Billing — automatic invoice on consultation completion~~
+12. Notification delivery (email) ← next
 13. Audit, emergency access, hardening · 14. Full test pass · 15. Verification

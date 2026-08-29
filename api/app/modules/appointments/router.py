@@ -26,6 +26,7 @@ from app.modules.appointments import service
 from app.modules.appointments.schedule import MAX_RANGE_DAYS, iso_utc, to_clinic
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
+from app.modules.billing import service as billing
 from app.modules.notifications.service import (
     notify,
     user_id_for_doctor,
@@ -438,6 +439,31 @@ async def set_status(
             link=f"/appointments/{appointment.id}",
             metadata={"appointmentId": appointment.id},
         )
+
+    if payload.status == AppointmentStatus.COMPLETED:
+        # Automatic billing (spec §15, R4). Inside the same transaction as the
+        # status change, so a completed consultation and its invoice commit
+        # together or not at all — there is no window where the visit is billed
+        # but not recorded, or recorded but never billed.
+        #
+        # Idempotent by construction: the unique `Invoice.appointmentId` means a
+        # retried completion finds the existing invoice instead of writing a
+        # second one, and `created` says which happened.
+        invoice, created = await billing.generate_for_appointment(db, appointment)
+        if created:
+            await billing.announce(db, invoice)
+            await _audit(
+                request,
+                db,
+                auth,
+                AuditAction.INVOICE_CREATED,
+                appointment,
+                {
+                    "invoiceId": invoice.id,
+                    "invoiceNumber": invoice.invoice_number,
+                    "totalAmount": str(invoice.total_amount),
+                },
+            )
 
     updated = await service.load_for(db, auth, appointment.id)
     return ok(service.serialize_row(updated))

@@ -318,8 +318,8 @@ async def register(
     message = email_templates.verify_email(
         name=user.name, code=code, expires_minutes=twofactor.EMAIL_CODE_TTL_MINUTES
     )
-    await email_service.send(
-        to=user.email, subject=message.subject, text_body=message.text, html_body=message.html
+    await email_service.send_or_log_code(
+        to=user.email, subject=message.subject, text_body=message.text, code=code
     )
 
     return PendingVerification(email=user.email)
@@ -439,8 +439,8 @@ async def resend_verification_code(db: AsyncSession, email: str) -> int:
     message = email_templates.verify_email(
         name=user.name, code=code, expires_minutes=twofactor.EMAIL_CODE_TTL_MINUTES
     )
-    await email_service.send(
-        to=user.email, subject=message.subject, text_body=message.text, html_body=message.html
+    await email_service.send_or_log_code(
+        to=user.email, subject=message.subject, text_body=message.text, code=code
     )
     return RESEND_COOLDOWN_SECONDS
 
@@ -709,8 +709,8 @@ async def _send_challenge_code(db: AsyncSession, user: User, challenge: TwoFacto
     message = email_templates.two_factor_code(
         name=user.name, code=code, expires_minutes=twofactor.CHALLENGE_TTL_MINUTES
     )
-    await email_service.send(
-        to=user.email, subject=message.subject, text_body=message.text, html_body=message.html
+    await email_service.send_or_log_code(
+        to=user.email, subject=message.subject, text_body=message.text, code=code
     )
 
 

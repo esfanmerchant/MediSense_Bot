@@ -68,9 +68,11 @@ password containing `@` must be percent-encoded as `%40`.
 
 Verification codes, two-factor codes and the doctor-application notices all go
 out through one SMTP transport (`api/app/services/email.py`). Without these the
-application still runs: `EMAIL_ENABLED=false` makes every send a logged no-op,
-and the code is written to the API log instead — enough to develop against, and
-never enough for production.
+application still runs, and a one-time code stays reachable: with no transport
+configured, and only outside production, the code is written to the API log
+(`email_code_not_delivered_logged_instead`) so a developer can finish a sign-up
+without a mail server. In production it is not logged — an operator who turned
+delivery off has said the code should not go anywhere.
 
 | Variable | Meaning |
 |---|---|

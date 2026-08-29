@@ -126,6 +126,27 @@ def _send_blocking(message: EmailMessage) -> Delivery:
         return Delivery(False, f"unexpected error ({type(exc).__name__})", retryable=True)
 
 
+async def send_or_log_code(*, to: str, subject: str, text_body: str, code: str) -> Delivery:
+    """Send a one-time code, or — off production, with no transport — log it.
+
+    A verification code that cannot be delivered is an account that cannot be
+    finished, so a developer running without SMTP would be unable to sign up at
+    all. This makes the code reachable in exactly that case and no other:
+    delivery must be unconfigured, and ``NODE_ENV`` must not be production.
+
+    The code is logged alone, without the message body: the body is branded
+    prose that says nothing, while the pairing of a code with the address it
+    was minted for is the whole secret. Logging it is a development
+    convenience and is why the production guard is not optional.
+    """
+    delivery = await send(to=to, subject=subject, text_body=text_body)
+    if not delivery.sent and not settings.is_production:
+        ready, _ = is_configured()
+        if not ready:
+            logger.warning("email_code_not_delivered_logged_instead", to=to, code=code)
+    return delivery
+
+
 async def send(
     *, to: str, subject: str, text_body: str, html_body: str | None = None
 ) -> Delivery:

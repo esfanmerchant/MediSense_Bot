@@ -26,6 +26,7 @@ import {
   type OcrState,
   type OcrStructured,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 interface Draft {
@@ -95,6 +96,7 @@ export function OcrReview({
   canConfirm: boolean;
   onConfirmed?: (medications: ConfirmedMedication[]) => void;
 }) {
+  const tr = useTr();
   const fetched = useAsync(() => ocrApi.get(documentId), [documentId]);
 
   // Written only from event handlers, never from an effect: seeding state off
@@ -156,8 +158,8 @@ export function OcrReview({
 
   return (
     <Card
-      title="Extracted details"
-      description={`Read automatically from ${fileName}.`}
+      title={tr("Extracted details", "Nikali gayi tafseelat")}
+      description={tr(`Read automatically from ${fileName}.`, `${fileName} se khud-ba-khud parhi gayin.`)}
       action={
         state?.status !== "CONFIRMED" && (
           <Button variant="secondary" disabled={busy} onClick={() => void run()}>
@@ -166,7 +168,7 @@ export function OcrReview({
         )
       }
     >
-      {loading && <Loading label="Loading the extraction" />}
+      {loading && <Loading label={tr("Loading the extraction", "Extraction load ho rahi hai")} />}
       {error && <ErrorState message={error} onRetry={fetched.reload} />}
       {!error && fetched.error && !override && (
         <ErrorState message={fetched.error.message} onRetry={fetched.reload} />
@@ -289,6 +291,7 @@ function MedicationDraft({
   readOnly: boolean;
   onChange: (patch: Partial<Draft>) => void;
 }) {
+  const tr = useTr();
   return (
     <div
       className={cx(
@@ -300,19 +303,19 @@ function MedicationDraft({
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-sm font-semibold text-strong">
-          Medication {index + 1}
+          {tr("Medication", "Dawa")} {index + 1}
         </span>
-        {draft.needsReview && <Badge tone="warning">Check this one</Badge>}
+        {draft.needsReview && <Badge tone="warning">{tr("Check this one", "Isay zaroor jaanchein")}</Badge>}
       </div>
 
       {draft.sourceText && (
         <p className="mb-3 rounded bg-sunken px-2 py-1 font-mono text-xs text-muted">
-          Read as: {draft.sourceText}
+          {tr("Read as:", "Aisa parha gaya:")} {draft.sourceText}
         </p>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Medication" htmlFor={`med-${index}`}>
+        <Field label={tr("Medication", "Dawa")} htmlFor={`med-${index}`}>
           <Input
             id={`med-${index}`}
             value={draft.medication}
@@ -321,7 +324,7 @@ function MedicationDraft({
             onChange={(event) => onChange({ medication: event.target.value })}
           />
         </Field>
-        <Field label="Dosage" htmlFor={`dose-${index}`}>
+        <Field label={tr("Dosage", "Khuraak")} htmlFor={`dose-${index}`}>
           <Input
             id={`dose-${index}`}
             value={draft.dosage}
@@ -330,7 +333,7 @@ function MedicationDraft({
             onChange={(event) => onChange({ dosage: event.target.value })}
           />
         </Field>
-        <Field label="Frequency" htmlFor={`freq-${index}`}>
+        <Field label={tr("Frequency", "Kitni baar")} htmlFor={`freq-${index}`}>
           <Input
             id={`freq-${index}`}
             value={draft.frequency}
@@ -339,7 +342,7 @@ function MedicationDraft({
             onChange={(event) => onChange({ frequency: event.target.value })}
           />
         </Field>
-        <Field label="Duration" htmlFor={`dur-${index}`}>
+        <Field label={tr("Duration", "Kitne din")} htmlFor={`dur-${index}`}>
           <Input
             id={`dur-${index}`}
             value={draft.duration}

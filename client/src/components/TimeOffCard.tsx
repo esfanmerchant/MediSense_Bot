@@ -12,6 +12,7 @@ import { useCallback, useState } from "react";
 
 import { Button, Card, EmptyState, ErrorState, Field, Input, Loading } from "@/components/ui";
 import { ApiError, doctors } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 function formatRange(startsAt: string, endsAt: string): string {
@@ -31,6 +32,7 @@ function formatRange(startsAt: string, endsAt: string): string {
 }
 
 export function TimeOffCard() {
+  const tr = useTr();
   const [refresh, setRefresh] = useState(0);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const list = useAsync(() => doctors.timeOff(), [refresh]);
@@ -77,8 +79,11 @@ export function TimeOffCard() {
 
   return (
     <Card
-      title="Time off"
-      description="Blocked-out periods do not appear as bookable slots."
+      title={tr("Time off", "Chhutti")}
+      description={tr(
+        "Blocked-out periods do not appear as bookable slots.",
+        "Band kiye gaye auqat booking ke liye nazar nahi aate.",
+      )}
       action={
         !adding && (
           <Button variant="secondary" onClick={() => setAdding(true)}>
@@ -90,7 +95,7 @@ export function TimeOffCard() {
       {adding && (
         <div className="mb-5 space-y-4 rounded-md border border-line p-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="From" htmlFor="time-off-from">
+            <Field label={tr("From", "Se")} htmlFor="time-off-from">
               <Input
                 id="time-off-from"
                 type="datetime-local"
@@ -98,7 +103,7 @@ export function TimeOffCard() {
                 onChange={(event) => setFrom(event.target.value)}
               />
             </Field>
-            <Field label="Until" htmlFor="time-off-to">
+            <Field label={tr("Until", "Tak")} htmlFor="time-off-to">
               <Input
                 id="time-off-to"
                 type="datetime-local"
@@ -107,7 +112,7 @@ export function TimeOffCard() {
               />
             </Field>
           </div>
-          <Field label="Reason (optional)" htmlFor="time-off-reason">
+          <Field label={tr("Reason (optional)", "Wajah (ikhtiyari)")} htmlFor="time-off-reason">
             <Input
               id="time-off-reason"
               value={reason}
@@ -141,14 +146,17 @@ export function TimeOffCard() {
         </div>
       )}
 
-      {list.loading && <Loading label="Loading your leave" />}
+      {list.loading && <Loading label={tr("Loading your leave", "Chhuttiyan load ho rahi hain")} />}
       {list.error && <ErrorState message={list.error.message} onRetry={list.reload} />}
 
       {list.data &&
         (list.data.length === 0 ? (
           <EmptyState
-            title="No time off booked"
-            description="Your published availability applies every week."
+            title={tr("No time off booked", "Koi chhutti booked nahi")}
+            description={tr(
+              "Your published availability applies every week.",
+              "Aap ki shaya karda availability har hafte laagu hoti hai.",
+            )}
           />
         ) : (
           <ul className="divide-y divide-line">

@@ -8,22 +8,31 @@
  */
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
+import { useTr } from "@/lib/lang";
 import { InvoicesPanel } from "@/components/billing";
 
 export default function PatientBilling() {
+  const tr = useTr();
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">Billing</h1>
-        <p className="mt-1 max-w-2xl text-muted">
-          An invoice is created automatically when a consultation is completed. Payments are
-          recorded by the hospital&rsquo;s billing desk.
-        </p>
+        <PageHeader
+          eyebrow={tr("Patient portal", "Mareez ka portal")}
+          title={tr("Billing", "Billing")}
+          subtitle={tr(
+            "An invoice is created automatically when a consultation is completed. Payments are recorded by the hospital's billing desk.",
+            "Consultation mukammal hote hi invoice khud ban jaata hai. Adaigi hospital ka billing desk darj karta hai.",
+          )}
+        />
 
         <div className="mt-6">
           <InvoicesPanel
-            title="Your invoices"
-            description="Newest first. Open one to see what was charged."
+            title={tr("Your invoices", "Aap ke invoices")}
+            description={tr(
+              "Newest first. Open one to see what was charged.",
+              "Sab se naya pehle. Kholein aur dekhein kya charge hua.",
+            )}
           />
         </div>
       </div>

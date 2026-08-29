@@ -1,8 +1,10 @@
 "use client";
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { Badge, Card, EmptyState, ErrorState, Loading, StatTile } from "@/components/ui";
 import { dashboard } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 const VITAL_LABELS: Record<string, string> = {
@@ -22,16 +24,21 @@ function severityTone(severity: string) {
 
 export default function DoctorDashboard() {
   const { data, error, loading, reload } = useAsync(() => dashboard.doctor());
+  const tr = useTr();
 
   return (
     <AppShell role="DOCTOR">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">Today</h1>
-        <p className="mt-1 text-muted">
-          Your caseload, your clinic list, and anything needing attention now.
-        </p>
+        <PageHeader
+          eyebrow={tr("Doctor portal", "Doctor ka portal")}
+          title={tr("Today", "Aaj ka din")}
+          subtitle={tr(
+            "Your caseload, your clinic list, and anything needing attention now.",
+            "Aap ke mareez, aaj ki clinic list, aur jo cheez abhi tawajjo maangti hai.",
+          )}
+        />
 
-        {loading && <Loading label="Loading your dashboard" />}
+        {loading && <Loading label={tr("Loading your dashboard", "Dashboard load ho raha hai")} />}
         {error && <ErrorState message={error.message} onRetry={reload} />}
 
         {data && (

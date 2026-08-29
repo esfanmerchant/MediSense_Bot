@@ -11,6 +11,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { AppointmentList, AppointmentRow, isUpcoming } from "@/components/appointments";
 import { TimeOffCard } from "@/components/TimeOffCard";
 import { Button, Card, ErrorState, Loading, StatTile, cx } from "@/components/ui";
@@ -20,6 +21,7 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 /** Mirrors the server's ALLOWED_TRANSITIONS for the actions a doctor may take. */
@@ -33,6 +35,7 @@ const NEXT_STEP: Partial<Record<AppointmentStatus, { to: AppointmentStatus; labe
 const CAN_MARK_ABSENT: AppointmentStatus[] = ["REQUESTED", "CONFIRMED", "CHECKED_IN"];
 
 export default function DoctorAppointments() {
+  const tr = useTr();
   const [refresh, setRefresh] = useState(0);
   const reloadAll = useCallback(() => setRefresh((n) => n + 1), []);
   const list = useAsync(() => appointments.list({ limit: 100 }), [refresh]);
@@ -62,12 +65,16 @@ export default function DoctorAppointments() {
   return (
     <AppShell role="DOCTOR">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">Appointments</h1>
-        <p className="mt-1 text-muted">
-          Your clinic list and the consultations waiting on you.
-        </p>
+        <PageHeader
+          eyebrow={tr("Doctor portal", "Doctor ka portal")}
+          title={tr("Appointments", "Appointments")}
+          subtitle={tr(
+            "Your clinic list and the consultations waiting on you.",
+            "Aaj ki clinic list aur woh consultations jo aap ke intezar mein hain.",
+          )}
+        />
 
-        {list.loading && <Loading label="Loading your schedule" />}
+        {list.loading && <Loading label={tr("Loading your schedule", "Schedule load ho raha hai")} />}
         {list.error && <ErrorState message={list.error.message} onRetry={list.reload} />}
 
         {list.data && (

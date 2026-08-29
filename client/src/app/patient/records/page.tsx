@@ -12,12 +12,15 @@
 import { useMemo } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { PrescriptionRow, RecordTimeline } from "@/components/records";
 import { Card, EmptyState, ErrorState, Loading, StatTile } from "@/components/ui";
 import { prescriptions as prescriptionsApi, records } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 export default function PatientRecords() {
+  const tr = useTr();
   const history = useAsync(
     () => records.list({ includePrescriptions: true, limit: 50 }),
     [],
@@ -32,15 +35,16 @@ export default function PatientRecords() {
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">
-          Medical history
-        </h1>
-        <p className="mt-1 text-muted">
-          Everything your care team has recorded. If something here looks wrong, raise it at your
-          next appointment — records are written and corrected by your doctor.
-        </p>
+        <PageHeader
+          eyebrow={tr("Patient portal", "Mareez ka portal")}
+          title={tr("Medical history", "Medical history")}
+          subtitle={tr(
+            "Everything your care team has recorded. If something here looks wrong, raise it at your next appointment — records are written and corrected by your doctor.",
+            "Jo kuchh aap ki care team ne darj kiya, sab yahan hai. Kahin ghalti lage to agli appointment par batayein — record doctor hi likhta aur durust karta hai.",
+          )}
+        />
 
-        {(history.loading || medication.loading) && <Loading label="Loading your records" />}
+        {(history.loading || medication.loading) && <Loading label={tr("Loading your records", "Record load ho raha hai")} />}
         {history.error && <ErrorState message={history.error.message} onRetry={history.reload} />}
 
         {history.data && medication.data && (

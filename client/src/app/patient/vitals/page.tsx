@@ -9,23 +9,29 @@
  */
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, Loading } from "@/components/ui";
 import { ThresholdsPanel, VitalsTable } from "@/components/vitals";
+import { useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
 
 export default function PatientVitals() {
   const { user, loading } = useSession();
+  const tr = useTr();
 
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">Vitals</h1>
-        <p className="mt-1 max-w-2xl text-muted">
-          Observations recorded by your care team. If a reading crosses a threshold, the doctor
-          responsible for you is notified automatically.
-        </p>
+        <PageHeader
+          eyebrow={tr("Patient portal", "Mareez ka portal")}
+          title={tr("Vitals", "Vitals")}
+          subtitle={tr(
+            "Observations recorded by your care team. If a reading crosses a threshold, the doctor responsible for you is notified automatically.",
+            "Aap ki care team ki darj ki hui readings. Koi reading had paar kare to aap ke zimmedar doctor ko khud-ba-khud ittila milti hai.",
+          )}
+        />
 
-        {loading && <Loading label="Loading your readings" />}
+        {loading && <Loading label={tr("Loading your readings", "Readings load ho rahi hain")} />}
 
         {!loading && !user?.patientId && (
           <ErrorState

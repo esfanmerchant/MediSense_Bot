@@ -28,6 +28,7 @@ import {
   type AuditSeverity,
   type ChainVerification,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 const SEVERITY_TONE: Record<AuditSeverity, "critical" | "warning" | "info" | "neutral"> = {
@@ -58,6 +59,7 @@ function humanise(action: string): string {
 }
 
 function ChainStatus() {
+  const tr = useTr();
   const [result, setResult] = useState<ChainVerification | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,11 +78,14 @@ function ChainStatus() {
 
   return (
     <Card
-      title="Tamper check"
-      description="Recomputes the hash chain over the stored entries and reports whether it still holds."
+      title={tr("Tamper check", "Cherh-chharh ki jaanch")}
+      description={tr(
+        "Recomputes the hash chain over the stored entries and reports whether it still holds.",
+        "Mehfooz entries par hash chain dobara banata hai aur batata hai ke woh salamat hai ya nahi.",
+      )}
       action={
         <Button variant="secondary" disabled={busy} onClick={() => void verify()}>
-          {busy ? "Checking…" : "Verify chain"}
+          {busy ? tr("Checking…", "Jaanch ho rahi hai…") : tr("Verify chain", "Chain verify karein")}
         </Button>
       }
     >
@@ -88,9 +93,10 @@ function ChainStatus() {
 
       {!result && !error && (
         <p className="text-sm text-muted">
-          Each entry is hashed together with the one before it, so an entry altered or removed
-          directly in the database no longer verifies. This is what makes &ldquo;append-only&rdquo;
-          checkable rather than merely stated.
+          {tr(
+            "Each entry is hashed together with the one before it, so an entry altered or removed directly in the database no longer verifies. This is what makes “append-only” checkable rather than merely stated.",
+            "Har entry apni pichhli entry ke saath hash hoti hai — database mein seedha badli ya hataayi gayi entry verify nahi hoti. Yehi cheez “append-only” ko sirf daawa nahi, jaanchne ke qabil banati hai.",
+          )}
         </p>
       )}
 
@@ -124,8 +130,8 @@ function ChainStatus() {
                 : "text-strong",
             )}
           >
-            {result.checked} entries checked
-            {result.brokenAt && ` · first break at entry ${result.brokenAt}`}
+            {result.checked} {tr("entries checked", "entries jaanchi gayin")}
+            {result.brokenAt && ` · ${tr("first break at entry", "pehla tor is entry par:")} ${result.brokenAt}`}
           </p>
         </div>
       )}
@@ -134,6 +140,7 @@ function ChainStatus() {
 }
 
 function EntryRow({ entry }: { entry: AuditEntry }) {
+  const tr = useTr();
   const alerting = ALERTING.includes(entry.severity);
 
   return (
@@ -157,7 +164,9 @@ function EntryRow({ entry }: { entry: AuditEntry }) {
       <td className="py-2 pr-4">
         {/* Null when the account has since been deleted. `userId` is
             deliberately not a foreign key — the trail outlives its subject. */}
-        {entry.actorName ?? <span className="italic text-faint">(deleted account)</span>}
+        {entry.actorName ?? (
+          <span className="italic text-faint">{tr("(deleted account)", "(hazf shuda account)")}</span>
+        )}
         {entry.actorRole && (
           <div className="text-xs text-faint">{entry.actorRole.toLowerCase()}</div>
         )}
@@ -173,6 +182,7 @@ function EntryRow({ entry }: { entry: AuditEntry }) {
 }
 
 export function AuditPanel() {
+  const tr = useTr();
   const [securityOnly, setSecurityOnly] = useState(false);
   const fetched = useAsync(
     () =>
@@ -188,12 +198,15 @@ export function AuditPanel() {
       <ChainStatus />
 
       <Card
-        title="Audit trail"
-        description="Every sensitive action, newest first. Entries cannot be edited or removed."
+        title={tr("Audit trail", "Audit trail")}
+        description={tr(
+          "Every sensitive action, newest first. Entries cannot be edited or removed.",
+          "Har hassas amal, naya pehle. Entries na badli ja sakti hain, na hataayi.",
+        )}
         action={
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <p className="text-xs text-muted">Security events</p>
+              <p className="text-xs text-muted">{tr("Security events", "Security ke waqiat")}</p>
               <p
                 className={cx(
                   "text-lg font-semibold tabular-nums",
@@ -204,21 +217,31 @@ export function AuditPanel() {
               </p>
             </div>
             <Button variant="secondary" onClick={() => setSecurityOnly((value) => !value)}>
-              {securityOnly ? "Show all" : "Security only"}
+              {securityOnly ? tr("Show all", "Sab dikhayein") : tr("Security only", "Sirf security")}
             </Button>
           </div>
         }
       >
-        {fetched.loading && <Loading label="Loading the audit trail" />}
+        {fetched.loading && <Loading label={tr("Loading the audit trail", "Audit trail load ho raha hai")} />}
         {fetched.error && <ErrorState message={fetched.error.message} onRetry={fetched.reload} />}
 
         {!fetched.loading && !fetched.error && rows.length === 0 && (
           <EmptyState
-            title={securityOnly ? "No security events" : "No entries"}
+            title={
+              securityOnly
+                ? tr("No security events", "Koi security waqia nahi")
+                : tr("No entries", "Koi entry nahi")
+            }
             description={
               securityOnly
-                ? "No denied access or break-glass use has been recorded."
-                : "Sensitive actions are recorded here as they happen."
+                ? tr(
+                    "No denied access or break-glass use has been recorded.",
+                    "Na koi rasai roki gayi, na emergency access istemal hui.",
+                  )
+                : tr(
+                    "Sensitive actions are recorded here as they happen.",
+                    "Hassas amal hote hi yahan darj ho jate hain.",
+                  )
             }
           />
         )}
@@ -229,11 +252,11 @@ export function AuditPanel() {
               <caption className="sr-only">Audit trail, newest first</caption>
               <thead>
                 <tr className="border-b border-line text-left">
-                  <th scope="col" className="py-2 pr-4 font-medium">When</th>
-                  <th scope="col" className="py-2 pr-4 font-medium">Action</th>
-                  <th scope="col" className="py-2 pr-4 font-medium">Who</th>
-                  <th scope="col" className="py-2 pr-4 font-medium">Entity</th>
-                  <th scope="col" className="py-2 font-medium">From</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">{tr("When", "Kab")}</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">{tr("Action", "Amal")}</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">{tr("Who", "Kis ne")}</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">{tr("Entity", "Cheez")}</th>
+                  <th scope="col" className="py-2 font-medium">{tr("From", "Kahan se")}</th>
                 </tr>
               </thead>
               <tbody>

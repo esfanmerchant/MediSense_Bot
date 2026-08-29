@@ -1,8 +1,10 @@
 "use client";
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { Badge, Card, EmptyState, ErrorState, Loading, StatTile } from "@/components/ui";
 import { dashboard } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 function formatDateTime(iso: string): string {
@@ -17,16 +19,21 @@ function formatDateTime(iso: string): string {
 
 export default function PatientDashboard() {
   const { data, error, loading, reload } = useAsync(() => dashboard.patient());
+  const tr = useTr();
 
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">Your health</h1>
-        <p className="mt-1 text-muted">
-          Appointments, prescriptions, reports and billing — all in one place.
-        </p>
+        <PageHeader
+          eyebrow={tr("Patient portal", "Mareez ka portal")}
+          title={tr("Your health", "Aap ki sehat")}
+          subtitle={tr(
+            "Appointments, prescriptions, reports and billing — all in one place.",
+            "Appointments, nuskhe, reports aur billing — sab kuchh ek jagah.",
+          )}
+        />
 
-        {loading && <Loading label="Loading your dashboard" />}
+        {loading && <Loading label={tr("Loading your dashboard", "Dashboard load ho raha hai")} />}
         {error && <ErrorState message={error.message} onRetry={reload} />}
 
         {data && (

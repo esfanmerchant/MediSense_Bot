@@ -33,6 +33,7 @@ import {
   type SymptomProposal,
   type Urgency,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
 
@@ -47,11 +48,11 @@ const URGENCY_TONE: Record<Urgency, "critical" | "warning" | "info" | "neutral">
   INFORMATION: "neutral",
 };
 
-const URGENCY_LABEL: Record<Urgency, string> = {
-  EMERGENCY: "Seek care now",
-  URGENT: "See a doctor today",
-  ROUTINE: "Routine",
-  INFORMATION: "Information",
+const URGENCY_LABEL: Record<Urgency, [string, string]> = {
+  EMERGENCY: ["Seek care now", "Foran ilaaj lein"],
+  URGENT: ["See a doctor today", "Aaj hi doctor ko dikhayein"],
+  ROUTINE: ["Routine", "Mamool ki baat"],
+  INFORMATION: ["Information", "Ittila"],
 };
 
 /**
@@ -61,17 +62,20 @@ const URGENCY_LABEL: Record<Urgency, string> = {
  * hear this, and someone who cannot distinguish red from grey has to see it.
  */
 function EmergencyBanner() {
+  const tr = useTr();
   return (
     <div
       role="alert"
       className="rounded-md border-2 border-critical bg-critical-soft px-4 py-3"
     >
       <p className="font-semibold text-critical">
-        This may need emergency care
+        {tr("This may need emergency care", "Yeh emergency ho sakti hai")}
       </p>
       <p className="mt-1 text-sm text-strong">
-        Do not wait for a reply here. Call your local emergency number or go to the nearest
-        emergency department.
+        {tr(
+          "Do not wait for a reply here. Call your local emergency number or go to the nearest emergency department.",
+          "Yahan jawab ka intezar na karein. Foran emergency number par call karein ya qareeb tareen emergency department jayein.",
+        )}
       </p>
     </div>
   );
@@ -92,14 +96,15 @@ function Disclaimer({ text }: { text: string }) {
 }
 
 function AnswerBody({ answer }: { answer: AssistantAnswer }) {
+  const tr = useTr();
   return (
     <div className="space-y-3">
       {answer.emergency && <EmergencyBanner />}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={URGENCY_TONE[answer.urgency]}>{URGENCY_LABEL[answer.urgency]}</Badge>
+        <Badge tone={URGENCY_TONE[answer.urgency]}>{tr(...URGENCY_LABEL[answer.urgency])}</Badge>
         {answer.suggestedDepartment && (
-          <Badge tone="neutral">Suggested: {answer.suggestedDepartment}</Badge>
+          <Badge tone="neutral">{tr("Suggested:", "Tajweez:")} {answer.suggestedDepartment}</Badge>
         )}
       </div>
 
@@ -112,7 +117,7 @@ function AnswerBody({ answer }: { answer: AssistantAnswer }) {
           href="/patient/appointments"
           className="inline-flex min-h-11 items-center text-sm font-medium text-teal-800 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
-          Book an appointment
+          {tr("Book an appointment", "Appointment book karein")}
         </Link>
       )}
 
@@ -143,13 +148,17 @@ function VoiceInput({
   onTranscript: (settled: string) => void;
   disabled: boolean;
 }) {
+  const tr = useTr();
   const speech = useSpeechRecognition(onTranscript);
 
   if (speech.state === "unsupported") {
     return (
       <p className="text-sm text-muted">
-        This browser cannot listen for speech. Chrome, Edge and Safari can — or you can type{" "}
-        {subject} below.
+        {tr(
+          "This browser cannot listen for speech. Chrome, Edge and Safari can — or you can type",
+          "Yeh browser awaaz nahi sun sakta. Chrome, Edge aur Safari sun sakte hain — ya aap neeche likh sakte hain:",
+        )}{" "}
+        {subject}
       </p>
     );
   }
@@ -167,22 +176,28 @@ function VoiceInput({
         onClick={() => (listening ? speech.stop() : speech.start())}
       >
         <span aria-hidden>{listening ? "⏹" : "🎤"}</span>
-        {listening ? "Stop listening" : label}
+        {listening ? tr("Stop listening", "Sunna band karein") : label}
       </Button>
 
       {/* Announced, not merely animated: a patient who cannot see the button
           change colour still needs to know the microphone is live. */}
       <p role="status" aria-live="polite" className="text-sm text-muted">
         {listening
-          ? "Listening. Speak normally — your words appear below, and you can edit them before anything is sent."
-          : "Your speech is turned into text on this device. The recording is never sent to MediSense."}
+          ? tr(
+              "Listening. Speak normally — your words appear below, and you can edit them before anything is sent.",
+              "Sun raha hai. Aaram se bolein — aap ke alfaz neeche aayenge, aur bhejne se pehle aap unhe badal sakte hain.",
+            )
+          : tr(
+              "Your speech is turned into text on this device. The recording is never sent to MediSense.",
+              "Aap ki awaaz isi device par likhai mein badalti hai. Recording kabhi MediSense ko nahi bheji jaati.",
+            )}
       </p>
 
       {speech.interim && (
         <p className="text-sm italic text-faint">{speech.interim}…</p>
       )}
 
-      {speech.error && <ErrorState title="Microphone" message={speech.error} />}
+      {speech.error && <ErrorState title={tr("Microphone", "Microphone")} message={speech.error} />}
     </div>
   );
 }
@@ -201,6 +216,7 @@ interface Turn {
  * is just what is on screen since the page opened.
  */
 export function AssistantChat() {
+  const tr = useTr();
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
@@ -241,14 +257,20 @@ export function AssistantChat() {
 
   return (
     <Card
-      title="Ask about your care"
-      description="Questions about your prescriptions, your appointments, or which department to see."
+      title={tr("Ask about your care", "Apne ilaaj ke baare mein poochein")}
+      description={tr(
+        "Questions about your prescriptions, your appointments, or which department to see.",
+        "Apne nuskhon, appointments, ya kis department ko dikhana hai — is baare mein sawal karein.",
+      )}
     >
       <div className="space-y-4">
         {turns.length === 0 && (
           <EmptyState
-            title="No questions yet"
-            description="Try “what is my blood pressure tablet for?” or “which department should I see for a persistent cough?”"
+            title={tr("No questions yet", "Abhi koi sawal nahi")}
+            description={tr(
+              "Try “what is my blood pressure tablet for?” or “which department should I see for a persistent cough?”",
+              "Misal ke taur par poochein: “meri blood pressure ki goli kis liye hai?” ya “purani khansi ke liye kaunsa department dekhun?”",
+            )}
           />
         )}
 
@@ -267,7 +289,7 @@ export function AssistantChat() {
           ))}
         </ol>
 
-        {busy && <Loading label="Thinking" />}
+        {busy && <Loading label={tr("Thinking", "Soch raha hai")} />}
         {error && <ErrorState message={error} />}
 
         <VoiceInput
@@ -286,15 +308,15 @@ export function AssistantChat() {
         >
           <Input
             id="assistant-question"
-            aria-label="Your question"
-            placeholder="Type your question"
+            aria-label={tr("Your question", "Aap ka sawal")}
+            placeholder={tr("Type your question", "Apna sawal likhein")}
             maxLength={2000}
             value={question}
             disabled={busy}
             onChange={(event) => setQuestion(event.target.value)}
           />
           <Button type="submit" disabled={busy || !question.trim()}>
-            Send
+            {tr("Send", "Bhejein")}
           </Button>
         </form>
       </div>
@@ -339,6 +361,7 @@ function draftOf(symptom = ""): SymptomDraft {
  * symptoms are `AI_ASSISTED`, typed ones are `PATIENT_REPORTED`.
  */
 export function SymptomReview() {
+  const tr = useTr();
   const [text, setText] = useState("");
   /**
    * Set once the patient dictates anything, and deliberately not cleared when
@@ -441,8 +464,11 @@ export function SymptomReview() {
 
   return (
     <Card
-      title="Describe your symptoms"
-      description="Speak or type, in your own words. You will get to correct everything before anything is saved."
+      title={tr("Describe your symptoms", "Apni takleef batayein")}
+      description={tr(
+        "Speak or type, in your own words. You will get to correct everything before anything is saved.",
+        "Bol kar ya likh kar, apne alfaz mein. Save hone se pehle aap har cheez durust kar sakenge.",
+      )}
     >
       <div className="space-y-4">
         <VoiceInput
@@ -453,12 +479,18 @@ export function SymptomReview() {
         />
 
         <Field
-          label="What are you experiencing?"
+          label={tr("What are you experiencing?", "Aap kya mehsoos kar rahe hain?")}
           htmlFor="symptom-text"
           hint={
             dictated
-              ? "This is what was heard. Correct anything that is wrong before continuing."
-              : "For example: “headache since yesterday, worse in the morning, and some dizziness.”"
+              ? tr(
+                  "This is what was heard. Correct anything that is wrong before continuing.",
+                  "Jo suna gaya woh yeh hai. Aage barhne se pehle jo ghalat ho usay durust kar lein.",
+                )
+              : tr(
+                  "For example: “headache since yesterday, worse in the morning, and some dizziness.”",
+                  "Misal: “kal se sar dard hai, subah zyada hota hai, aur kabhi kabhi chakkar bhi.”",
+                )
           }
         >
           <textarea
@@ -473,7 +505,9 @@ export function SymptomReview() {
         </Field>
 
         <Button disabled={busy || !text.trim()} onClick={() => void analyse()}>
-          {busy && !reviewing ? "Reading…" : "Review my symptoms"}
+          {busy && !reviewing
+            ? tr("Reading…", "Parha ja raha hai…")
+            : tr("Review my symptoms", "Meri takleef ka jaiza lein")}
         </Button>
 
         {error && <ErrorState message={error} />}
@@ -493,12 +527,18 @@ export function SymptomReview() {
 
             <div>
               <h3 className="font-medium text-strong">
-                {proposal?.reviewPrompt ?? "List the symptoms you want to record."}
+                {proposal?.reviewPrompt ?? tr("List the symptoms you want to record.", "Jo takleef darj karni hai uski fehrist banayein.")}
               </h3>
               <p className="mt-1 text-sm text-muted">
                 {proposal
-                  ? "This is what the assistant heard, not a medical record. Change anything that is wrong, remove anything you did not say, and add anything it missed."
-                  : "Nothing has been saved yet. Add a row for each symptom, and remove any you do not want to record."}
+                  ? tr(
+                      "This is what the assistant heard, not a medical record. Change anything that is wrong, remove anything you did not say, and add anything it missed.",
+                      "Yeh woh hai jo assistant ne suna — medical record nahi. Jo ghalat hai badlein, jo aap ne nahi kaha usay hatayein, aur jo reh gaya usay shamil karein.",
+                    )
+                  : tr(
+                      "Nothing has been saved yet. Add a row for each symptom, and remove any you do not want to record.",
+                      "Abhi kuchh save nahi hua. Har takleef ke liye ek qatar barhayein, aur jo darj nahi karni usay hata dein.",
+                    )}
               </p>
             </div>
 
@@ -508,7 +548,7 @@ export function SymptomReview() {
                   key={draft.key}
                   className="grid gap-3 rounded-md border border-line p-3 sm:grid-cols-[2fr_1fr_1fr_auto] "
                 >
-                  <Field label="Symptom" htmlFor={`symptom-${draft.key}`}>
+                  <Field label={tr("Symptom", "Takleef")} htmlFor={`symptom-${draft.key}`}>
                     <Input
                       id={`symptom-${draft.key}`}
                       value={draft.symptom}
@@ -516,21 +556,21 @@ export function SymptomReview() {
                       onChange={(event) => update(draft.key, { symptom: event.target.value })}
                     />
                   </Field>
-                  <Field label="Severity" htmlFor={`severity-${draft.key}`}>
+                  <Field label={tr("Severity", "Shiddat")} htmlFor={`severity-${draft.key}`}>
                     <Input
                       id={`severity-${draft.key}`}
                       value={draft.severity}
                       maxLength={50}
-                      placeholder="mild / severe"
+                      placeholder={tr("mild / severe", "halki / sakht")}
                       onChange={(event) => update(draft.key, { severity: event.target.value })}
                     />
                   </Field>
-                  <Field label="How long" htmlFor={`duration-${draft.key}`}>
+                  <Field label={tr("How long", "Kab se")} htmlFor={`duration-${draft.key}`}>
                     <Input
                       id={`duration-${draft.key}`}
                       value={draft.duration}
                       maxLength={100}
-                      placeholder="2 days"
+                      placeholder={tr("2 days", "2 din")}
                       onChange={(event) => update(draft.key, { duration: event.target.value })}
                     />
                   </Field>
@@ -540,7 +580,7 @@ export function SymptomReview() {
                       aria-label={`Remove ${draft.symptom || `symptom ${index + 1}`}`}
                       onClick={() => remove(draft.key)}
                     >
-                      Remove
+                      {tr("Remove", "Hatayein")}
                     </Button>
                   </div>
                 </li>
@@ -552,16 +592,18 @@ export function SymptomReview() {
                 variant="secondary"
                 onClick={() => setDrafts((current) => [...current, draftOf()])}
               >
-                Add a symptom
+                {tr("Add a symptom", "Aur takleef likhein")}
               </Button>
               <Button disabled={busy || !usable} onClick={() => void confirm()}>
-                {busy ? "Saving…" : "This is correct — save it"}
+                {busy ? tr("Saving…", "Save ho raha hai…") : tr("This is correct — save it", "Yeh durust hai — save karein")}
               </Button>
             </div>
 
             <p className="text-sm text-muted">
-              Saved symptoms are your own account of how you feel. They are not a diagnosis, and a
-              doctor decides what goes in your medical record.
+              {tr(
+                "Saved symptoms are your own account of how you feel. They are not a diagnosis, and a doctor decides what goes in your medical record.",
+                "Save shuda takleef aap ka apna bayan hai. Yeh tashkhees nahi — medical record mein kya jayega, yeh doctor tay karta hai.",
+              )}
             </p>
 
             {proposal && <Disclaimer text={proposal.disclaimer} />}
@@ -580,6 +622,7 @@ export function SymptomReview() {
  * what it covers and that it can be withdrawn (spec §5, conflict C2).
  */
 function ConsentGate({ status, onGranted }: { status: AssistantStatus; onGranted: () => void }) {
+  const tr = useTr();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -598,36 +641,42 @@ function ConsentGate({ status, onGranted }: { status: AssistantStatus; onGranted
 
   if (!status.providerConfigured) {
     return (
-      <Card title="The assistant is unavailable">
+      <Card title={tr("The assistant is unavailable", "Assistant dastyab nahi hai")}>
         <p className="text-muted">
-          {status.reason ?? "The assistant is not configured on this server."} Your appointments,
-          records and documents are unaffected.
+          {status.reason ?? tr("The assistant is not configured on this server.", "Is server par assistant configure nahi hai.")}{" "}
+          {tr(
+            "Your appointments, records and documents are unaffected.",
+            "Aap ki appointments, records aur documents par koi asar nahi.",
+          )}
         </p>
       </Card>
     );
   }
 
   return (
-    <Card title="Turn on the health assistant">
+    <Card title={tr("Turn on the health assistant", "Health assistant chalu karein")}>
       <div className="space-y-4">
         <p className="text-muted">
-          To answer your questions, the assistant sends what you write — and a list of your current
-          prescriptions and upcoming appointments — to an AI provider. Nothing is sent until you
-          agree, and you can withdraw at any time from your profile.
+          {tr(
+            "To answer your questions, the assistant sends what you write — and a list of your current prescriptions and upcoming appointments — to an AI provider. Nothing is sent until you agree, and you can withdraw at any time from your profile.",
+            "Jawab dene ke liye assistant aap ki likhi hui baat — aur maujooda nuskhon aur aane wali appointments ki fehrist — AI provider ko bhejta hai. Aap ki ijazat ke baghair kuchh nahi bheja jaata, aur aap kabhi bhi profile se ijazat wapas le sakte hain.",
+          )}
         </p>
         <p className="text-muted">
-          If you use the microphone, your browser turns your speech into text on your device and
-          MediSense never receives the recording. Most browsers use their own online service to do
-          that, so the audio reaches the browser&rsquo;s provider rather than ours. You can always
-          type instead.
+          {tr(
+            "If you use the microphone, your browser turns your speech into text on your device and MediSense never receives the recording. Most browsers use their own online service to do that, so the audio reaches the browser's provider rather than ours. You can always type instead.",
+            "Microphone istemal karein to aap ka browser awaaz ko isi device par likhai mein badalta hai — MediSense ko recording kabhi nahi milti. Aksar browsers iske liye apni online service istemal karte hain, is liye audio browser ke provider tak jaati hai, hum tak nahi. Aap hamesha likh bhi sakte hain.",
+          )}
         </p>
         <p className="text-muted">
-          The assistant gives general guidance. It does not diagnose, and it never replaces your
-          doctor.
+          {tr(
+            "The assistant gives general guidance. It does not diagnose, and it never replaces your doctor.",
+            "Assistant sirf aam rehnumai deta hai. Yeh tashkhees nahi karta, aur kabhi doctor ki jagah nahi leta.",
+          )}
         </p>
         {error && <ErrorState message={error} />}
         <Button disabled={busy} onClick={() => void grant()}>
-          {busy ? "Saving…" : "I agree — turn it on"}
+          {busy ? tr("Saving…", "Save ho raha hai…") : tr("I agree — turn it on", "Main razi hoon — chalu karein")}
         </Button>
       </div>
     </Card>
@@ -636,9 +685,10 @@ function ConsentGate({ status, onGranted }: { status: AssistantStatus; onGranted
 
 /** The assistant page's body: status gate, then chat and symptom review. */
 export function AssistantPanels() {
+  const tr = useTr();
   const status = useAsync(() => assistantApi.status(), []);
 
-  if (status.loading) return <Loading label="Checking the assistant" />;
+  if (status.loading) return <Loading label={tr("Checking the assistant", "Assistant check ho raha hai")} />;
   if (status.error) return <ErrorState message={status.error.message} onRetry={status.reload} />;
   if (!status.data) return null;
 

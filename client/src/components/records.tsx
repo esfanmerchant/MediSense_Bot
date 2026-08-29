@@ -11,6 +11,7 @@
  */
 
 import type { MedicalRecord, Prescription } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { Badge, EmptyState } from "@/components/ui";
 
 export function formatDate(iso: string): string {
@@ -39,6 +40,7 @@ export function RecordEntry({
   record: MedicalRecord;
   action?: React.ReactNode;
 }) {
+  const tr = useTr();
   const prescriptions = record.prescriptions ?? [];
 
   return (
@@ -59,12 +61,12 @@ export function RecordEntry({
       </p>
 
       <dl className="mt-3 space-y-3 text-sm">
-        {record.symptoms && <Section label="Symptoms">{record.symptoms}</Section>}
-        {record.treatmentPlan && <Section label="Treatment">{record.treatmentPlan}</Section>}
-        {record.notes && <Section label="Notes">{record.notes}</Section>}
-        {record.followUpNotes && <Section label="Follow-up">{record.followUpNotes}</Section>}
+        {record.symptoms && <Section label={tr("Symptoms", "Alamat")}>{record.symptoms}</Section>}
+        {record.treatmentPlan && <Section label={tr("Treatment", "Ilaaj")}>{record.treatmentPlan}</Section>}
+        {record.notes && <Section label={tr("Notes", "Notes")}>{record.notes}</Section>}
+        {record.followUpNotes && <Section label={tr("Follow-up", "Agla muaina")}>{record.followUpNotes}</Section>}
         {record.followUpDate && (
-          <Section label="Follow-up due">{formatDate(record.followUpDate)}</Section>
+          <Section label={tr("Follow-up due", "Agla muaina kab")}>{formatDate(record.followUpDate)}</Section>
         )}
       </dl>
 

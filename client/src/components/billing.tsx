@@ -30,6 +30,7 @@ import {
   type Invoice,
   type InvoiceStatus,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 function messageOf(caught: unknown, fallback: string): string {
@@ -45,13 +46,13 @@ const STATUS_TONE: Record<InvoiceStatus, "good" | "warning" | "critical" | "neut
   DRAFT: "neutral",
 };
 
-const STATUS_LABEL: Record<InvoiceStatus, string> = {
-  PAID: "Paid",
-  ISSUED: "Due",
-  OVERDUE: "Overdue",
-  VOID: "Cancelled",
-  REFUNDED: "Credited",
-  DRAFT: "Draft",
+const STATUS_LABEL: Record<InvoiceStatus, [string, string]> = {
+  PAID: ["Paid", "Ada shuda"],
+  ISSUED: ["Due", "Wajib-ul-ada"],
+  OVERDUE: ["Overdue", "Muddat guzar gayi"],
+  VOID: ["Cancelled", "Mansookh"],
+  REFUNDED: ["Credited", "Wapas kiya gaya"],
+  DRAFT: ["Draft", "Musawwada"],
 };
 
 function when(iso: string | null): string {
@@ -72,11 +73,15 @@ function money(amount: string, currency: string): string {
 }
 
 function InvoiceDetail({ invoice }: { invoice: Invoice }) {
+  const tr = useTr();
   return (
     <div className="space-y-4">
       {invoice.amendsInvoiceId && (
         <p className="rounded-md border border-warning/50 bg-warning-soft px-3 py-2 text-sm text-warning">
-          This is a credit note correcting an earlier invoice. The original is kept as issued.
+          {tr(
+            "This is a credit note correcting an earlier invoice. The original is kept as issued.",
+            "Yeh credit note hai jo pichhle invoice ki islah karta hai. Asal invoice jaisa jari hua tha waisa hi mehfooz hai.",
+          )}
         </p>
       )}
 
@@ -85,9 +90,9 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
           <caption className="sr-only">Invoice {invoice.invoiceNumber} line items</caption>
           <thead>
             <tr className="border-b border-line text-left">
-              <th scope="col" className="py-2 pr-4 font-medium">Description</th>
-              <th scope="col" className="py-2 pr-4 font-medium">Qty</th>
-              <th scope="col" className="py-2 text-right font-medium">Amount</th>
+              <th scope="col" className="py-2 pr-4 font-medium">{tr("Description", "Tafseel")}</th>
+              <th scope="col" className="py-2 pr-4 font-medium">{tr("Qty", "Tadaad")}</th>
+              <th scope="col" className="py-2 text-right font-medium">{tr("Amount", "Raqam")}</th>
             </tr>
           </thead>
           <tbody>
@@ -104,7 +109,7 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
           <tfoot>
             <tr>
               <td colSpan={2} className="py-1 pr-4 text-right text-muted">
-                Subtotal
+                {tr("Subtotal", "Kul raqam")}
               </td>
               <td className="py-1 text-right tabular-nums">
                 {money(invoice.amount, invoice.currency)}
@@ -112,7 +117,7 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
             </tr>
             <tr>
               <td colSpan={2} className="py-1 pr-4 text-right text-muted">
-                Tax
+                {tr("Tax", "Tax")}
               </td>
               <td className="py-1 text-right tabular-nums">
                 {money(invoice.taxAmount, invoice.currency)}
@@ -120,7 +125,7 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
             </tr>
             <tr className="border-t border-line-strong">
               <td colSpan={2} className="py-2 pr-4 text-right font-semibold">
-                Total
+                {tr("Total", "Mila kar total")}
               </td>
               <td className="py-2 text-right font-semibold tabular-nums">
                 {money(invoice.totalAmount, invoice.currency)}
@@ -131,19 +136,19 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
       </div>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
-        <dt className="text-muted">Issued</dt>
+        <dt className="text-muted">{tr("Issued", "Jari hua")}</dt>
         <dd className="tabular-nums">{when(invoice.issuedAt)}</dd>
-        <dt className="text-muted">Due</dt>
+        <dt className="text-muted">{tr("Due", "Aakhri tareekh")}</dt>
         <dd className="tabular-nums">{when(invoice.dueAt)}</dd>
         {invoice.paidAt && (
           <>
-            <dt className="text-muted">Paid</dt>
+            <dt className="text-muted">{tr("Paid", "Ada hua")}</dt>
             <dd className="tabular-nums">{when(invoice.paidAt)}</dd>
           </>
         )}
         {invoice.voidedAt && (
           <>
-            <dt className="text-muted">Cancelled</dt>
+            <dt className="text-muted">{tr("Cancelled", "Mansookh hua")}</dt>
             <dd className="tabular-nums">{when(invoice.voidedAt)}</dd>
           </>
         )}
@@ -170,6 +175,7 @@ function AdminActions({
   invoice: Invoice;
   onChanged: (next: Invoice) => void;
 }) {
+  const tr = useTr();
   const [pending, setPending] = useState<"void" | "credit" | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -206,19 +212,19 @@ function AdminActions({
         <div className="flex flex-wrap gap-2">
           {invoice.status !== "PAID" && (
             <Button disabled={busy} onClick={() => void run("pay")}>
-              Record payment
+              {tr("Record payment", "Adaigi darj karein")}
             </Button>
           )}
           {invoice.status !== "PAID" && (
             <Button variant="secondary" onClick={() => setPending("void")}>
-              Cancel invoice
+              {tr("Cancel invoice", "Invoice mansookh karein")}
             </Button>
           )}
           {invoice.status === "PAID" && (
             // A paid invoice cannot be voided: money has moved, and pretending
             // the document never existed would leave the payment unexplained.
             <Button variant="secondary" onClick={() => setPending("credit")}>
-              Issue credit note
+              {tr("Issue credit note", "Credit note banayein")}
             </Button>
           )}
         </div>
@@ -227,9 +233,16 @@ function AdminActions({
       {pending !== null && (
         <div className="space-y-3">
           <Field
-            label={pending === "void" ? "Why is this cancelled?" : "Why is this being credited?"}
+            label={
+              pending === "void"
+                ? tr("Why is this cancelled?", "Yeh kyun mansookh ho raha hai?")
+                : tr("Why is this being credited?", "Yeh raqam kyun wapas ho rahi hai?")
+            }
             htmlFor={`reason-${invoice.id}`}
-            hint="Stored on the invoice, so the accounts explain themselves later."
+            hint={tr(
+              "Stored on the invoice, so the accounts explain themselves later.",
+              "Invoice par mehfooz hota hai, taake baad mein hisaab khud apni wazahat kare.",
+            )}
           >
             <Input
               id={`reason-${invoice.id}`}
@@ -243,7 +256,11 @@ function AdminActions({
               disabled={busy || reason.trim().length < 3}
               onClick={() => void run(pending === "void" ? "void" : "credit")}
             >
-              {busy ? "Saving…" : pending === "void" ? "Cancel invoice" : "Issue credit note"}
+              {busy
+                ? tr("Saving…", "Save ho raha hai…")
+                : pending === "void"
+                  ? tr("Cancel invoice", "Invoice mansookh karein")
+                  : tr("Issue credit note", "Credit note banayein")}
             </Button>
             <Button
               variant="ghost"
@@ -253,7 +270,7 @@ function AdminActions({
                 setError(null);
               }}
             >
-              Back
+              {tr("Back", "Wapas")}
             </Button>
           </div>
         </div>
@@ -271,6 +288,7 @@ function InvoiceCard({
   canManage: boolean;
   onChanged: (next: Invoice) => void;
 }) {
+  const tr = useTr();
   const [open, setOpen] = useState(false);
 
   return (
@@ -279,26 +297,27 @@ function InvoiceCard({
         <span className="font-medium tabular-nums text-strong">
           {invoice.invoiceNumber}
         </span>
-        <Badge tone={STATUS_TONE[invoice.status]}>{STATUS_LABEL[invoice.status]}</Badge>
+        <Badge tone={STATUS_TONE[invoice.status]}>{tr(...STATUS_LABEL[invoice.status])}</Badge>
         <span className="ml-auto font-semibold tabular-nums">
           {money(invoice.totalAmount, invoice.currency)}
         </span>
       </div>
 
       <p className="mt-1 text-sm text-muted">
-        Issued {when(invoice.issuedAt)}
-        {invoice.status === "OVERDUE" && ` · was due ${when(invoice.dueAt)}`}
+        {tr("Issued", "Jari hua")} {when(invoice.issuedAt)}
+        {invoice.status === "OVERDUE" &&
+          ` · ${tr("was due", "aakhri tareekh thi")} ${when(invoice.dueAt)}`}
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="secondary" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-          {open ? "Hide detail" : "View detail"}
+          {open ? tr("Hide detail", "Tafseel chhupayein") : tr("View detail", "Tafseel dekhein")}
         </Button>
         {open && (
           // Honest label: this opens the print dialogue, from which a browser
           // can save a PDF. There is no server-side PDF generator.
           <Button variant="ghost" onClick={() => window.print()}>
-            Print
+            {tr("Print", "Print karein")}
           </Button>
         )}
       </div>
@@ -322,14 +341,17 @@ function InvoiceCard({
  */
 export function InvoicesPanel({
   canManage = false,
-  title = "Invoices",
-  description = "Your billing history.",
+  title,
+  description,
 }: {
   canManage?: boolean;
   title?: string;
   description?: string;
 }) {
+  const tr = useTr();
   const fetched = useAsync(() => invoicesApi.list({ limit: 50 }), []);
+  const heading = title ?? tr("Invoices", "Invoices");
+  const subheading = description ?? tr("Your billing history.", "Aap ki billing ki tareekh.");
   const [edited, setEdited] = useState<Record<string, Invoice>>({});
 
   const rows = (fetched.data?.data ?? []).map((invoice) => edited[invoice.id] ?? invoice);
@@ -337,24 +359,27 @@ export function InvoicesPanel({
 
   return (
     <Card
-      title={title}
-      description={description}
+      title={heading}
+      description={subheading}
       action={
         outstanding !== undefined && (
           <div className="text-right">
-            <p className="text-xs text-muted">Outstanding</p>
+            <p className="text-xs text-muted">{tr("Outstanding", "Baqaya")}</p>
             <p className="text-lg font-semibold tabular-nums">{outstanding}</p>
           </div>
         )
       }
     >
-      {fetched.loading && <Loading label="Loading invoices" />}
+      {fetched.loading && <Loading label={tr("Loading invoices", "Invoices load ho rahe hain")} />}
       {fetched.error && <ErrorState message={fetched.error.message} onRetry={fetched.reload} />}
 
       {!fetched.loading && !fetched.error && rows.length === 0 && (
         <EmptyState
-          title="No invoices"
-          description="An invoice is created automatically when a consultation is completed."
+          title={tr("No invoices", "Koi invoice nahi")}
+          description={tr(
+            "An invoice is created automatically when a consultation is completed.",
+            "Consultation mukammal hote hi invoice khud ban jaata hai.",
+          )}
         />
       )}
 

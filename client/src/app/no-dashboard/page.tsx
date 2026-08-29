@@ -10,24 +10,32 @@
  */
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { EmergencyAccessPanel } from "@/components/emergency";
 import { Card } from "@/components/ui";
+import { useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
 
 export default function NoDashboardPage() {
   const { user } = useSession();
+  const tr = useTr();
 
   return (
     <AppShell role="NURSE">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">
-          Emergency access
-        </h1>
-        <p className="mt-1 max-w-2xl text-muted">
-          {user ? `You are signed in as ${user.name}. ` : ""}
-          Nursing accounts do not hold standing access to patient records — you can open one
-          patient&rsquo;s chart when you are treating them and need it.
-        </p>
+        <PageHeader
+          eyebrow={tr("Nursing", "Nursing")}
+          title={tr("Emergency access", "Emergency access")}
+          subtitle={
+            (user
+              ? tr(`You are signed in as ${user.name}. `, `Aap ${user.name} ke taur par signed in hain. `)
+              : "") +
+            tr(
+              "Nursing accounts do not hold standing access to patient records — you can open one patient's chart when you are treating them and need it.",
+              "Nursing account ke paas mareez ke record ki mustaqil rasai nahi hoti — jis mareez ka aap ilaaj kar rahe hon, zaroorat par sirf usi ki file khol sakte hain.",
+            )
+          }
+        />
 
         <div className="mt-6 space-y-6">
           <EmergencyAccessPanel />

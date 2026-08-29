@@ -40,3 +40,14 @@ class NoopEventSource {
 if (!("EventSource" in window)) {
   (window as unknown as { EventSource: unknown }).EventSource = NoopEventSource;
 }
+
+// The app defaults to Roman Urdu; the UI tests assert the English strings.
+// The language is set through the store's own API rather than localStorage:
+// under this Node/jsdom combination the global `localStorage` is Node's own
+// experimental shim, whose `setItem` is not callable without a backing file.
+// `setLang` already treats storage as best-effort, so it works either way —
+// and every test renders the English branch, the same one a reviewer flips to
+// with the navbar toggle.
+import { setLang } from "@/lib/lang";
+
+setLang("en");

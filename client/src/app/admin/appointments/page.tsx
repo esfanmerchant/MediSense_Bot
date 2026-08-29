@@ -13,6 +13,7 @@
 import { useCallback, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { AppointmentRow } from "@/components/appointments";
 import { Button, Card, EmptyState, ErrorState, Input, Loading } from "@/components/ui";
 import {
@@ -21,6 +22,7 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 const FILTERS: Array<{ label: string; status?: AppointmentStatus; upcomingOnly?: boolean }> = [
@@ -33,6 +35,7 @@ const FILTERS: Array<{ label: string; status?: AppointmentStatus; upcomingOnly?:
 ];
 
 export default function AdminAppointments() {
+  const tr = useTr();
   const [active, setActive] = useState(0);
   const [day, setDay] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -54,11 +57,14 @@ export default function AdminAppointments() {
   return (
     <AppShell role="ADMIN">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">Appointments</h1>
-        <p className="mt-1 text-muted">
-          Every booking in the hospital. Clinical notes and consultation outcomes stay with the
-          treating doctor.
-        </p>
+        <PageHeader
+          eyebrow={tr("Admin portal", "Intezami portal")}
+          title={tr("Appointments", "Appointments")}
+          subtitle={tr(
+            "Every booking in the hospital. Clinical notes and consultation outcomes stay with the treating doctor.",
+            "Hospital ki har booking. Clinical notes aur consultation ke nataij ilaaj karne wale doctor ke paas hi rehte hain.",
+          )}
+        />
 
         <div className="mt-6 flex flex-wrap items-end gap-3">
           <div role="tablist" aria-label="Filter appointments" className="flex flex-wrap gap-2">

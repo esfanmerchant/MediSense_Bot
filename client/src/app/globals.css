@@ -138,6 +138,7 @@
   --shadow-overlay: var(--shadow-overlay);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-display-face), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
@@ -199,6 +200,104 @@ h3 {
 
 .animate-breathe {
   animation: breathe 2.4s ease-in-out infinite;
+}
+
+/**
+ * Motion vocabulary.
+ *
+ * Three rules keep this from becoming noise:
+ * 1. Everything here is *entrance or ambience*, never feedback — feedback
+ *    (hover, focus, pressed) stays on the components themselves.
+ * 2. Nothing loops except the two "live" indicators, because a looping
+ *    animation next to a vital sign competes with the vital sign.
+ * 3. All of it dies under prefers-reduced-motion via the override below, and
+ *    reveal hiding only ever happens from JavaScript — so reduced motion or a
+ *    failed script both mean "visible immediately", never "blank page".
+ */
+
+/* Reveal-on-scroll: applied by useReveal after mount, never in server HTML. */
+.reveal-start {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.reveal-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Page transitions (mounted by app/template.tsx on every navigation). */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.page-enter {
+  animation: page-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Slow ambient drift for decorative glows. */
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2rem, -1.5rem, 0) scale(1.08);
+  }
+}
+.animate-drift {
+  animation: drift 14s ease-in-out infinite;
+}
+.animate-drift-late {
+  animation: drift 18s ease-in-out infinite reverse;
+}
+
+/* The ECG trace in the hero fallback and loading states. */
+@keyframes ecg-dash {
+  to {
+    stroke-dashoffset: -640;
+  }
+}
+.animate-ecg {
+  stroke-dasharray: 320 320;
+  animation: ecg-dash 3.2s linear infinite;
+}
+
+/* Gradient text for the one phrase per page that earns it. */
+.text-gradient-medical {
+  background: linear-gradient(92deg, #8df5e4 0%, #b0c6ff 55%, #d9e2ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Frosted panel on the dark hero. */
+.glass-dark {
+  background: rgb(255 255 255 / 0.05);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Cards that respond to the hand. Transform + shadow only — no colour shift,
+   so status colours keep their meaning at rest and under the cursor alike. */
+.hover-lift {
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hover-lift:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-overlay);
 }
 
 /* Nobody should have motion forced on them, least of all someone reading a

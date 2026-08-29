@@ -29,6 +29,7 @@ import {
   type VitalThreshold,
   type VitalType,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 function messageOf(caught: unknown, fallback: string): string {
@@ -41,10 +42,10 @@ const SEVERITY_TONE: Record<AlertSeverity, "critical" | "warning" | "info"> = {
   INFO: "info",
 };
 
-const SEVERITY_LABEL: Record<AlertSeverity, string> = {
-  CRITICAL: "Critical",
-  WARNING: "Warning",
-  INFO: "Information",
+const SEVERITY_LABEL: Record<AlertSeverity, [string, string]> = {
+  CRITICAL: ["Critical", "Sangeen"],
+  WARNING: ["Warning", "Khabardari"],
+  INFO: ["Information", "Ittila"],
 };
 
 /** Column order and presentation for a reading. Mirrors the server's mapping. */
@@ -131,10 +132,14 @@ function useAlertStream(onAlert: (alert: Alert) => void, onVital?: (vital: Vital
 }
 
 function FeedIndicator({ state }: { state: FeedState }) {
+  const tr = useTr();
   const copy: Record<FeedState, string> = {
-    connecting: "Connecting to live updates",
-    live: "Live",
-    offline: "Live updates disconnected — reload to reconnect",
+    connecting: tr("Connecting to live updates", "Live updates se jur rahe hain"),
+    live: tr("Live", "Live"),
+    offline: tr(
+      "Live updates disconnected — reload to reconnect",
+      "Live updates mungqata — dobara jorne ke liye reload karein",
+    ),
   };
   const tone: Record<FeedState, "good" | "neutral" | "warning"> = {
     connecting: "neutral",
@@ -159,6 +164,7 @@ function AlertRow({
   alert: Alert;
   onChanged: (next: Alert) => void;
 }) {
+  const tr = useTr();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -195,9 +201,9 @@ function AlertRow({
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={SEVERITY_TONE[alert.severity]}>{SEVERITY_LABEL[alert.severity]}</Badge>
+        <Badge tone={SEVERITY_TONE[alert.severity]}>{tr(...SEVERITY_LABEL[alert.severity])}</Badge>
         <Badge tone={settled ? "good" : "neutral"}>{alert.status.toLowerCase()}</Badge>
-        {alert.escalationLevel > 0 && <Badge tone="critical">escalated</Badge>}
+        {alert.escalationLevel > 0 && <Badge tone="critical">{tr("escalated", "shiddat barhi")}</Badge>}
         <span className="ml-auto text-sm text-muted tabular-nums">
           {when(alert.createdAt)}
         </span>
@@ -215,11 +221,11 @@ function AlertRow({
         <div className="mt-3 flex flex-wrap gap-2">
           {alert.status === "OPEN" && (
             <Button variant="secondary" disabled={busy} onClick={() => void act("acknowledge")}>
-              I am looking at this
+              {tr("I am looking at this", "Main isay dekh raha hoon")}
             </Button>
           )}
           <Button disabled={busy} onClick={() => void act("resolve")}>
-            Resolve
+            {tr("Resolve", "Hal karein")}
           </Button>
         </div>
       )}
@@ -235,6 +241,7 @@ function AlertRow({
  * purely by time would bury it.
  */
 export function AlertsPanel() {
+  const tr = useTr();
   const fetched = useAsync(() => alertsApi.list({ limit: 50 }), []);
   const [live, setLive] = useState<Record<string, Alert>>({});
   const [showResolved, setShowResolved] = useState(false);
@@ -265,31 +272,41 @@ export function AlertsPanel() {
 
   return (
     <Card
-      title="Vital alerts"
-      description="Raised automatically when a reading crosses its configured threshold."
+      title={tr("Vital alerts", "Vitals ke alerts")}
+      description={tr(
+        "Raised automatically when a reading crosses its configured threshold.",
+        "Jab koi reading muqarrar had paar karti hai to alert khud uthta hai.",
+      )}
       action={
         <div className="flex items-center gap-3">
           <FeedIndicator state={feed} />
           <Button variant="secondary" onClick={() => setShowResolved((value) => !value)}>
-            {showResolved ? "Hide resolved" : "Show resolved"}
+            {showResolved
+              ? tr("Hide resolved", "Hal shuda chhupayein")
+              : tr("Show resolved", "Hal shuda dikhayein")}
           </Button>
         </div>
       }
     >
-      {fetched.loading && <Loading label="Loading alerts" />}
+      {fetched.loading && <Loading label={tr("Loading alerts", "Alerts load ho rahe hain")} />}
       {fetched.error && <ErrorState message={fetched.error.message} onRetry={fetched.reload} />}
 
       {!fetched.loading && !fetched.error && rows.length === 0 && (
         <EmptyState
-          title={showResolved ? "No alerts" : "No open alerts"}
-          description="Readings that cross a threshold will appear here as they are recorded."
+          title={
+            showResolved ? tr("No alerts", "Koi alert nahi") : tr("No open alerts", "Koi khula alert nahi")
+          }
+          description={tr(
+            "Readings that cross a threshold will appear here as they are recorded.",
+            "Had paar karne wali readings yahan usi waqt zahir hongi.",
+          )}
         />
       )}
 
       {rows.length > 0 && (
         <>
           <p className="mb-3 text-sm text-muted">
-            <span className="font-medium tabular-nums">{openCount}</span> needing attention
+            <span className="font-medium tabular-nums">{openCount}</span> {tr("needing attention", "tawajjo talab")}
           </p>
           <ul className="space-y-3">
             {rows.map((alert) => (
@@ -308,6 +325,7 @@ export function AlertsPanel() {
 
 /** One patient's readings, with values outside their rules marked. */
 export function VitalsTable({ patientId }: { patientId: string }) {
+  const tr = useTr();
   const readings = useAsync(() => vitalsApi.list(patientId, { limit: 50 }), [patientId]);
   const rules = useAsync(() => vitalsApi.thresholds(patientId), [patientId]);
 
@@ -320,14 +338,23 @@ export function VitalsTable({ patientId }: { patientId: string }) {
   const rows = readings.data?.data ?? [];
 
   return (
-    <Card title="Recent readings" description="Newest first. Values outside range are marked.">
-      {readings.loading && <Loading label="Loading readings" />}
+    <Card
+      title={tr("Recent readings", "Taaza readings")}
+      description={tr(
+        "Newest first. Values outside range are marked.",
+        "Sab se nayi pehle. Had se bahar values nishan-zadah hain.",
+      )}
+    >
+      {readings.loading && <Loading label={tr("Loading readings", "Readings load ho rahi hain")} />}
       {readings.error && (
         <ErrorState message={readings.error.message} onRetry={readings.reload} />
       )}
 
       {!readings.loading && !readings.error && rows.length === 0 && (
-        <EmptyState title="No readings yet" description="Recorded observations appear here." />
+        <EmptyState
+          title={tr("No readings yet", "Abhi koi reading nahi")}
+          description={tr("Recorded observations appear here.", "Darj shuda readings yahan nazar aati hain.")}
+        />
       )}
 
       {rows.length > 0 && (
@@ -339,7 +366,7 @@ export function VitalsTable({ patientId }: { patientId: string }) {
             <thead>
               <tr className="border-b border-line text-left">
                 <th scope="col" className="py-2 pr-4 font-medium">
-                  Recorded
+                  {tr("Recorded", "Darj hui")}
                 </th>
                 {COLUMNS.map((column) => (
                   <th key={column.key} scope="col" className="py-2 pr-4 font-medium">
@@ -370,7 +397,9 @@ export function VitalsTable({ patientId }: { patientId: string }) {
                             )}
                           >
                             {value}
-                            {/* Spelled out, so the mark is not colour-only. */}
+                            {/* Spelled out, so the mark is not colour-only. English in both
+                                locales: the tests assert it, and a screen reader set to
+                                English is the common case on ward hardware. */}
                             {flagged && <span className="sr-only"> (outside range)</span>}
                           </span>
                         )}
@@ -386,8 +415,9 @@ export function VitalsTable({ patientId }: { patientId: string }) {
 
       {rules.data && rules.data.unconfigured.length > 0 && (
         <p className="mt-4 rounded-md border border-warning/50 bg-warning-soft px-3 py-2 text-sm text-warning">
-          No threshold is configured for {rules.data.unconfigured.join(", ").toLowerCase()}, so
-          those readings will never raise an alert.
+          {tr("No threshold is configured for", "In ke liye koi had muqarrar nahi:")}{" "}
+          {rules.data.unconfigured.join(", ").toLowerCase()}
+          {tr(", so those readings will never raise an alert.", " — is liye yeh readings kabhi alert nahi uthayengi.")}
         </p>
       )}
     </Card>
@@ -435,6 +465,7 @@ export function RecordVitals({
   patientId: string;
   onRecorded?: () => void;
 }) {
+  const tr = useTr();
   const [draft, setDraft] = useState<ReadingDraft>(EMPTY_DRAFT);
   const [raised, setRaised] = useState<Alert[]>([]);
   const [busy, setBusy] = useState(false);
@@ -472,8 +503,11 @@ export function RecordVitals({
 
   return (
     <Card
-      title="Record observations"
-      description="Fill in whatever was measured. Blank fields are not recorded."
+      title={tr("Record observations", "Readings darj karein")}
+      description={tr(
+        "Fill in whatever was measured. Blank fields are not recorded.",
+        "Jo napa gaya wahi bharein. Khali khane darj nahi hote.",
+      )}
     >
       <form
         className="space-y-4"
@@ -508,7 +542,9 @@ export function RecordVitals({
             className="rounded-md border-2 border-critical bg-critical-soft p-4"
           >
             <p className="font-semibold text-critical">
-              {raised.length === 1 ? "An alert was raised" : `${raised.length} alerts were raised`}
+              {raised.length === 1
+                ? tr("An alert was raised", "Ek alert uth gaya hai")
+                : tr(`${raised.length} alerts were raised`, `${raised.length} alerts uth gaye hain`)}
             </p>
             <ul className="mt-2 space-y-1 text-sm text-strong">
               {raised.map((alert) => (
@@ -516,19 +552,19 @@ export function RecordVitals({
               ))}
             </ul>
             <p className="mt-2 text-sm text-strong">
-              The responsible doctor has been notified.
+              {tr("The responsible doctor has been notified.", "Zimmedar doctor ko ittila de di gayi hai.")}
             </p>
           </div>
         )}
 
         {raised.length === 0 && !error && !busy && !anyValue && (
           <p className="text-sm text-muted">
-            Enter at least one measurement to save.
+            {tr("Enter at least one measurement to save.", "Save karne ke liye kam az kam ek reading likhein.")}
           </p>
         )}
 
         <Button type="submit" disabled={busy || !anyValue}>
-          {busy ? "Saving…" : "Save reading"}
+          {busy ? tr("Saving…", "Save ho raha hai…") : tr("Save reading", "Reading save karein")}
         </Button>
       </form>
     </Card>
@@ -543,14 +579,18 @@ export function RecordVitals({
  * falling back to the hospital's.
  */
 export function ThresholdsPanel({ patientId }: { patientId: string }) {
+  const tr = useTr();
   const fetched = useAsync(() => vitalsApi.thresholds(patientId), [patientId]);
 
   return (
     <Card
-      title="Alert thresholds"
-      description="A rule set for this patient overrides the hospital default."
+      title={tr("Alert thresholds", "Alert ki hadein")}
+      description={tr(
+        "A rule set for this patient overrides the hospital default.",
+        "Is mareez ke liye banaya gaya usool hospital ke aam usool par foqiyat rakhta hai.",
+      )}
     >
-      {fetched.loading && <Loading label="Loading thresholds" />}
+      {fetched.loading && <Loading label={tr("Loading thresholds", "Hadein load ho rahi hain")} />}
       {fetched.error && <ErrorState message={fetched.error.message} onRetry={fetched.reload} />}
 
       {fetched.data && (
@@ -559,10 +599,10 @@ export function ThresholdsPanel({ patientId }: { patientId: string }) {
             <caption className="sr-only">Thresholds governing this patient</caption>
             <thead>
               <tr className="border-b border-line text-left">
-                <th scope="col" className="py-2 pr-4 font-medium">Vital</th>
-                <th scope="col" className="py-2 pr-4 font-medium">Range</th>
-                <th scope="col" className="py-2 pr-4 font-medium">Severity</th>
-                <th scope="col" className="py-2 pr-4 font-medium">Applies from</th>
+                <th scope="col" className="py-2 pr-4 font-medium">{tr("Vital", "Vital")}</th>
+                <th scope="col" className="py-2 pr-4 font-medium">{tr("Range", "Had")}</th>
+                <th scope="col" className="py-2 pr-4 font-medium">{tr("Severity", "Shiddat")}</th>
+                <th scope="col" className="py-2 pr-4 font-medium">{tr("Applies from", "Kahan se laagu")}</th>
               </tr>
             </thead>
             <tbody>
@@ -573,18 +613,20 @@ export function ThresholdsPanel({ patientId }: { patientId: string }) {
                     {rule.minValue ?? "—"} to {rule.maxValue ?? "—"} {rule.unit}
                     {rule.sustainedReadings > 1 && (
                       <span className="ml-2 text-faint">
-                        after {rule.sustainedReadings} readings
+                        {tr(`after ${rule.sustainedReadings} readings`, `${rule.sustainedReadings} readings ke baad`)}
                       </span>
                     )}
                   </td>
                   <td className="py-2 pr-4">
                     <Badge tone={SEVERITY_TONE[rule.severity]}>
-                      {SEVERITY_LABEL[rule.severity]}
+                      {tr(...SEVERITY_LABEL[rule.severity])}
                     </Badge>
                   </td>
                   <td className="py-2 pr-4">
                     <Badge tone={rule.scope === "PATIENT" ? "info" : "neutral"}>
-                      {rule.scope === "PATIENT" ? "This patient" : "Hospital default"}
+                      {rule.scope === "PATIENT"
+                        ? tr("This patient", "Yeh mareez")
+                        : tr("Hospital default", "Hospital ka aam usool")}
                     </Badge>
                   </td>
                 </tr>

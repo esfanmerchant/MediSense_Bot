@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Bricolage_Grotesque, Inter } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { SessionProvider } from "@/lib/session";
@@ -20,6 +20,22 @@ const inter = Inter({
 });
 
 /**
+ * The display face, for headlines only.
+ *
+ * Inter stays on every data surface — the design system chose it for tables of
+ * doses and times, and that holds. But headlines set in the body face read as a
+ * settings page, and this product has a public front door now. Bricolage's
+ * slightly flared, characterful cuts give the big type a voice without touching
+ * a single clinical screen's legibility.
+ */
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display-face",
+  display: "swap",
+  weight: ["500", "600", "700", "800"],
+});
+
+/**
  * Material Symbols is *not* loaded through `next/font`.
  *
  * It cannot be: this Next version's bundled Google Fonts list covers text faces
@@ -34,12 +50,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "MediSense — Smart Healthcare Management",
   description:
-    "One place for appointments, records, vitals and billing — for patients and the people caring for them.",
+    "Sehat ka sara record, appointments, vitals aur billing — sab ek jagah. One place for your whole care.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="ur-Latn" className={`${inter.variable} ${display.variable}`} suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />

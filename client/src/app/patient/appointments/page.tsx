@@ -12,6 +12,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import {
   AppointmentList,
   AppointmentRow,
@@ -29,11 +30,13 @@ import {
   cx,
 } from "@/components/ui";
 import { ApiError, appointments, doctors, type Appointment } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 type Mode = { kind: "idle" } | { kind: "book" } | { kind: "move"; appointment: Appointment };
 
 export default function PatientAppointments() {
+  const tr = useTr();
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [refresh, setRefresh] = useState(0);
   const reloadAll = useCallback(() => setRefresh((n) => n + 1), []);
@@ -54,12 +57,14 @@ export default function PatientAppointments() {
       <div id="main">
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-strong">
-              Appointments
-            </h1>
-            <p className="mt-1 text-muted">
-              Book a visit, or reschedule one you have already booked.
-            </p>
+            <PageHeader
+              eyebrow={tr("Patient portal", "Mareez ka portal")}
+              title={tr("Appointments", "Appointments")}
+              subtitle={tr(
+                "Book a visit, or reschedule one you have already booked.",
+                "Naya appointment book karein, ya pehle se booked appointment ka waqt badlein.",
+              )}
+            />
           </div>
           {mode.kind === "idle" && (
             <Button className="ml-auto" onClick={() => setMode({ kind: "book" })}>

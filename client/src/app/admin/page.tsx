@@ -1,8 +1,10 @@
 "use client";
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { Badge, Card, EmptyState, ErrorState, Loading, StatTile } from "@/components/ui";
 import { dashboard } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -17,19 +19,22 @@ const ACTION_LABELS: Record<string, string> = {
 
 export default function AdminDashboard() {
   const { data, error, loading, reload } = useAsync(() => dashboard.admin());
+  const tr = useTr();
   const unreviewed = data?.counts.unreviewedEmergencyGrants ?? 0;
 
   return (
     <AppShell role="ADMIN">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">
-          Hospital overview
-        </h1>
-        <p className="mt-1 text-muted">
-          Users, departments, activity and security events.
-        </p>
+        <PageHeader
+          eyebrow={tr("Admin portal", "Intezami portal")}
+          title={tr("Hospital overview", "Hospital ka jaiza")}
+          subtitle={tr(
+            "Users, departments, activity and security events.",
+            "Users, departments, sargarmi aur security ke waqiat.",
+          )}
+        />
 
-        {loading && <Loading label="Loading the overview" />}
+        {loading && <Loading label={tr("Loading the overview", "Jaiza load ho raha hai")} />}
         {error && <ErrorState message={error.message} onRetry={reload} />}
 
         {data && (

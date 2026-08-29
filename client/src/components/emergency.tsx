@@ -23,6 +23,7 @@ import {
   type EmergencyGrant,
   type GrantedAccess,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 function messageOf(caught: unknown, fallback: string): string {
@@ -53,23 +54,29 @@ function minutesLeft(iso: string): number {
  * is designed for.
  */
 function WhatHappensNotice() {
+  const tr = useTr();
   return (
     <div className="rounded-md border border-warning/50 bg-warning-soft p-4 text-sm">
       <p className="font-semibold text-warning">
-        What happens when you do this
+        {tr("What happens when you do this", "Aisa karne par kya hota hai")}
       </p>
       <ul className="mt-2 list-disc space-y-1 pl-5 text-warning">
-        <li>You get access to <strong>this patient only</strong>, not to any other record.</li>
-        <li>It expires automatically, and you can hand it back at any time.</li>
-        <li>Your reason is stored, and every record you open is counted and logged.</li>
-        <li>The patient is told their record was opened this way.</li>
-        <li>An administrator reviews it afterwards.</li>
+        <li>
+          {tr("You get access to", "Aap ko rasai milti hai sirf")}{" "}
+          <strong>{tr("this patient only", "isi ek mareez ki")}</strong>
+          {tr(", not to any other record.", " — kisi aur record ki nahi.")}
+        </li>
+        <li>{tr("It expires automatically, and you can hand it back at any time.", "Yeh khud khatam ho jaati hai, aur aap jab chahein wapas kar sakte hain.")}</li>
+        <li>{tr("Your reason is stored, and every record you open is counted and logged.", "Aap ki wajah mehfooz hoti hai, aur jo record kholein woh gina aur darj hota hai.")}</li>
+        <li>{tr("The patient is told their record was opened this way.", "Mareez ko bataya jaata hai ke unka record is tarah khola gaya.")}</li>
+        <li>{tr("An administrator reviews it afterwards.", "Baad mein administrator iska jaiza leta hai.")}</li>
       </ul>
     </div>
   );
 }
 
 function GrantCard({ grant, onRevoked }: { grant: EmergencyGrant; onRevoked: () => void }) {
+  const tr = useTr();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,12 +96,13 @@ function GrantCard({ grant, onRevoked }: { grant: EmergencyGrant; onRevoked: () 
   return (
     <li className="rounded-lg border border-accent/40 bg-accent-soft p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone="good">Access open</Badge>
+        <Badge tone="good">{tr("Access open", "Rasai khuli hai")}</Badge>
         <span className="text-sm text-muted tabular-nums">
-          expires in {minutesLeft(grant.expiresAt)} min
+          {tr("expires in", "khatam hogi")} {minutesLeft(grant.expiresAt)} {tr("min", "min mein")}
         </span>
         <span className="ml-auto text-sm text-muted tabular-nums">
-          {grant.accessCount} record{grant.accessCount === 1 ? "" : "s"} opened
+          {grant.accessCount}{" "}
+          {tr(`record${grant.accessCount === 1 ? "" : "s"} opened`, "record khole gaye")}
         </span>
       </div>
 
@@ -107,7 +115,7 @@ function GrantCard({ grant, onRevoked }: { grant: EmergencyGrant; onRevoked: () 
       )}
 
       <Button variant="secondary" className="mt-3" disabled={busy} onClick={() => void revoke()}>
-        {busy ? "Ending…" : "I am finished — end access"}
+        {busy ? tr("Ending…", "Khatam ho rahi hai…") : tr("I am finished — end access", "Kaam ho gaya — rasai khatam karein")}
       </Button>
     </li>
   );
@@ -115,6 +123,7 @@ function GrantCard({ grant, onRevoked }: { grant: EmergencyGrant; onRevoked: () 
 
 /** Request break-glass access, and manage what is currently open. */
 export function EmergencyAccessPanel() {
+  const tr = useTr();
   const active = useAsync(() => emergencyApi.active(), []);
   const [patientId, setPatientId] = useState("");
   const [reason, setReason] = useState("");
@@ -146,8 +155,11 @@ export function EmergencyAccessPanel() {
   return (
     <div className="space-y-6">
       <Card
-        title="Emergency access"
-        description="For a patient you are treating right now who you are not otherwise authorised to see."
+        title={tr("Emergency access", "Emergency access")}
+        description={tr(
+          "For a patient you are treating right now who you are not otherwise authorised to see.",
+          "Us mareez ke liye jiska aap abhi ilaaj kar rahe hain magar jise dekhne ki aam ijazat aap ke paas nahi.",
+        )}
       >
         <form
           className="space-y-4"
@@ -159,9 +171,12 @@ export function EmergencyAccessPanel() {
           <WhatHappensNotice />
 
           <Field
-            label="Patient identifier"
+            label={tr("Patient identifier", "Mareez ki shanakht")}
             htmlFor="emergency-patient"
-            hint="The patient's record number or id, from their wristband or the ward list."
+            hint={tr(
+              "The patient's record number or id, from their wristband or the ward list.",
+              "Mareez ka record number ya id — wristband ya ward list se.",
+            )}
           >
             <Input
               id="emergency-patient"
@@ -173,12 +188,18 @@ export function EmergencyAccessPanel() {
           </Field>
 
           <Field
-            label="Why do you need access?"
+            label={tr("Why do you need access?", "Aap ko rasai kyun chahiye?")}
             htmlFor="emergency-reason"
             hint={
               reason.trim().length < MIN_REASON
-                ? `A sentence, not a word — at least ${MIN_REASON} characters. This is stored and reviewed.`
-                : "This is stored on the record and reviewed by an administrator."
+                ? tr(
+                    `A sentence, not a word — at least ${MIN_REASON} characters. This is stored and reviewed.`,
+                    `Ek jumla likhein, sirf lafz nahi — kam az kam ${MIN_REASON} huroof. Yeh mehfooz hota hai aur iska jaiza hota hai.`,
+                  )
+                : tr(
+                    "This is stored on the record and reviewed by an administrator.",
+                    "Yeh record par mehfooz hota hai aur administrator iska jaiza leta hai.",
+                  )
             }
           >
             <textarea
@@ -201,8 +222,8 @@ export function EmergencyAccessPanel() {
             >
               <p className="font-semibold text-primary">
                 {granted.created
-                  ? "Access granted"
-                  : "You already had access to this patient"}
+                  ? tr("Access granted", "Rasai mil gayi")
+                  : tr("You already had access to this patient", "Is mareez ki rasai aap ke paas pehle se thi")}
               </p>
               <p className="mt-1 text-sm text-primary">{granted.notice}</p>
             </div>
@@ -212,19 +233,25 @@ export function EmergencyAccessPanel() {
               action, and making it look like a mistake discourages the very
               use it exists for. */}
           <Button type="submit" size="lg" disabled={busy || !ready}>
-            {busy ? "Requesting…" : "Request emergency access"}
+            {busy ? tr("Requesting…", "Darkhwast ja rahi hai…") : tr("Request emergency access", "Emergency access ki darkhwast karein")}
           </Button>
         </form>
       </Card>
 
-      <Card title="Access you currently hold" description="Hand it back as soon as you are done.">
-        {active.loading && <Loading label="Checking your access" />}
+      <Card
+        title={tr("Access you currently hold", "Aap ke paas is waqt jo rasai hai")}
+        description={tr("Hand it back as soon as you are done.", "Kaam khatam hote hi wapas kar dein.")}
+      >
+        {active.loading && <Loading label={tr("Checking your access", "Rasai check ho rahi hai")} />}
         {active.error && <ErrorState message={active.error.message} onRetry={active.reload} />}
 
         {!active.loading && !active.error && (active.data ?? []).length === 0 && (
           <EmptyState
-            title="No open access"
-            description="You are not currently holding emergency access to any record."
+            title={tr("No open access", "Koi khuli rasai nahi")}
+            description={tr(
+              "You are not currently holding emergency access to any record.",
+              "Is waqt aap ke paas kisi record ki emergency rasai nahi hai.",
+            )}
           />
         )}
 
@@ -245,6 +272,7 @@ export function EmergencyAccessPanel() {
 // ---------------------------------------------------------------------------
 
 function ReviewRow({ grant, onReviewed }: { grant: EmergencyGrant; onReviewed: (next: EmergencyGrant) => void }) {
+  const tr = useTr();
   const [open, setOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
@@ -276,13 +304,13 @@ function ReviewRow({ grant, onReviewed }: { grant: EmergencyGrant; onReviewed: (
     >
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={grant.live ? "critical" : "neutral"}>
-          {grant.live ? "Still open" : grant.status.toLowerCase()}
+          {grant.live ? tr("Still open", "Abhi khuli hai") : grant.status.toLowerCase()}
         </Badge>
         <Badge tone={reviewed ? "good" : "warning"}>
-          {reviewed ? "Reviewed" : "Awaiting review"}
+          {reviewed ? tr("Reviewed", "Jaiza ho gaya") : tr("Awaiting review", "Jaiza baqi hai")}
         </Badge>
         <span className="text-sm text-muted">
-          {grant.requesterName ?? "(deleted account)"}
+          {grant.requesterName ?? tr("(deleted account)", "(hazf shuda account)")}
         </span>
         <span className="ml-auto text-sm text-muted tabular-nums">
           {when(grant.grantedAt)}
@@ -294,8 +322,9 @@ function ReviewRow({ grant, onReviewed }: { grant: EmergencyGrant; onReviewed: (
       <p className="mt-1 text-sm text-muted">
         {/* The count is the first thing a reviewer should weigh: one read and
             ninety reads are very different events. */}
-        <span className="font-medium tabular-nums">{grant.accessCount}</span> record
-        {grant.accessCount === 1 ? "" : "s"} opened · patient{" "}
+        <span className="font-medium tabular-nums">{grant.accessCount}</span>{" "}
+        {tr(`record${grant.accessCount === 1 ? "" : "s"} opened`, "record khole gaye")} ·{" "}
+        {tr("patient", "mareez")}{" "}
         <span className="tabular-nums">{grant.patientId}</span>
       </p>
 
@@ -309,16 +338,19 @@ function ReviewRow({ grant, onReviewed }: { grant: EmergencyGrant; onReviewed: (
 
       {!reviewed && !open && (
         <Button variant="secondary" className="mt-3" onClick={() => setOpen(true)}>
-          Record review
+          {tr("Record review", "Jaiza darj karein")}
         </Button>
       )}
 
       {!reviewed && open && (
         <div className="mt-3 space-y-3">
           <Field
-            label="Review notes"
+            label={tr("Review notes", "Jaize ke notes")}
             htmlFor={`review-${grant.id}`}
-            hint="What you checked, and whether the access was appropriate."
+            hint={tr(
+              "What you checked, and whether the access was appropriate.",
+              "Aap ne kya jaancha, aur kya yeh rasai munasib thi.",
+            )}
           >
             <Input
               id={`review-${grant.id}`}
@@ -329,10 +361,10 @@ function ReviewRow({ grant, onReviewed }: { grant: EmergencyGrant; onReviewed: (
           </Field>
           <div className="flex flex-wrap gap-2">
             <Button disabled={busy || notes.trim().length < 3} onClick={() => void submit()}>
-              {busy ? "Saving…" : "Save review"}
+              {busy ? tr("Saving…", "Save ho raha hai…") : tr("Save review", "Jaiza save karein")}
             </Button>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+              {tr("Cancel", "Mansookh")}
             </Button>
           </div>
         </div>
@@ -350,6 +382,7 @@ function ReviewRow({ grant, onReviewed }: { grant: EmergencyGrant; onReviewed: (
  * something to see is not a control.
  */
 export function EmergencyReviewPanel() {
+  const tr = useTr();
   const fetched = useAsync(() => emergencyApi.list({ limit: 50 }), []);
   const [reviewed, setReviewed] = useState<Record<string, EmergencyGrant>>({});
 
@@ -358,11 +391,14 @@ export function EmergencyReviewPanel() {
 
   return (
     <Card
-      title="Emergency access"
-      description="Every break-glass grant, and whether it has been reviewed."
+      title={tr("Emergency access", "Emergency access")}
+      description={tr(
+        "Every break-glass grant, and whether it has been reviewed.",
+        "Har emergency grant, aur yeh ke uska jaiza hua ya nahi.",
+      )}
       action={
         <div className="text-right">
-          <p className="text-xs text-muted">Awaiting review</p>
+          <p className="text-xs text-muted">{tr("Awaiting review", "Jaiza baqi")}</p>
           <p
             className={
               outstanding > 0
@@ -375,13 +411,16 @@ export function EmergencyReviewPanel() {
         </div>
       }
     >
-      {fetched.loading && <Loading label="Loading emergency access" />}
+      {fetched.loading && <Loading label={tr("Loading emergency access", "Emergency access load ho raha hai")} />}
       {fetched.error && <ErrorState message={fetched.error.message} onRetry={fetched.reload} />}
 
       {!fetched.loading && !fetched.error && rows.length === 0 && (
         <EmptyState
-          title="No emergency access has been used"
-          description="Break-glass grants appear here as soon as they are issued."
+          title={tr("No emergency access has been used", "Ab tak koi emergency access istemal nahi hui")}
+          description={tr(
+            "Break-glass grants appear here as soon as they are issued.",
+            "Emergency grants jari hote hi yahan nazar aate hain.",
+          )}
         />
       )}
 

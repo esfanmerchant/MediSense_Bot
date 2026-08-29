@@ -5,14 +5,17 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Icon } from "@/components/Icon";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Button, Loading, Unauthorized, cx } from "@/components/ui";
+import { useTr } from "@/lib/lang";
 import { homePathFor, useSession } from "@/lib/session";
 import type { Role } from "@/lib/api";
 
 interface NavItem {
   href: string;
-  label: string;
+  /** [English, Roman Urdu] — resolved by the language toggle at render. */
+  label: [string, string];
   icon: string;
 }
 
@@ -28,28 +31,28 @@ interface NavItem {
  */
 const NAV: Record<Role, NavItem[]> = {
   PATIENT: [
-    { href: "/patient", label: "Dashboard", icon: "dashboard" },
-    { href: "/patient/appointments", label: "Appointments", icon: "calendar_today" },
-    { href: "/patient/records", label: "Medical records", icon: "description" },
-    { href: "/patient/documents", label: "Documents", icon: "folder_open" },
-    { href: "/patient/vitals", label: "Vitals", icon: "monitor_heart" },
-    { href: "/patient/billing", label: "Billing", icon: "payments" },
-    { href: "/patient/assistant", label: "Health assistant", icon: "smart_toy" },
+    { href: "/patient", label: ["Dashboard", "Dashboard"], icon: "dashboard" },
+    { href: "/patient/appointments", label: ["Appointments", "Appointments"], icon: "calendar_today" },
+    { href: "/patient/records", label: ["Medical records", "Medical record"], icon: "description" },
+    { href: "/patient/documents", label: ["Documents", "Documents"], icon: "folder_open" },
+    { href: "/patient/vitals", label: ["Vitals", "Vitals"], icon: "monitor_heart" },
+    { href: "/patient/billing", label: ["Billing", "Billing"], icon: "payments" },
+    { href: "/patient/assistant", label: ["Health assistant", "Health assistant"], icon: "smart_toy" },
   ],
   DOCTOR: [
-    { href: "/doctor", label: "Dashboard", icon: "dashboard" },
-    { href: "/doctor/patients", label: "My patients", icon: "group" },
-    { href: "/doctor/appointments", label: "Appointments", icon: "calendar_today" },
-    { href: "/doctor/alerts", label: "Alerts", icon: "notifications_active" },
+    { href: "/doctor", label: ["Dashboard", "Dashboard"], icon: "dashboard" },
+    { href: "/doctor/patients", label: ["My patients", "Mere mareez"], icon: "group" },
+    { href: "/doctor/appointments", label: ["Appointments", "Appointments"], icon: "calendar_today" },
+    { href: "/doctor/alerts", label: ["Alerts", "Alerts"], icon: "notifications_active" },
   ],
   ADMIN: [
-    { href: "/admin", label: "Dashboard", icon: "dashboard" },
-    { href: "/admin/appointments", label: "Appointments", icon: "calendar_today" },
-    { href: "/admin/billing", label: "Billing", icon: "payments" },
-    { href: "/admin/emergency", label: "Emergency access", icon: "e911_emergency" },
-    { href: "/admin/audit", label: "Audit trail", icon: "policy" },
+    { href: "/admin", label: ["Dashboard", "Dashboard"], icon: "dashboard" },
+    { href: "/admin/appointments", label: ["Appointments", "Appointments"], icon: "calendar_today" },
+    { href: "/admin/billing", label: ["Billing", "Billing"], icon: "payments" },
+    { href: "/admin/emergency", label: ["Emergency access", "Emergency access"], icon: "e911_emergency" },
+    { href: "/admin/audit", label: ["Audit trail", "Audit trail"], icon: "policy" },
   ],
-  NURSE: [{ href: "/no-dashboard", label: "Emergency access", icon: "e911_emergency" }],
+  NURSE: [{ href: "/no-dashboard", label: ["Emergency access", "Emergency access"], icon: "e911_emergency" }],
 };
 
 /** Where the rail's emergency button takes each role. Patients have none. */
@@ -68,6 +71,7 @@ const EMERGENCY_HREF: Partial<Record<Role, string>> = {
  */
 function InactivityWarning() {
   const { showWarning, secondsRemaining, stayAlive, signOut } = useSession();
+  const tr = useTr();
   if (!showWarning || secondsRemaining === null) return null;
 
   return (
@@ -80,15 +84,16 @@ function InactivityWarning() {
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3">
         <Icon name="timer" className="text-[20px] text-warning" />
         <p className="text-sm font-semibold text-warning">
-          You will be signed out in <span className="tabular-nums">{secondsRemaining}s</span>{" "}
-          because of inactivity.
+          {tr("You will be signed out in", "Ghair-faal rehne par aap")}{" "}
+          <span className="tabular-nums">{secondsRemaining}s</span>{" "}
+          {tr("because of inactivity.", "mein sign out ho jayenge.")}
         </p>
         <div className="ml-auto flex gap-2">
           <Button size="md" onClick={stayAlive}>
-            Stay signed in
+            {tr("Stay signed in", "Signed in rahein")}
           </Button>
           <Button size="md" variant="secondary" onClick={() => void signOut()}>
-            Sign out now
+            {tr("Sign out now", "Abhi sign out karein")}
           </Button>
         </div>
       </div>
@@ -115,6 +120,7 @@ function Rail({
   emergencyHref?: string;
   onNavigate?: () => void;
 }) {
+  const tr = useTr();
   return (
     // The brand link sits outside the <nav> landmark on purpose. It is chrome —
     // a way back to the public site — not one of this role's destinations.
@@ -148,7 +154,7 @@ function Rail({
             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-critical text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
             <Icon name="warning" filled className="text-[20px]" />
-            Emergency access
+            {tr("Emergency access", "Emergency access")}
           </Link>
         </div>
       )}
@@ -172,7 +178,7 @@ function Rail({
                   )}
                 >
                   <Icon name={item.icon} filled={active} className="text-[20px]" />
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate">{tr(...item.label)}</span>
                 </Link>
               </li>
             );
@@ -192,6 +198,7 @@ function Rail({
  */
 export function AppShell({ role, children }: { role: Role; children: ReactNode }) {
   const { user, loading, signOut } = useSession();
+  const tr = useTr();
   const pathname = usePathname();
   const router = useRouter();
   const [railOpen, setRailOpen] = useState(false);
@@ -203,7 +210,7 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
   if (loading) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-16">
-        <Loading label="Checking your session" />
+        <Loading label={tr("Checking your session", "Aap ka session check ho raha hai")} />
       </main>
     );
   }
@@ -214,10 +221,13 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
     return (
       <main className="mx-auto max-w-2xl px-4 py-16">
         <Unauthorized
-          message={`This area is for ${role.toLowerCase()}s. Your account is signed in as ${user.role.toLowerCase()}.`}
+          message={tr(
+            `This area is for ${role.toLowerCase()}s. Your account is signed in as ${user.role.toLowerCase()}.`,
+            `Yeh hissa sirf ${role.toLowerCase()} ke liye hai. Aap ${user.role.toLowerCase()} ke taur par signed in hain.`,
+          )}
         />
         <Button className="mt-4" onClick={() => router.replace(homePathFor(user.role))}>
-          Go to your dashboard
+          {tr("Go to your dashboard", "Apne dashboard par jayein")}
         </Button>
       </main>
     );
@@ -269,6 +279,7 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
           </button>
 
           <div className="ml-auto flex items-center gap-2">
+            <LanguageToggle />
             <span className="mr-1 hidden text-right sm:block">
               <span className="block text-sm font-semibold text-strong">{user.name}</span>
               <span className="block text-xs capitalize text-faint">
@@ -278,7 +289,7 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
             <NotificationBell role={user.role} />
             <Button variant="secondary" onClick={() => void signOut()}>
               <Icon name="logout" className="text-[18px]" />
-              <span className="hidden sm:inline">Sign out</span>
+              <span className="hidden sm:inline">{tr("Sign out", "Sign out")}</span>
             </Button>
           </div>
         </header>

@@ -12,11 +12,14 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { Badge, Card, EmptyState, ErrorState, Input, Loading } from "@/components/ui";
 import { doctors } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 export default function DoctorPatients() {
+  const tr = useTr();
   const [search, setSearch] = useState("");
   const list = useAsync(() => doctors.myPatients({ limit: 100 }), []);
 
@@ -34,12 +37,16 @@ export default function DoctorPatients() {
   return (
     <AppShell role="DOCTOR">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">My patients</h1>
-        <p className="mt-1 text-muted">
-          Patients you are assigned to or currently treating.
-        </p>
+        <PageHeader
+          eyebrow={tr("Doctor portal", "Doctor ka portal")}
+          title={tr("My patients", "Mere mareez")}
+          subtitle={tr(
+            "Patients you are assigned to or currently treating.",
+            "Woh mareez jo aap ke supurd hain ya jin ka aap is waqt ilaaj kar rahe hain.",
+          )}
+        />
 
-        {list.loading && <Loading label="Loading your caseload" />}
+        {list.loading && <Loading label={tr("Loading your caseload", "Mareezon ki fehrist load ho rahi hai")} />}
         {list.error && <ErrorState message={list.error.message} onRetry={list.reload} />}
 
         {list.data && (

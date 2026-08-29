@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { getLang } from "@/lib/lang";
+
 /**
  * Speech-to-text through the browser, for spec §20's voice symptom input.
  *
@@ -37,23 +39,42 @@ interface SpeechRecognitionState {
   stop: () => void;
 }
 
-/** Phrases a worried person can act on, rather than the spec's error codes. */
+/** Phrases a worried person can act on, rather than the spec's error codes.
+
+Reads the language store directly instead of a hook: this runs inside a browser
+event callback, not a render. */
 function describe(code: string): string {
+  const t = (en: string, ur: string) => (getLang() === "ur" ? ur : en);
   switch (code) {
     case "not-allowed":
     case "service-not-allowed":
-      return "Microphone access was blocked. Allow it in your browser's address bar, or type instead.";
+      return t(
+        "Microphone access was blocked. Allow it in your browser's address bar, or type instead.",
+        "Microphone ki ijazat nahi mili. Browser ke address bar se ijazat dein, ya likh lein.",
+      );
     case "no-speech":
-      return "I did not hear anything. Try again, or type instead.";
+      return t(
+        "I did not hear anything. Try again, or type instead.",
+        "Kuchh sunai nahi diya. Dobara koshish karein, ya likh lein.",
+      );
     case "audio-capture":
-      return "No microphone was found. Check it is connected, or type instead.";
+      return t(
+        "No microphone was found. Check it is connected, or type instead.",
+        "Koi microphone nahi mila. Connection check karein, ya likh lein.",
+      );
     case "network":
-      return "Speech recognition needs a connection and could not reach it. You can type instead.";
+      return t(
+        "Speech recognition needs a connection and could not reach it. You can type instead.",
+        "Awaaz samajhne ke liye internet chahiye tha jo nahi mila. Aap likh sakte hain.",
+      );
     case "aborted":
       // Usually the patient pressing stop; not worth alarming them about.
       return "";
     default:
-      return "Speech recognition stopped unexpectedly. You can type instead.";
+      return t(
+        "Speech recognition stopped unexpectedly. You can type instead.",
+        "Awaaz samajhna achanak ruk gaya. Aap likh sakte hain.",
+      );
   }
 }
 

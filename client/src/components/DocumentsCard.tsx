@@ -20,6 +20,7 @@ import {
   type DocumentType,
   type MedicalDocument,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 /** Types the engine can read. HEIC is stored but not machine-read. */
@@ -85,6 +86,7 @@ export function DocumentsCard({
   title?: string;
   description?: string;
 }) {
+  const tr = useTr();
   const [refresh, setRefresh] = useState(0);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   const list = useAsync(() => documents.list({ patientId, limit: 100 }), [patientId, refresh]);
@@ -120,7 +122,7 @@ export function DocumentsCard({
     <Card title={title} description={description}>
       {canUpload && <UploadForm patientId={patientId} onUploaded={reload} />}
 
-      {list.loading && <Loading label="Loading documents" />}
+      {list.loading && <Loading label={tr("Loading documents", "Documents load ho rahe hain")} />}
       {list.error && <ErrorState message={list.error.message} onRetry={list.reload} />}
 
       {error && (
@@ -132,8 +134,11 @@ export function DocumentsCard({
       {list.data &&
         (list.data.data.length === 0 ? (
           <EmptyState
-            title="No documents yet"
-            description="Reports, prescriptions and scans appear here once uploaded."
+            title={tr("No documents yet", "Abhi koi document nahi")}
+            description={tr(
+              "Reports, prescriptions and scans appear here once uploaded.",
+              "Reports, nuskhe aur scans upload hote hi yahan nazar aate hain.",
+            )}
           />
         ) : (
           <ul className="divide-y divide-line">
@@ -205,6 +210,7 @@ function UploadForm({
   patientId: string;
   onUploaded: () => void;
 }) {
+  const tr = useTr();
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState<DocumentType>("LAB_REPORT");
@@ -236,7 +242,7 @@ function UploadForm({
     <div className="mb-5 space-y-4 rounded-md border border-line p-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
-          label="File"
+          label={tr("File", "File")}
           htmlFor="document-file"
           hint="PDF, JPEG, PNG, WebP, TIFF or HEIC, up to 20 MB."
         >
@@ -254,7 +260,7 @@ function UploadForm({
           />
         </Field>
 
-        <Field label="What is it?" htmlFor="document-type">
+        <Field label={tr("What is it?", "Yeh kya hai?")} htmlFor="document-type">
           <select
             id="document-type"
             value={documentType}
@@ -270,7 +276,7 @@ function UploadForm({
         </Field>
       </div>
 
-      <Field label="Title (optional)" htmlFor="document-title">
+      <Field label={tr("Title (optional)", "Unwan (ikhtiyari)")} htmlFor="document-title">
         <Input
           id="document-title"
           value={title}

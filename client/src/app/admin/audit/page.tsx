@@ -9,17 +9,23 @@
  */
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
+import { useTr } from "@/lib/lang";
 import { AuditPanel } from "@/components/audit";
 
 export default function AdminAudit() {
+  const tr = useTr();
   return (
     <AppShell role="ADMIN">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">Audit trail</h1>
-        <p className="mt-1 max-w-2xl text-muted">
-          Every sensitive action, in order, hash-chained so tampering is detectable. Opening this
-          page is itself recorded.
-        </p>
+        <PageHeader
+          eyebrow={tr("Admin portal", "Intezami portal")}
+          title={tr("Audit trail", "Audit trail")}
+          subtitle={tr(
+            "Every sensitive action, in order, hash-chained so tampering is detectable. Opening this page is itself recorded.",
+            "Har hassas amal, tarteeb se, hash-chain mein — cherh-chharh pakri ja sakti hai. Yeh safha kholna bhi darj hota hai.",
+          )}
+        />
 
         <div className="mt-6">
           <AuditPanel />

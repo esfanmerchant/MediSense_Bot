@@ -9,23 +9,29 @@
  */
 
 import { AppShell } from "@/components/AppShell";
+import { PageHeader } from "@/components/PageHeader";
 import { DocumentsCard } from "@/components/DocumentsCard";
 import { ErrorState, Loading } from "@/components/ui";
+import { useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
 
 export default function PatientDocuments() {
   const { user, loading } = useSession();
+  const tr = useTr();
 
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-strong">Documents</h1>
-        <p className="mt-1 text-muted">
-          Upload reports, prescriptions and scans so your care team can see them. Files are
-          private — they open through a link that expires, and only your care team can read them.
-        </p>
+        <PageHeader
+          eyebrow={tr("Patient portal", "Mareez ka portal")}
+          title={tr("Documents", "Documents")}
+          subtitle={tr(
+            "Upload reports, prescriptions and scans so your care team can see them. Files are private — they open through a link that expires, and only your care team can read them.",
+            "Reports, nuskhe aur scans upload karein taake aap ki care team dekh sake. Files nijji hain — mukhtasar muddat ke link se khulti hain, aur sirf aap ki care team parh sakti hai.",
+          )}
+        />
 
-        {loading && <Loading label="Loading your documents" />}
+        {loading && <Loading label={tr("Loading your documents", "Documents load ho rahe hain")} />}
 
         {!loading && !user?.patientId && (
           <ErrorState

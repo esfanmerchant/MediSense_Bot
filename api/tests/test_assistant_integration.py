@@ -19,6 +19,7 @@ on every run.
 
 from __future__ import annotations
 
+import io
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -41,6 +42,34 @@ ADMIN = "admin@example.com"
 NURSE = "nurse@example.com"
 
 EMERGENCY_TEXT = "I have crushing chest pain going down my left arm"
+
+
+def report_png() -> bytes:
+    """A legible lab report, drawn rather than checked in.
+
+    One value sits outside its printed range so a real answer has something
+    to point at; none of it belongs to a real person.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("RGB", (960, 480), "white")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default(size=26)
+    draw.text((40, 30), "CITY DIAGNOSTIC LAB - Complete Blood Count", fill="black", font=font)
+    rows = [
+        ("Test", "Result", "Reference range"),
+        ("Hemoglobin", "11.2 g/dL", "13.0 - 17.0"),
+        ("WBC count", "7.4 x10^9/L", "4.0 - 11.0"),
+        ("Platelets", "210 x10^9/L", "150 - 400"),
+    ]
+    for index, (name, value, ref) in enumerate(rows):
+        y = 110 + index * 52
+        draw.text((40, y), name, fill="black", font=font)
+        draw.text((400, y), value, fill="black", font=font)
+        draw.text((680, y), ref, fill="black", font=font)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 def sign_in(client: TestClient, email: str) -> dict[str, Any]:
@@ -459,6 +488,73 @@ class TestInputLimits:
         assert response.status_code == 422
 
 
+class TestAttachedImages:
+    """The image route validates bytes before the provider sees anything."""
+
+    def test_a_pdf_is_sent_to_the_documents_page(
+        self, client: TestClient, consenting_patient: str, clean_assistant_rows: None
+    ) -> None:
+        # A PDF is a document with a retention policy, not a chat attachment.
+        response = client.post(
+            "/api/assistant/chat/image",
+            data={"message": "what does this say"},
+            files={"image": ("report.pdf", b"%PDF-1.4\n" + b"0" * 400, "application/pdf")},
+        )
+        assert response.status_code == 400
+        assert "documents page" in response.json()["error"]["message"]
+
+    def test_a_file_that_is_not_an_image_is_refused_by_its_bytes(
+        self, client: TestClient, consenting_patient: str, clean_assistant_rows: None
+    ) -> None:
+        # Declared as PNG, but the bytes say otherwise. The declaration is
+        # never what decides.
+        response = client.post(
+            "/api/assistant/chat/image",
+            data={"message": "what does this say"},
+            files={"image": ("photo.png", b"not an image at all " * 20, "image/png")},
+        )
+        assert response.status_code == 400
+
+    def test_consent_is_required_for_an_image_too(
+        self, client: TestClient, clean_assistant_rows: None
+    ) -> None:
+        sign_in(client, PATIENT)
+        client.put("/api/patients/me/ai-consent", json={"granted": False})
+        response = client.post(
+            "/api/assistant/chat/image",
+            data={"message": "what does this say"},
+            files={"image": ("cbc.png", report_png(), "image/png")},
+        )
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "CONSENT_REQUIRED"
+
+    async def test_the_image_is_recorded_as_attached_and_never_stored(
+        self, client: TestClient, consenting_patient: str, clean_assistant_rows: None
+    ) -> None:
+        """With AI off the fallback answers, but the record is the same shape."""
+        response = client.post(
+            "/api/assistant/chat/image",
+            data={"message": "Is report mein kya likha hai?"},
+            files={"image": ("cbc.png", report_png(), "image/png")},
+        )
+        assert response.status_code == 200, response.text
+        assert "does not replace" in response.json()["data"]["disclaimer"]
+
+        async with SessionFactory() as session:
+            row = (
+                await session.execute(
+                    select(AIInteraction)
+                    .where(AIInteraction.patient_id == consenting_patient)
+                    .order_by(AIInteraction.created_at.desc())
+                )
+            ).scalars().first()
+        assert row is not None
+        assert "[Attached image: cbc.png]" in row.input
+        # Nothing of the image itself — not its bytes, not a data URL.
+        assert "base64" not in row.input
+        assert "\x89PNG" not in row.input
+
+
 def requires_a_real_answer(data: dict[str, Any]) -> None:
     """Skip if the provider did not actually answer this call.
 
@@ -509,6 +605,52 @@ class TestAgainstTheRealProvider:
 
         assert data["urgency"] == "EMERGENCY"
         assert data["emergency"] is True
+
+    def test_a_photographed_report_is_explained_not_diagnosed(
+        self,
+        client: TestClient,
+        consenting_patient: str,
+        clean_assistant_rows: None,
+        ai_enabled: None,
+    ) -> None:
+        data = client.post(
+            "/api/assistant/chat/image",
+            data={"message": "What does this report say? Is the hemoglobin okay?"},
+            files={"image": ("cbc.png", report_png(), "image/png")},
+        ).json()["data"]
+
+        requires_a_real_answer(data)
+        answer = data["answer"].lower()
+        # It read the page: the one out-of-range value is what a patient asks
+        # about, and it must be named — as something to raise with a doctor.
+        assert "hemoglobin" in answer or "haemoglobin" in answer
+        assert "doctor" in answer
+        assert "does not replace" in data["disclaimer"]
+
+    def test_a_follow_up_uses_the_earlier_turn(
+        self,
+        client: TestClient,
+        consenting_patient: str,
+        clean_assistant_rows: None,
+        ai_enabled: None,
+    ) -> None:
+        """Conversation memory: "and the other one?" only works with context."""
+        first = client.post(
+            "/api/assistant/chat",
+            json={"message": "What does the cardiology department treat?"},
+        ).json()["data"]
+        requires_a_real_answer(first)
+
+        second = client.post(
+            "/api/assistant/chat",
+            json={
+                "message": "And which department is it next to on your list?",
+                "sessionId": first["sessionId"],
+            },
+        ).json()["data"]
+        requires_a_real_answer(second)
+        assert second["sessionId"] == first["sessionId"]
+        assert second["answer"].strip()
 
     def test_extraction_returns_symptoms_to_correct(
         self,

@@ -115,7 +115,28 @@ If the patient describes anything that could be an emergency, your answer must \
 lead with that and tell them to seek immediate care. Do not soften it.
 
 Write at a reading level a worried person can follow. Short sentences. No jargon \
-without explaining it."""
+without explaining it.
+
+Language: reply in the language the patient wrote in. If they wrote in Roman Urdu \
+(Urdu in Latin letters, e.g. "mujhe sar dard hai"), answer in simple Roman Urdu. \
+If they wrote in English, answer in English. Keep medical terms in English either \
+way so they match what is printed on their prescription or report.
+
+Formatting: short paragraphs. When listing steps or items, use a bullet list — one \
+item per line starting with "- ". Use **bold** for at most one phrase per answer, \
+the single most important instruction. No headings, no tables, no other markup.
+
+If the patient attaches an image of a report, prescription or other document:
+- Say what kind of document it appears to be and explain its contents in plain \
+language: what each test or item measures and what the printed reference range \
+means.
+- Point out values that sit outside their printed reference range as something to \
+discuss with the doctor. Never say what condition they indicate.
+- Only read what is visibly printed. If a value or a word is unclear, say it is \
+unclear rather than guessing.
+- If the image is not a medical document, or is unreadable, say so.
+- Keep the explanation under about 250 words: the values that matter, what \
+they measure, and what to raise with the doctor. Do not transcribe the whole page."""
 
 
 @dataclass
@@ -159,6 +180,30 @@ def build_context(
         + (", ".join(departments) if departments else "not listed")
     )
     return "\n".join(parts)
+
+
+#: How much of a conversation the model is shown. Six exchanges is enough to
+#: resolve "and the other one?"; more only spends tokens on what was already
+#: answered.
+HISTORY_TURNS = 6
+HISTORY_CHARS = 600
+
+
+def render_history(turns: list[tuple[str, str]]) -> str:
+    """Prior exchanges of this conversation, oldest first, for the prompt.
+
+    Multi-turn memory is what turns a question box into a conversation: "what
+    is it for?" only means something if the model can see that the previous
+    question named the tablet. Each side is truncated so a long earlier answer
+    cannot crowd out the question being asked now.
+    """
+    if not turns:
+        return ""
+    lines = ["CONVERSATION SO FAR (oldest first):"]
+    for question, answer in turns[-HISTORY_TURNS:]:
+        lines.append(f"Patient: {question[:HISTORY_CHARS]}")
+        lines.append(f"You: {answer[:HISTORY_CHARS]}")
+    return "\n".join(lines)
 
 
 def _strip_diagnosis_claims(text: str) -> tuple[str, bool]:
@@ -276,6 +321,8 @@ async def ask(
     context: str,
     triage: TriageResult,
     allowed_medications: list[str],
+    history: list[tuple[str, str]] | None = None,
+    image: tuple[bytes, str] | None = None,
 ) -> AssistantAnswer:
     """Answer a patient's question, with both validation layers applied.
 
@@ -284,11 +331,19 @@ async def ask(
     than a fabricated answer and better than a bare 503 when the urgent advice
     is already known.
     """
+    previous = render_history(history or [])
+    attached = (
+        "The patient attached the image below. Read it under the document rules.\n\n"
+        if image is not None
+        else ""
+    )
     prompt = (
         f"{context}\n\n"
-        f"URGENCY ALREADY DETECTED BY THE SAFETY LAYER: {triage.urgency}\n"
+        + (f"{previous}\n\n" if previous else "")
+        + f"URGENCY ALREADY DETECTED BY THE SAFETY LAYER: {triage.urgency}\n"
         f"(If this is EMERGENCY or URGENT, your answer must reflect that. "
         f"You may raise it. You may not lower it.)\n\n"
+        f"{attached}"
         f"PATIENT'S QUESTION:\n{question}"
     )
 
@@ -296,7 +351,11 @@ async def ask(
         prompt=prompt,
         schema=RESPONSE_SCHEMA,
         system_instruction=SYSTEM_INSTRUCTION,
-        max_output_tokens=1024,
+        image=image,
+        # A report explanation legitimately runs longer than a one-line answer,
+        # and on current models the cap also covers the model's own reasoning
+        # tokens — a tight cap cuts the JSON off mid-answer.
+        max_output_tokens=4096 if image is not None else 2048,
     )
 
     payload = response.data if isinstance(response.data, dict) else {}

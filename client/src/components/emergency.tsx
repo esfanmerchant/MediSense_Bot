@@ -232,7 +232,7 @@ export function EmergencyAccessPanel() {
           {/* Not styled as a danger button. This is a legitimate clinical
               action, and making it look like a mistake discourages the very
               use it exists for. */}
-          <Button type="submit" size="lg" disabled={busy || !ready}>
+          <Button type="submit" size="lg" disabled={busy || !ready} loading={busy}>
             {busy ? tr("Requesting…", "Darkhwast ja rahi hai…") : tr("Request emergency access", "Emergency access ki darkhwast karein")}
           </Button>
         </form>

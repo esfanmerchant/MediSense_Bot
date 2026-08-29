@@ -21,6 +21,7 @@
   --brand-primary-active: #00429c;
   --brand-primary-soft: #d9e2ff;
   --brand-primary-on: #ffffff;
+  --brand-navy-deep: #002050;
 
   /* Medical teal — secondary #006b5f, secondary-fixed #8df5e4 */
   --brand-accent: #006b5f;
@@ -54,6 +55,11 @@
   /* Elevation — Stitch level 1 and level 2 */
   --shadow-card: 0 4px 12px rgb(0 0 0 / 0.05);
   --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.1);
+  --shadow-float: 0 18px 40px -12px rgb(0 49 120 / 0.22);
+
+  /* Ambient glows behind the canvas. Soft enough to be felt, not seen. */
+  --glow-a: rgb(217 226 255 / 0.8);
+  --glow-b: rgb(207 250 240 / 0.7);
 }
 
 /**
@@ -69,6 +75,7 @@
     --brand-primary-active: #00429c;
     --brand-primary-soft: #17284f;
     --brand-primary-on: #001945;
+    --brand-navy-deep: #0b1830;
 
     --brand-accent: #70d8c8;
     --brand-accent-bright: #8df5e4;
@@ -95,6 +102,10 @@
 
     --shadow-card: 0 4px 12px rgb(0 0 0 / 0.4);
     --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.55);
+    --shadow-float: 0 18px 40px -12px rgb(0 0 0 / 0.7);
+
+    --glow-a: rgb(23 40 79 / 0.55);
+    --glow-b: rgb(0 51 44 / 0.45);
   }
 }
 
@@ -106,6 +117,7 @@
   --color-primary-on: var(--brand-primary-on);
   /* Kept for existing call sites that mean "the darker primary". */
   --color-primary-strong: var(--brand-primary-hover);
+  --color-navy-deep: var(--brand-navy-deep);
 
   --color-accent: var(--brand-accent);
   --color-accent-bright: var(--brand-accent-bright);
@@ -136,13 +148,20 @@
 
   --shadow-card: var(--shadow-card);
   --shadow-overlay: var(--shadow-overlay);
+  --shadow-float: var(--shadow-float);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: var(--font-display-face), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
-  background: var(--surface-canvas);
+  /* The canvas colour, with two ambient glows pinned to the viewport corners.
+     They give the page depth without a single element having to carry it. */
+  background-color: var(--surface-canvas);
+  background-image:
+    radial-gradient(56rem 36rem at -8% -12%, var(--glow-a), transparent 62%),
+    radial-gradient(48rem 34rem at 108% 112%, var(--glow-b), transparent 62%);
+  background-attachment: fixed;
   color: var(--text-strong);
   font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -156,6 +175,18 @@ h2,
 h3 {
   letter-spacing: -0.02em;
   text-wrap: balance;
+}
+
+::selection {
+  background: var(--brand-primary-soft);
+  color: var(--text-strong);
+}
+
+/* A thin, tinted scrollbar: the chat and the tables scroll a lot, and a fat
+   grey bar is the one part of the page the design system never touched. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 /**
@@ -208,8 +239,8 @@ h3 {
  * Three rules keep this from becoming noise:
  * 1. Everything here is *entrance or ambience*, never feedback — feedback
  *    (hover, focus, pressed) stays on the components themselves.
- * 2. Nothing loops except the two "live" indicators, because a looping
- *    animation next to a vital sign competes with the vital sign.
+ * 2. Nothing loops except the "live" and "waiting" indicators, because a
+ *    looping animation next to a vital sign competes with the vital sign.
  * 3. All of it dies under prefers-reduced-motion via the override below, and
  *    reveal hiding only ever happens from JavaScript — so reduced motion or a
  *    failed script both mean "visible immediately", never "blank page".
@@ -244,6 +275,37 @@ h3 {
   animation: page-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* Children arrive one after another. Each direct child gets the entrance
+   with a small delay by position — a grid of tiles "deals in" rather than
+   appearing as a block. */
+.stagger > * {
+  animation: page-enter 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.stagger > :nth-child(1) { animation-delay: 0ms; }
+.stagger > :nth-child(2) { animation-delay: 60ms; }
+.stagger > :nth-child(3) { animation-delay: 120ms; }
+.stagger > :nth-child(4) { animation-delay: 180ms; }
+.stagger > :nth-child(5) { animation-delay: 240ms; }
+.stagger > :nth-child(6) { animation-delay: 300ms; }
+.stagger > :nth-child(7) { animation-delay: 360ms; }
+.stagger > :nth-child(8) { animation-delay: 420ms; }
+.stagger > :nth-child(n + 9) { animation-delay: 480ms; }
+
+/* A message arriving in the chat. */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pop-in {
+  animation: pop-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* Slow ambient drift for decorative glows. */
 @keyframes drift {
   0%,
@@ -261,7 +323,21 @@ h3 {
   animation: drift 18s ease-in-out infinite reverse;
 }
 
-/* The ECG trace in the hero fallback and loading states. */
+/* A gentle hover for decorative icons — the tile "breathes" under the hand. */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+.animate-float {
+  animation: float 3.6s ease-in-out infinite;
+}
+
+/* The ECG trace in the hero fallback. */
 @keyframes ecg-dash {
   to {
     stroke-dashoffset: -640;
@@ -270,6 +346,97 @@ h3 {
 .animate-ecg {
   stroke-dasharray: 320 320;
   animation: ecg-dash 3.2s linear infinite;
+}
+
+/* The loading heartbeat: a bright segment travelling along a still trace.
+   Waiting on a healthcare system should look like a monitor, not a spinner. */
+@keyframes ecg-sweep {
+  to {
+    stroke-dashoffset: -260;
+  }
+}
+.ecg-sweep {
+  stroke-dasharray: 48 212;
+  stroke-dashoffset: 0;
+  animation: ecg-sweep 1.5s linear infinite;
+}
+
+/* Skeleton shimmer for content that is on its way. */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  border-radius: 0.5rem;
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    var(--surface-raised) 37%,
+    var(--surface-sunken) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.7s ease-in-out infinite;
+}
+
+/* "The assistant is thinking": three dots that take turns. */
+@keyframes typing {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+.typing-dot {
+  animation: typing 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* The caret at the end of an answer still being revealed. */
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+.stream-cursor::after {
+  content: "▍";
+  margin-left: 1px;
+  color: var(--brand-accent);
+  animation: blink 0.9s steps(2) infinite;
+}
+
+/* A soft ring that spreads from the microphone while it listens. */
+@keyframes listening-ring {
+  from {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.listening-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--status-critical);
+  animation: listening-ring 1.4s ease-out infinite;
+  z-index: -1;
 }
 
 /* Gradient text for the one phrase per page that earns it. */
@@ -288,6 +455,14 @@ h3 {
   -webkit-backdrop-filter: blur(14px);
 }
 
+/* The navy gradient that carries a welcome banner or a brand panel. */
+.hero-navy {
+  background:
+    radial-gradient(40rem 20rem at 85% -20%, rgb(13 71 161 / 0.85), transparent 60%),
+    radial-gradient(30rem 18rem at -10% 120%, rgb(0 107 95 / 0.55), transparent 60%),
+    linear-gradient(135deg, #002050 0%, #003178 55%, #00429c 100%);
+}
+
 /* Cards that respond to the hand. Transform + shadow only — no colour shift,
    so status colours keep their meaning at rest and under the cursor alike. */
 .hover-lift {
@@ -298,6 +473,48 @@ h3 {
 .hover-lift:hover {
   transform: translateY(-5px);
   box-shadow: var(--shadow-overlay);
+}
+.hover-lift-sm {
+  transition:
+    transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.3s ease;
+}
+.hover-lift-sm:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-overlay);
+}
+
+/* A faint accent thread along the top of a card that wants a little warmth. */
+.card-thread {
+  position: relative;
+  overflow: hidden;
+}
+.card-thread::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--brand-accent), var(--brand-primary-hover));
+  opacity: 0.9;
+}
+
+/* The assistant's answers: a tiny markdown — paragraphs, bullets, bold. */
+.prose-chat p + p,
+.prose-chat p + ul,
+.prose-chat ul + p {
+  margin-top: 0.6em;
+}
+.prose-chat ul {
+  list-style: disc;
+  padding-left: 1.3rem;
+}
+.prose-chat li + li {
+  margin-top: 0.3em;
+}
+.prose-chat strong {
+  font-weight: 650;
+  color: var(--text-strong);
 }
 
 /* Nobody should have motion forced on them, least of all someone reading a

@@ -14,9 +14,13 @@ import pytest
 
 from app.services.assistant import (
     DISCLAIMER,
+    HISTORY_CHARS,
+    HISTORY_TURNS,
+    SYSTEM_INSTRUCTION,
     AssistantAnswer,
     build_context,
     fallback_answer,
+    render_history,
     validate_response,
 )
 from app.services.triage import Urgency, assess, combine
@@ -302,3 +306,49 @@ class TestDisclaimer:
             AssistantAnswer("x", Urgency.ROUTINE, None, [], False),
         ):
             assert result.disclaimer == DISCLAIMER
+
+
+class TestConversationMemory:
+    """Earlier turns reach the model as context — bounded, ordered, labelled."""
+
+    def test_no_history_adds_nothing_to_the_prompt(self) -> None:
+        assert render_history([]) == ""
+
+    def test_turns_are_shown_oldest_first_and_labelled_by_speaker(self) -> None:
+        rendered = render_history(
+            [
+                ("what is amlodipine for", "It lowers blood pressure."),
+                ("and the other one?", "That is your statin."),
+            ]
+        )
+        lines = rendered.splitlines()
+        assert lines[0].startswith("CONVERSATION SO FAR")
+        assert lines[1] == "Patient: what is amlodipine for"
+        assert lines[2] == "You: It lowers blood pressure."
+        assert lines[3] == "Patient: and the other one?"
+
+    def test_only_the_most_recent_turns_are_kept(self) -> None:
+        # A long conversation must not grow the prompt without bound: what
+        # was answered twenty questions ago is not context, it is cost.
+        turns = [(f"q{index}", f"a{index}") for index in range(HISTORY_TURNS + 5)]
+        rendered = render_history(turns)
+        assert "Patient: q0" not in rendered
+        assert f"Patient: q{HISTORY_TURNS + 4}" in rendered
+        assert rendered.count("Patient:") == HISTORY_TURNS
+
+    def test_a_long_answer_cannot_crowd_out_the_new_question(self) -> None:
+        rendered = render_history([("q", "x" * (HISTORY_CHARS * 3))])
+        assert len(rendered) < HISTORY_CHARS * 2
+
+
+class TestReportReading:
+    """The rules the model is given for an attached image are the safe ones."""
+
+    def test_it_is_told_to_read_and_never_to_interpret(self) -> None:
+        assert "Only read what is visibly printed" in SYSTEM_INSTRUCTION
+        assert "Never say what condition they indicate" in SYSTEM_INSTRUCTION
+
+    def test_it_answers_in_the_patients_language(self) -> None:
+        assert "Roman Urdu" in SYSTEM_INSTRUCTION
+        # Medical terms stay as printed so they match the report in hand.
+        assert "Keep medical terms in English" in SYSTEM_INSTRUCTION

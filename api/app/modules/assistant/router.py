@@ -10,6 +10,11 @@ Three endpoints, and the boundaries between them are the safety design:
   writes nothing.
 * ``POST /assistant/symptoms/confirm`` stores the corrected list as
   ``ReportedSymptom`` rows with source ``PATIENT_REPORTED`` or ``AI_ASSISTED``.
+* ``POST /assistant/chat/image`` is ``/chat`` with a photographed report or
+  prescription attached. The image is read by the model for that one answer
+  and **never stored**: it is not a document upload, and a patient who wants
+  the report kept uses the documents page, where retention and access are
+  governed. Same consent, same validation, same escalation.
 
 That last distinction is spec §21 and conflict C7: a symptom the patient
 described is *patient-reported information*, not a physician's finding. It sits
@@ -27,13 +32,14 @@ import time
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
 from app.api.responses import ok
-from app.core.errors import AppError, ErrorCode, forbidden
+from app.core.config import settings
+from app.core.errors import AppError, ErrorCode, bad_request, forbidden
 from app.core.ratelimit import limit
 from app.db.base import new_id, utcnow
 from app.db.enums import (
@@ -57,6 +63,7 @@ from app.modules.appointments.schedule import to_clinic
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
 from app.services import ai, assistant, triage
+from app.services.files import FileRejectedError, inspect_upload
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
@@ -65,6 +72,15 @@ RequireAiChat = Annotated[object, Depends(require_permission(Permission.AI_CHAT)
 #: A question longer than this is not a question. The cap also bounds what a
 #: single request can send to the provider.
 MAX_QUESTION_LENGTH = 2000
+
+#: An attached report is sent inline to the provider, so it is capped well
+#: below the documents limit: a phone photo of a page is a few megabytes, and
+#: anything larger is a scan that belongs on the documents page.
+MAX_ATTACHMENT_BYTES = min(settings.MAX_UPLOAD_BYTES, 8 * 1024 * 1024)
+
+#: The model reads images. A PDF is a document, and the documents page already
+#: extracts those with a reviewable result.
+ATTACHMENT_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 
 
 class ChatRequest(BaseModel):
@@ -191,6 +207,110 @@ async def _gather_context(db: DbSession, patient_id: str) -> tuple[str, list[str
     return context, medication_names
 
 
+async def _recent_turns(
+    db: DbSession, patient_id: str, session_id: str
+) -> list[tuple[str, str]]:
+    """Earlier exchanges of this conversation, oldest first.
+
+    Filtered on the caller's own patient id as well as the session id, so a
+    guessed session id can only ever pull the caller's own turns.
+    """
+    rows = (
+        (
+            await db.execute(
+                select(AIInteraction.input, AIInteraction.response)
+                .where(
+                    AIInteraction.patient_id == patient_id,
+                    AIInteraction.session_id == session_id,
+                )
+                .order_by(AIInteraction.created_at.desc())
+                .limit(assistant.HISTORY_TURNS)
+            )
+        )
+        .all()
+    )
+    return [(row.input, row.response) for row in reversed(rows)]
+
+
+async def _answer(
+    *,
+    request: Request,
+    auth: CurrentAuth,
+    db: DbSession,
+    message: str,
+    session_id: str | None,
+    input_type: InputType,
+    image: tuple[bytes, str] | None = None,
+    attachment_name: str | None = None,
+) -> dict[str, Any]:
+    """The whole chat pipeline, shared by the JSON and the multipart route.
+
+    Note the order: triage runs before the provider is contacted, so an
+    emergency is escalated even when the provider is down, slow, or wrong.
+    """
+    patient = await _require_consenting_patient(auth, db)
+    session_id = session_id or uuid.uuid4().hex
+
+    assessment = triage.assess(message)
+    context, medication_names = await _gather_context(db, patient.id)
+    history = await _recent_turns(db, patient.id, session_id)
+
+    started = time.perf_counter()
+    try:
+        answer = await assistant.ask(
+            message,
+            context=context,
+            triage=assessment,
+            allowed_medications=medication_names,
+            history=history,
+            image=image,
+        )
+    except AppError:
+        # The provider failed. The safety layer still holds, so the patient gets
+        # the escalation rather than an error page.
+        answer = assistant.fallback_answer(assessment)
+    latency_ms = int((time.perf_counter() - started) * 1000)
+
+    # The record says an image was attached, and nothing of what it showed:
+    # the bytes are gone once this request returns.
+    recorded = message if image is None else f"{message}\n[Attached image: {attachment_name}]"
+
+    await _record_interaction(
+        db,
+        patient_id=patient.id,
+        session_id=session_id,
+        request_text=recorded,
+        input_type=input_type,
+        answer=answer,
+        latency_ms=latency_ms,
+    )
+
+    await record_audit(
+        db,
+        AuditEntry(
+            action=AuditAction.AI_INTERACTION,
+            user_id=auth.user_id,
+            actor_role=auth.role,
+            patient_id=patient.id,
+            entity_type="AIInteraction",
+            ip_address=client_ip(request),
+            request_id=getattr(request.state, "request_id", None),
+            # What happened, never what was said: the question is clinical
+            # content and lives in ai_interactions, not the audit log.
+            metadata={
+                "urgency": str(answer.urgency),
+                "emergency": answer.emergency,
+                "inputType": str(input_type),
+                "imageAttached": image is not None,
+                "interventions": answer.interventions,
+                "latencyMs": latency_ms,
+            },
+        ),
+    )
+
+    return ok(_serialize(answer, session_id))
+
+
 async def _record_interaction(
     db: DbSession,
     *,
@@ -250,64 +370,62 @@ async def chat(
     _: RequireAiChat,
     __: ChatRateLimit,
 ) -> dict[str, Any]:
-    """Answer a patient's health question.
-
-    Note the order: triage runs before the provider is contacted, so an
-    emergency is escalated even when the provider is down, slow, or wrong.
-    """
-    patient = await _require_consenting_patient(auth, db)
-    session_id = payload.session_id or uuid.uuid4().hex
-
-    assessment = triage.assess(payload.message)
-    context, medication_names = await _gather_context(db, patient.id)
-
-    started = time.perf_counter()
-    try:
-        answer = await assistant.ask(
-            payload.message,
-            context=context,
-            triage=assessment,
-            allowed_medications=medication_names,
-        )
-    except AppError:
-        # The provider failed. The safety layer still holds, so the patient gets
-        # the escalation rather than an error page.
-        answer = assistant.fallback_answer(assessment)
-    latency_ms = int((time.perf_counter() - started) * 1000)
-
-    await _record_interaction(
-        db,
-        patient_id=patient.id,
-        session_id=session_id,
-        request_text=payload.message,
+    """Answer a patient's health question."""
+    return await _answer(
+        request=request,
+        auth=auth,
+        db=db,
+        message=payload.message,
+        session_id=payload.session_id,
         input_type=payload.input_type,
-        answer=answer,
-        latency_ms=latency_ms,
     )
 
-    await record_audit(
-        db,
-        AuditEntry(
-            action=AuditAction.AI_INTERACTION,
-            user_id=auth.user_id,
-            actor_role=auth.role,
-            patient_id=patient.id,
-            entity_type="AIInteraction",
-            ip_address=client_ip(request),
-            request_id=getattr(request.state, "request_id", None),
-            # What happened, never what was said: the question is clinical
-            # content and lives in ai_interactions, not the audit log.
-            metadata={
-                "urgency": str(answer.urgency),
-                "emergency": answer.emergency,
-                "inputType": str(payload.input_type),
-                "interventions": answer.interventions,
-                "latencyMs": latency_ms,
-            },
-        ),
-    )
 
-    return ok(_serialize(answer, session_id))
+@router.post("/chat/image")
+async def chat_with_image(
+    request: Request,
+    auth: CurrentAuth,
+    db: DbSession,
+    _: RequireAiChat,
+    __: ChatRateLimit,
+    image: Annotated[UploadFile, File()],
+    message: Annotated[str, Form(min_length=1, max_length=MAX_QUESTION_LENGTH)],
+    session_id: Annotated[str | None, Form(alias="sessionId", max_length=64)] = None,
+    input_type: Annotated[InputType, Form(alias="inputType")] = InputType.TEXT,
+) -> dict[str, Any]:
+    """Answer a question about a photographed report or prescription.
+
+    Multipart rather than JSON because the browser has to send bytes. The file
+    goes through the same inspection as a document upload — size, sniffed
+    type, declared-type agreement — and then only to the model, for this one
+    answer. It is not written to storage, to the database, or to the log.
+    """
+    content = await image.read()
+    try:
+        inspected = inspect_upload(
+            content,
+            declared_mime=image.content_type,
+            original_name=image.filename,
+            max_bytes=MAX_ATTACHMENT_BYTES,
+        )
+    except FileRejectedError as exc:
+        raise bad_request(str(exc)) from exc
+    if inspected.detected_mime not in ATTACHMENT_MIME_TYPES:
+        raise bad_request(
+            "Attach a photo of the report as a JPEG, PNG or WebP image. "
+            "PDFs and scans belong on your documents page."
+        )
+
+    return await _answer(
+        request=request,
+        auth=auth,
+        db=db,
+        message=message.strip(),
+        session_id=session_id,
+        input_type=input_type,
+        image=(content, inspected.detected_mime),
+        attachment_name=inspected.safe_name,
+    )
 
 
 @router.post("/symptoms")

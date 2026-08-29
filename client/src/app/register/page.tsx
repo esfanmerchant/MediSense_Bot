@@ -136,9 +136,8 @@ export default function RegisterPage() {
             />
           </Field>
 
-          <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-            {submitting
-              ? tr("Creating your account…", "Account ban raha hai…")
+          <Button type="submit" size="lg" className="w-full" disabled={submitting} loading={submitting}>
+            {submitting ? tr("Creating your account…", "Account ban raha hai…")
               : tr("Create account", "Account banayein")}
           </Button>
         </form>

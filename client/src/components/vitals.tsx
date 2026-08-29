@@ -563,7 +563,7 @@ export function RecordVitals({
           </p>
         )}
 
-        <Button type="submit" disabled={busy || !anyValue}>
+        <Button type="submit" disabled={busy || !anyValue} loading={busy}>
           {busy ? tr("Saving…", "Save ho raha hai…") : tr("Save reading", "Reading save karein")}
         </Button>
       </form>

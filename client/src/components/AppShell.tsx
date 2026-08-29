@@ -7,7 +7,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "@/components/Icon";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { NotificationBell } from "@/components/NotificationBell";
-import { Button, Loading, Unauthorized, cx } from "@/components/ui";
+import { Avatar, Button, Loading, Unauthorized, cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 import { homePathFor, useSession } from "@/lib/session";
 import type { Role } from "@/lib/api";
@@ -62,6 +62,13 @@ const EMERGENCY_HREF: Partial<Record<Role, string>> = {
   ADMIN: "/admin/emergency",
 };
 
+const ROLE_LABEL: Record<Role, [string, string]> = {
+  PATIENT: ["Patient", "Mareez"],
+  DOCTOR: ["Doctor", "Doctor"],
+  ADMIN: ["Administrator", "Admin"],
+  NURSE: ["Nurse", "Nurse"],
+};
+
 /**
  * Warns before the server ends the session (R8).
  *
@@ -113,31 +120,42 @@ function Rail({
   items,
   pathname,
   emergencyHref,
+  user,
   onNavigate,
 }: {
   items: NavItem[];
   pathname: string;
   emergencyHref?: string;
+  user: { name: string; role: Role };
   onNavigate?: () => void;
 }) {
   const tr = useTr();
   return (
     // The brand link sits outside the <nav> landmark on purpose. It is chrome —
     // a way back to the public site — not one of this role's destinations.
-    <div className="flex h-full flex-col py-6">
+    <div className="relative flex h-full flex-col py-6">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-20 top-10 h-64 w-64 rounded-full bg-[#0d47a1] opacity-50 blur-[90px]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -left-24 bottom-16 h-56 w-56 rounded-full bg-[#006b5f] opacity-30 blur-[90px]"
+      />
+
       <Link
         href="/"
         onClick={onNavigate}
-        className="mb-8 flex items-center gap-3 px-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-bright"
+        className="relative mb-8 flex items-center gap-3 px-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-bright"
       >
         <span
           aria-hidden
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/20"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 ring-1 ring-white/20"
         >
           <Icon name="health_and_safety" filled className="text-[22px] text-accent-bright" />
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-lg font-bold tracking-tight text-white">
+          <span className="block truncate font-display text-lg font-bold tracking-tight text-white">
             MediSense
           </span>
           <span className="block truncate text-[11px] text-white/60">Healthcare System</span>
@@ -145,13 +163,13 @@ function Rail({
       </Link>
 
       {emergencyHref && (
-        <div className="mb-8 px-6">
+        <div className="relative mb-8 px-6">
           {/* The one red thing in the rail — the fastest route to the screen
               somebody needs when there is no time to navigate. */}
           <Link
             href={emergencyHref}
             onClick={onNavigate}
-            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-critical text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-critical text-sm font-bold text-white shadow-md transition-[opacity,transform] hover:opacity-90 hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
             <Icon name="warning" filled className="text-[20px]" />
             {tr("Emergency access", "Emergency access")}
@@ -159,7 +177,7 @@ function Rail({
         </div>
       )}
 
-      <nav aria-label="Main" className="flex-1 px-4">
+      <nav aria-label="Main" className="relative flex-1 px-4">
         <ul className="space-y-1">
           {items.map((item) => {
             const active = pathname === item.href;
@@ -170,11 +188,11 @@ function Rail({
                   aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
                   className={cx(
-                    "flex min-h-11 items-center gap-3 rounded-r-full border-l-4 px-4 py-2.5 text-sm transition-colors",
+                    "flex min-h-11 items-center gap-3 rounded-r-full border-l-4 px-4 py-2.5 text-sm transition-[background-color,color,transform] duration-200",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-bright",
                     active
-                      ? "border-accent-bright bg-primary-active font-bold text-accent-bright"
-                      : "border-transparent font-medium text-white/70 hover:bg-white/10 hover:text-white",
+                      ? "border-accent-bright bg-primary-active font-bold text-accent-bright shadow-[inset_0_1px_0_rgb(255_255_255/0.08)]"
+                      : "border-transparent font-medium text-white/70 hover:translate-x-0.5 hover:bg-white/10 hover:text-white",
                   )}
                 >
                   <Icon name={item.icon} filled={active} className="text-[20px]" />
@@ -185,6 +203,16 @@ function Rail({
           })}
         </ul>
       </nav>
+
+      {/* Who is signed in, at the foot of the rail where the eye checks it
+          last — the same place every desk-side terminal puts it. */}
+      <div className="relative mx-4 mt-6 flex items-center gap-3 rounded-xl bg-white/10 p-3 ring-1 ring-white/10">
+        <Avatar name={user.name} size="sm" className="!bg-accent-bright !text-[#00201c]" />
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold text-white">{user.name}</span>
+          <span className="block text-[11px] text-white/60">{tr(...ROLE_LABEL[user.role])}</span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -237,11 +265,11 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
   const emergencyHref = EMERGENCY_HREF[user.role];
 
   return (
-    <div className="flex min-h-screen bg-canvas">
+    <div className="flex min-h-screen">
       {/* Desktop rail — sticky, so a long table never scrolls navigation out of
           reach. */}
-      <aside className="sticky top-0 hidden h-screen w-[260px] shrink-0 bg-rail shadow-overlay lg:block">
-        <Rail items={nav} pathname={pathname} emergencyHref={emergencyHref} />
+      <aside className="sticky top-0 hidden h-screen w-[260px] shrink-0 overflow-hidden bg-gradient-to-b from-[#002050] via-[#003178] to-[#003178] shadow-overlay lg:block">
+        <Rail items={nav} pathname={pathname} emergencyHref={emergencyHref} user={user} />
       </aside>
 
       {/* Mobile rail — a drawer, because 260px of a phone is most of it. */}
@@ -250,14 +278,15 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
           <button
             type="button"
             aria-label="Close navigation"
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setRailOpen(false)}
           />
-          <aside className="relative h-full w-[260px] max-w-[85%] bg-rail shadow-overlay">
+          <aside className="page-enter relative h-full w-[260px] max-w-[85%] overflow-hidden bg-gradient-to-b from-[#002050] via-[#003178] to-[#003178] shadow-overlay">
             <Rail
               items={nav}
               pathname={pathname}
               emergencyHref={emergencyHref}
+              user={user}
               onNavigate={() => setRailOpen(false)}
             />
           </aside>
@@ -267,7 +296,7 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
       <div className="flex min-w-0 flex-1 flex-col">
         <InactivityWarning />
 
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-canvas/95 px-4 backdrop-blur sm:px-8">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-card/70 px-4 backdrop-blur-md sm:px-8">
           <button
             type="button"
             aria-label="Open navigation"
@@ -280,10 +309,11 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
 
           <div className="ml-auto flex items-center gap-2">
             <LanguageToggle />
-            <span className="mr-1 hidden text-right sm:block">
-              <span className="block text-sm font-semibold text-strong">{user.name}</span>
-              <span className="block text-xs capitalize text-faint">
-                {user.role.toLowerCase()}
+            <span className="mr-1 hidden items-center gap-2.5 sm:flex">
+              <Avatar name={user.name} size="sm" />
+              <span className="text-right">
+                <span className="block text-sm font-semibold text-strong">{user.name}</span>
+                <span className="block text-xs text-faint">{tr(...ROLE_LABEL[user.role])}</span>
               </span>
             </span>
             <NotificationBell role={user.role} />

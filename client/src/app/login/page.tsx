@@ -5,10 +5,88 @@ import Link from "next/link";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 
 import { AuthPanel } from "@/components/AuthPanel";
-import { Button, Field, Input, Loading } from "@/components/ui";
+import { Icon } from "@/components/Icon";
+import { Button, Field, Input, Loading, cx } from "@/components/ui";
 import { ApiError, type DeviceClass } from "@/lib/api";
 import { useTr } from "@/lib/lang";
 import { homePathFor, useSession, useStoredDeviceClass } from "@/lib/session";
+
+/**
+ * Where the person is signing in from, as two cards rather than a dropdown.
+ *
+ * The choice changes how long the session survives inactivity (R8), which is
+ * worth a glance at both options — a `<select>` hides the one not chosen, and
+ * the shared-terminal case is exactly the one people forget to pick.
+ */
+function DeviceChoice({
+  value,
+  onChange,
+}: {
+  value: DeviceClass;
+  onChange: (next: DeviceClass) => void;
+}) {
+  const tr = useTr();
+  const options: { value: DeviceClass; icon: string; title: string; hint: string }[] = [
+    {
+      value: "PERSONAL",
+      icon: "smartphone",
+      title: tr("My own device", "Mera apna device"),
+      hint: tr("Stays signed in for 15 min of inactivity", "15 minute ki khamoshi tak signed in"),
+    },
+    {
+      value: "SHARED_TERMINAL",
+      icon: "desktop_windows",
+      title: tr("A shared hospital terminal", "Hospital ka mushtarka computer"),
+      hint: tr("Signs out after 2 min of inactivity", "2 minute ki khamoshi ke baad sign out"),
+    },
+  ];
+
+  return (
+    <fieldset>
+      <legend className="mb-1.5 block text-sm font-semibold text-strong">
+        {tr("Where are you signing in from?", "Aap kahan se login kar rahe hain?")}
+      </legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((option) => {
+          const active = option.value === value;
+          return (
+            <label
+              key={option.value}
+              className={cx(
+                "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-[border-color,background-color,box-shadow] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary",
+                active
+                  ? "border-primary bg-primary-soft/60 shadow-sm"
+                  : "border-line-strong bg-card hover:border-faint",
+              )}
+            >
+              <input
+                type="radio"
+                name="deviceClass"
+                value={option.value}
+                checked={active}
+                onChange={() => onChange(option.value)}
+                className="sr-only"
+              />
+              <span
+                aria-hidden
+                className={cx(
+                  "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
+                  active ? "bg-primary text-white" : "bg-sunken text-muted",
+                )}
+              >
+                <Icon name={option.icon} filled={active} className="text-[20px]" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-strong">{option.title}</span>
+                <span className="block text-xs text-muted">{option.hint}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
 
 function LoginForm() {
   const router = useRouter();
@@ -18,6 +96,7 @@ function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -69,8 +148,14 @@ function LoginForm() {
   if (loading) return <Loading label={tr("Checking your session", "Session check ho raha hai")} />;
 
   return (
-    <div className="w-full max-w-md">
-      <div className="mb-8">
+    <div className="w-full">
+      <div className="mb-7">
+        <span
+          aria-hidden
+          className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-[#003178] to-[#0d47a1] text-white shadow-md"
+        >
+          <Icon name="waving_hand" filled className="text-[24px]" />
+        </span>
         <h1 className="font-display text-3xl font-bold text-strong">
           {tr("Welcome back", "Khush aamdeed")}
         </h1>
@@ -82,8 +167,9 @@ function LoginForm() {
       {reason && reasons[reason] && (
         <p
           role="status"
-          className="mb-5 rounded-lg border border-warning/50 bg-warning-soft px-4 py-3 text-sm text-warning"
+          className="pop-in mb-5 flex items-start gap-2 rounded-xl border border-warning/50 bg-warning-soft px-4 py-3 text-sm text-warning"
         >
+          <Icon name="info" className="mt-px shrink-0 text-[18px]" />
           {reasons[reason]}
         </p>
       )}
@@ -91,24 +177,32 @@ function LoginForm() {
       {error && (
         <p
           role="alert"
-          className="mb-5 rounded-lg border border-critical/50 bg-critical-soft px-4 py-3 text-sm font-medium text-critical"
+          className="pop-in mb-5 flex items-start gap-2 rounded-xl border border-critical/50 bg-critical-soft px-4 py-3 text-sm font-medium text-critical"
         >
+          <Icon name="error" className="mt-px shrink-0 text-[18px]" />
           {error.message}
         </p>
       )}
 
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <Field label={tr("Email", "Email")} htmlFor="email" error={error?.fieldError("email")}>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            invalid={Boolean(error?.fieldError("email"))}
-          />
+          <div className="relative">
+            <Icon
+              name="mail"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-faint"
+            />
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              invalid={Boolean(error?.fieldError("email"))}
+              className="pl-10"
+            />
+          </div>
         </Field>
 
         <Field
@@ -116,52 +210,43 @@ function LoginForm() {
           htmlFor="password"
           error={error?.fieldError("password")}
         >
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            invalid={Boolean(error?.fieldError("password"))}
-          />
+          <div className="relative">
+            <Icon
+              name="lock"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-faint"
+            />
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              invalid={Boolean(error?.fieldError("password"))}
+              className="pl-10 pr-12"
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? tr("Hide password", "Password chhupayein") : tr("Show password", "Password dikhayein")}
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword((current) => !current)}
+              className="absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-sunken hover:text-strong focus-visible:outline-2 focus-visible:outline-primary"
+            >
+              <Icon name={showPassword ? "visibility_off" : "visibility"} className="text-[20px]" />
+            </button>
+          </div>
         </Field>
 
-        <Field
-          label={tr("Where are you signing in from?", "Aap kahan se login kar rahe hain?")}
-          htmlFor="deviceClass"
-          hint={
-            deviceClass === "SHARED_TERMINAL"
-              ? tr(
-                  "Shared terminals sign out after 2 minutes of inactivity.",
-                  "Mushtarka terminals 2 minute ki khamoshi ke baad sign out ho jate hain.",
-                )
-              : tr(
-                  "Your own device stays signed in for 15 minutes of inactivity.",
-                  "Apna device 15 minute ki khamoshi tak signed in rehta hai.",
-                )
-          }
-        >
-          <select
-            id="deviceClass"
-            value={deviceClass}
-            onChange={(event) => setChosen(event.target.value as DeviceClass)}
-            className="block min-h-11 w-full rounded-lg border border-line-strong bg-card px-3 py-2.5 text-base text-strong focus:outline-2 focus:outline-primary"
-          >
-            <option value="PERSONAL">{tr("My own device", "Mera apna device")}</option>
-            <option value="SHARED_TERMINAL">
-              {tr("A shared hospital terminal", "Hospital ka mushtarka computer")}
-            </option>
-          </select>
-        </Field>
+        <DeviceChoice value={deviceClass} onChange={setChosen} />
 
-        <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+        <Button type="submit" size="lg" className="w-full" loading={submitting}>
           {submitting ? tr("Signing in…", "Login ho raha hai…") : tr("Sign in", "Login karein")}
+          {!submitting && <Icon name="arrow_forward" className="text-[20px]" />}
         </Button>
       </form>
 
-      <p className="mt-6 text-sm text-muted">
+      <p className="mt-6 text-center text-sm text-muted">
         {tr("New patient?", "Naye mareez hain?")}{" "}
         <Link
           href="/register"

@@ -60,6 +60,20 @@ def is_available() -> bool:
     return availability()[0]
 
 
+def _unfenced(text: str) -> str:
+    """Strip a ```json fence if the model added one despite the JSON mime type.
+
+    It happens, rarely, on vision requests. The fence is the only thing
+    removed: the JSON inside is parsed exactly as returned.
+    """
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.split("\n", 1)[1] if "\n" in stripped else ""
+        if stripped.rstrip().endswith("```"):
+            stripped = stripped.rstrip()[:-3]
+    return stripped.strip()
+
+
 def _safe_detail(response: httpx.Response) -> str:
     """Summarise a provider error without echoing the request back."""
     try:
@@ -152,11 +166,25 @@ async def generate_json(
         logger.warning("ai_no_candidate", reason=block_reason)
         raise AiUnavailableError("The AI service could not process that document.")
 
+    candidate = candidates[0]
+    finish_reason = candidate.get("finishReason")
     try:
-        text = candidates[0]["content"]["parts"][0]["text"]
-        data = json.loads(text)
+        # Newer models can return several parts, some of them "thought"
+        # summaries. Only the answer parts are the answer.
+        parts = candidate["content"]["parts"]
+        text = "".join(
+            str(part.get("text", "")) for part in parts if not part.get("thought")
+        )
+        data = json.loads(_unfenced(text))
     except (KeyError, IndexError, ValueError) as exc:
-        logger.error("ai_response_unparsable", error=type(exc).__name__)
+        # The reason is logged, the content is not: "MAX_TOKENS" says the answer
+        # was cut off mid-JSON, which is a cap to raise rather than a model to
+        # distrust. Nothing the model wrote reaches the log.
+        logger.error(
+            "ai_response_unparsable",
+            error=type(exc).__name__,
+            finish_reason=finish_reason,
+        )
         raise AiUnavailableError("The AI service returned an unusable response.") from exc
 
     usage = body.get("usageMetadata") or {}

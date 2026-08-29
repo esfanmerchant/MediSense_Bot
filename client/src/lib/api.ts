@@ -153,6 +153,38 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return payload.data as T;
 }
 
+/**
+ * Multipart POST. Deliberately not routed through `apiRequest`, which sets a
+ * JSON content type: the browser must set its own multipart boundary.
+ */
+export async function apiMultipart<T>(path: string, form: FormData): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError("NETWORK_ERROR", "Could not reach the server. Try again.", 0);
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.success === false) {
+    const error = payload?.error ?? {};
+    const apiError = new ApiError(
+      (error.code as ErrorCode) ?? "INTERNAL_ERROR",
+      error.message ?? "The file could not be uploaded.",
+      response.status,
+      error.details ?? [],
+    );
+    if (apiError.isAuthFailure) announceSessionEnded(apiError.code);
+    throw apiError;
+  }
+  return payload.data as T;
+}
+
 /** Same as apiRequest but keeps the pagination metadata. */
 export async function apiList<T, Extra = unknown>(
   path: string,
@@ -676,32 +708,7 @@ export const documents = {
     if (input.documentType) form.append("documentType", input.documentType);
     if (input.title) form.append("title", input.title);
     if (input.medicalRecordId) form.append("medicalRecordId", input.medicalRecordId);
-
-    let response: Response;
-    try {
-      response = await fetch(`${API_URL}/documents`, {
-        method: "POST",
-        credentials: "include",
-        body: form,
-        cache: "no-store",
-      });
-    } catch {
-      throw new ApiError("NETWORK_ERROR", "Could not reach the server. Try again.", 0);
-    }
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || payload?.success === false) {
-      const error = payload?.error ?? {};
-      const apiError = new ApiError(
-        (error.code as ErrorCode) ?? "INTERNAL_ERROR",
-        error.message ?? "The file could not be uploaded.",
-        response.status,
-        error.details ?? [],
-      );
-      if (apiError.isAuthFailure) announceSessionEnded(apiError.code);
-      throw apiError;
-    }
-    return payload.data as MedicalDocument;
+    return apiMultipart<MedicalDocument>("/documents", form);
   },
 
   /**
@@ -856,11 +863,35 @@ export interface ConfirmedSymptom {
   duration?: string;
 }
 
+/** Image types the assistant reads. A PDF belongs on the documents page. */
+export const ACCEPTED_ASSISTANT_IMAGE_TYPES = "image/jpeg,image/png,image/webp";
+
+/** Matches the server's cap for an inline attachment. */
+export const MAX_ASSISTANT_IMAGE_BYTES = 8 * 1024 * 1024;
+
 export const assistant = {
   status: () => apiRequest<AssistantStatus>("/assistant/status"),
 
   chat: (body: { message: string; sessionId?: string; inputType?: InputType }) =>
     apiRequest<AssistantAnswer>("/assistant/chat", { method: "POST", body }),
+
+  /**
+   * `chat` with a photographed report or prescription attached. The server
+   * reads the image for this one answer and never stores it.
+   */
+  chatWithImage: (input: {
+    message: string;
+    image: File;
+    sessionId?: string;
+    inputType?: InputType;
+  }) => {
+    const form = new FormData();
+    form.append("message", input.message);
+    form.append("image", input.image);
+    if (input.sessionId) form.append("sessionId", input.sessionId);
+    if (input.inputType) form.append("inputType", input.inputType);
+    return apiMultipart<AssistantAnswer>("/assistant/chat/image", form);
+  },
 
   history: (query?: { sessionId?: string; limit?: number }) =>
     apiRequest<AssistantTurn[]>("/assistant/history", { query }),

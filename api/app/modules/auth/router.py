@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.api.deps import ACCESS_COOKIE, REFRESH_COOKIE, CurrentAuth, DbSession, client_ip
 from app.core.config import settings
 from app.core.errors import AppError, unauthenticated
 from app.core.logging import logger
+from app.core.ratelimit import limit
 from app.modules.auth import service
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
@@ -30,6 +31,14 @@ def _ctx(request: Request) -> service.RequestContext:
         user_agent=request.headers.get("user-agent"),
         request_id=getattr(request.state, "request_id", None),
     )
+
+
+#: A first layer in front of the account lockout that already exists. Lockout
+#: protects *one* account and counts in the database, so it holds however many
+#: workers are running; this bounds a client working through many accounts, which
+#: lockout alone never sees. Ten a minute leaves room for a mistyped password
+#: and none for a wordlist.
+LoginRateLimit = Annotated[None, Depends(limit(times=10, seconds=60, scope="login"))]
 
 
 def _set_auth_cookies(response: Response, tokens: service.SessionTokens) -> None:
@@ -95,7 +104,13 @@ async def register(payload: RegisterRequest, request: Request, db: DbSession) ->
 
 
 @router.post("/login")
-async def login(payload: LoginRequest, request: Request, response: Response, db: DbSession) -> dict[str, Any]:
+async def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    _: LoginRateLimit,
+) -> dict[str, Any]:
     user, tokens = await service.login(db, payload, _ctx(request))
     _set_auth_cookies(response, tokens)
     return {"success": True, "data": {"user": _user_payload(user), "session": _session_payload(tokens)}}

@@ -34,6 +34,7 @@ from sqlalchemy import select
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
 from app.api.responses import ok
 from app.core.errors import AppError, ErrorCode, forbidden
+from app.core.ratelimit import limit
 from app.db.base import new_id, utcnow
 from app.db.enums import (
     AppointmentStatus,
@@ -234,6 +235,12 @@ def _serialize(answer: assistant.AssistantAnswer, session_id: str) -> dict[str, 
     }
 
 
+#: Every call spends real money at the provider, and this is the only
+#: patient-reachable endpoint that does. Twenty a minute is far more than a
+#: conversation needs and far less than a held-down button costs.
+ChatRateLimit = Annotated[None, Depends(limit(times=20, seconds=60, scope="assistant"))]
+
+
 @router.post("/chat")
 async def chat(
     payload: ChatRequest,
@@ -241,6 +248,7 @@ async def chat(
     auth: CurrentAuth,
     db: DbSession,
     _: RequireAiChat,
+    __: ChatRateLimit,
 ) -> dict[str, Any]:
     """Answer a patient's health question.
 
@@ -309,6 +317,7 @@ async def analyse_symptoms(
     auth: CurrentAuth,
     db: DbSession,
     _: RequireAiChat,
+    __: ChatRateLimit,
 ) -> dict[str, Any]:
     """Extract symptoms from what the patient said, for them to correct.
 

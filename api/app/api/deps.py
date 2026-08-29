@@ -141,6 +141,12 @@ async def get_current_auth(request: Request, db: DbSession) -> AuthContext:
     if now - session.last_seen_at > timedelta(seconds=LAST_SEEN_WRITE_THROTTLE_SECONDS):
         await db.execute(update(Session).where(Session.id == session.id).values(last_seen_at=now))
 
+    # Published on the request so a dependency that runs without the auth
+    # context — the rate limiter — can bucket by session rather than by IP. An
+    # authenticated user behind a hospital's shared NAT should get their own
+    # budget instead of sharing one with the whole building.
+    request.state.session_id = session.id
+
     return AuthContext(
         user_id=user.id,
         role=user.role,

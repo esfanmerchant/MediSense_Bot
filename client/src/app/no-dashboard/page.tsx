@@ -1,38 +1,51 @@
 "use client";
 
-import { Button, Card } from "@/components/ui";
-import { useSession } from "@/lib/session";
-
 /**
  * Landing page for NURSE accounts.
  *
  * Nurses hold no standing access to patient data — their only patient-facing
- * capability is requesting time-boxed break-glass access during a declared
- * emergency (R3). That flow arrives in a later phase; until then this page
- * states the position plainly rather than showing an empty dashboard.
+ * capability is requesting time-boxed break-glass access during an emergency
+ * (R3, conflict C1). So this is not a dashboard with nothing on it; it is the
+ * one screen the role actually needs, and it says why there is nothing else.
  */
+
+import { AppShell } from "@/components/AppShell";
+import { EmergencyAccessPanel } from "@/components/emergency";
+import { Card } from "@/components/ui";
+import { useSession } from "@/lib/session";
+
 export default function NoDashboardPage() {
-  const { user, signOut } = useSession();
+  const { user } = useSession();
 
   return (
-    <main id="main" className="mx-auto flex min-h-screen max-w-2xl items-center px-4 py-12">
-      <Card title="Emergency access only">
-        <p className="text-slate-700 dark:text-slate-300">
+    <AppShell role="NURSE">
+      <div id="main">
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+          Emergency access
+        </h1>
+        <p className="mt-1 max-w-2xl text-slate-600 dark:text-slate-400">
           {user ? `You are signed in as ${user.name}. ` : ""}
-          Nursing accounts do not hold standing access to patient records.
+          Nursing accounts do not hold standing access to patient records — you can open one
+          patient&rsquo;s chart when you are treating them and need it.
         </p>
-        <p className="mt-3 text-slate-700 dark:text-slate-300">
-          During a declared emergency you can request temporary access to a single patient&rsquo;s
-          critical information. That access is time-limited, notifies the patient&rsquo;s doctor and
-          the duty administrator, and every record it opens is logged and reviewed afterwards.
-        </p>
-        <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-          The emergency access request flow is not available yet.
-        </p>
-        <Button variant="secondary" className="mt-5" onClick={() => void signOut()}>
-          Sign out
-        </Button>
-      </Card>
-    </main>
+
+        <div className="mt-6 space-y-6">
+          <EmergencyAccessPanel />
+
+          <Card title="Why you have no patient list">
+            <p className="text-slate-700 dark:text-slate-300">
+              Access here is decided by the relationship to a patient, not by the role on the
+              account. A doctor sees the patients they treat; you see the patient in front of you,
+              for as long as you are treating them.
+            </p>
+            <p className="mt-3 text-slate-700 dark:text-slate-300">
+              That is deliberate. A standing list of every patient would be a standing risk, and
+              the emergency route gives you the same information when you actually need it —
+              with a record of why.
+            </p>
+          </Card>
+        </div>
+      </div>
+    </AppShell>
   );
 }

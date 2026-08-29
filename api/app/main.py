@@ -22,6 +22,7 @@ from app.core.logging import configure_logging, logger
 from app.db.session import check_database_connection, dispose_engine
 from app.modules.appointments.router import router as appointments_router
 from app.modules.assistant.router import router as assistant_router
+from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.billing.router import router as billing_router
 from app.modules.dashboard.router import router as dashboard_router
@@ -29,6 +30,7 @@ from app.modules.departments.router import router as departments_router
 from app.modules.doctors.router import router as doctors_router
 from app.modules.documents.ocr_router import router as ocr_router
 from app.modules.documents.router import router as documents_router
+from app.modules.emergency.router import router as emergency_router
 from app.modules.notifications import dispatcher
 from app.modules.notifications.router import router as notifications_router
 from app.modules.patients.router import router as patients_router
@@ -124,6 +126,8 @@ def create_app() -> FastAPI:
         vitals_router,
         alerts_router,
         billing_router,
+        emergency_router,
+        audit_router,
         notifications_router,
         dashboard_router,
     ):

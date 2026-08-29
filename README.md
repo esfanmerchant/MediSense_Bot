@@ -87,7 +87,8 @@ api/
     ├── api/                   # dependencies (auth, RBAC, resource access)
     ├── modules/
     │   ├── auth/              # login, sessions, RBAC catalogue
-    │   ├── audit/             # append-only, hash-chained log
+    │   ├── audit/             # append-only, hash-chained log; read-only router
+    │   ├── emergency/         # break-glass grant, revoke, review
     │   ├── users/             # admin user management, care assignments
     │   ├── patients/          # profile, roster, consent
     │   ├── doctors/           # directory and caseload
@@ -344,6 +345,38 @@ Appointment reminders are idempotent by observation — the loop asks which
 appointments already have a reminder notification and skips those, so there is
 no "reminded" flag to fall out of step with reality.
 
+**Break-glass access (R3, conflict C1).** A grant is issued **immediately, not
+approved** — and that is the design, not a shortcut. Break-glass that waits for
+an administrator has failed at the moment it exists for, and staff who cannot
+get in during an emergency start sharing logins, which defeats every control in
+this system rather than just this one.
+
+Control comes from making misuse expensive instead of making access hard: a
+mandatory stored reason, scope limited to **one patient**, automatic expiry in
+minutes, every read counted and audited at `BREAK_GLASS` severity, a
+notification to the patient that their record was opened this way, and a
+compliance review afterwards. The deterrent is the review, not the restriction.
+
+Expiry is enforced **at the moment of use**, never by a background sweeper: a
+sweeper that stopped running would silently extend every outstanding grant. The
+grant id rides in the access token, but the token is a *pointer* — the grant is
+re-read on every request, so revocation takes effect on the next call rather
+than when the token expires.
+
+**Rate limiting** is a sliding window on the endpoints where repetition costs
+something: the AI assistant (every call spends money), break-glass (probing for
+patient ids), and login (in front of the account lockout that already exists).
+Its counter lives in the process, so a multi-worker deployment allows roughly
+one budget per worker — a real weakness, stated rather than hidden. It is a cost
+and noise control; the defences that must not be bypassable — account lockout,
+authorization, audit — are all in the database.
+
+**Reading the audit trail is itself audited**, and there is no write route to
+it at all. `record_audit()` is the only writer and is called from inside the
+operations it records, so no API — administrator included — can add an entry by
+hand. `GET /audit-logs/verify` recomputes the hash chain and reports whether it
+still holds, which is what turns "append-only" from a claim into evidence.
+
 **Logging.** structlog with a central redaction list. Passwords, tokens, API
 keys, cookies and extracted document text never reach a log sink. The Supabase
 service role key bypasses row-level security, so it appears only in
@@ -362,10 +395,10 @@ explicit `Z` alongside a pre-formatted clinic-local label.
 |---|---|---|
 | R1 real-time vitals + alerts | **done** | `modules/vitals/` — threshold engine, alert lifecycle, SSE |
 | R2 encryption + role-based access | **done (access control)** | `rbac.py`, `deps.py`; at-rest field encryption Phase 13 |
-| R3 emergency override | schema + guard | break-glass path in `deps.py` — request flow Phase 13 |
+| R3 emergency override | **done** | `modules/emergency/` — immediate grant, one patient, expiring, reviewed |
 | R4 automated billing | **done** | `modules/billing/` — unique `appointmentId` is the idempotency guarantee |
 | R5 doctor record updates | **done** | `modules/records/` — author-only amendment, audited by field |
-| R6 append-only audit | **done** | `modules/audit/service.py` |
+| R6 append-only audit | **done** | `modules/audit/` — no write route; `/audit-logs/verify` proves the chain |
 | R7 patient portal | **done** | `client/src/app/patient` — appointments, history, documents, vitals, billing, assistant |
 | R8 2-minute timeout | **done** | `session_policy.py`, `deps.py`, client countdown |
 | §13 medical records | **done** | `modules/records/`, `modules/prescriptions/` |
@@ -377,6 +410,7 @@ explicit `Z` alongside a pre-formatted clinic-local label.
 | §16-17 vitals + thresholds | **done** | `modules/vitals/`, `components/vitals.tsx` — engine, alert lifecycle, SSE |
 | §15 automated billing | **done** | `modules/billing/`, `components/billing.tsx` — invoice per completed consultation |
 | §31-32 notifications | **done** | `notifications/templates.py`, `dispatcher.py`, `services/email.py` — in-app + email |
+| §33-34 rate limiting, ACL review | **done** | `core/ratelimit.py`, `tests/test_access_control_review.py` |
 
 Nothing is marked complete on the strength of a UI existing — a feature counts
 only with API, database, authorization, validation, error handling, audit and
@@ -397,4 +431,5 @@ passing tests behind it.
 10. ~~Vitals — threshold engine, alerts, live updates~~
 11. ~~Billing — automatic invoice on consultation completion~~
 12. ~~Notification delivery — email templates, dispatcher, appointment reminders~~
-13. Audit, emergency access, hardening ← next · 14. Full test pass · 15. Verification
+13. ~~Audit, emergency access, rate limiting, access-control review~~
+14. Full test pass ← next · 15. Requirement verification

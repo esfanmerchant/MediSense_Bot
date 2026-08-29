@@ -1088,3 +1088,114 @@ export const invoices = {
       body: { reason },
     }),
 };
+
+// ---------------------------------------------------------------------------
+// Break-glass emergency access
+// ---------------------------------------------------------------------------
+
+export type EmergencyStatus = "ACTIVE" | "EXPIRED" | "REVOKED";
+
+export interface EmergencyGrant {
+  id: string;
+  requesterId: string;
+  requesterName: string | null;
+  patientId: string;
+  reason: string;
+  status: EmergencyStatus;
+  grantedAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  /** How much was actually read under the grant — the reviewer's first signal. */
+  accessCount: number;
+  reviewedAt: string | null;
+  reviewedById: string | null;
+  reviewNotes: string | null;
+  /** Whether it would authorise a read right now: status *and* the clock. */
+  live: boolean;
+}
+
+export interface GrantedAccess extends EmergencyGrant {
+  /** False when an existing live grant was reused rather than a new one made. */
+  created: boolean;
+  expiresInMinutes: number;
+  notice: string;
+}
+
+export const emergency = {
+  /**
+   * Opens one patient's chart immediately — there is no approval step.
+   *
+   * The response re-mints the session's access cookie with the grant attached,
+   * so subsequent requests carry it without the client storing anything.
+   */
+  request: (body: { patientId: string; reason: string }) =>
+    apiRequest<GrantedAccess>("/emergency/request", { method: "POST", body }),
+
+  active: () => apiRequest<EmergencyGrant[]>("/emergency/active"),
+
+  revoke: (id: string) =>
+    apiRequest<EmergencyGrant>(`/emergency/${id}/revoke`, { method: "POST" }),
+
+  /** The compliance review queue. Administrators only. */
+  list: (query?: { unreviewedOnly?: boolean; limit?: number; offset?: number }) =>
+    apiList<EmergencyGrant, { unreviewed: number }>("/emergency", query),
+
+  review: (id: string, notes: string) =>
+    apiRequest<EmergencyGrant>(`/emergency/${id}/review`, {
+      method: "POST",
+      body: { notes },
+    }),
+};
+
+// ---------------------------------------------------------------------------
+// Audit trail — read-only by design
+// ---------------------------------------------------------------------------
+
+export type AuditSeverity = "INFO" | "NOTICE" | "WARNING" | "BREAK_GLASS" | "SECURITY";
+
+export interface AuditEntry {
+  id: string;
+  action: string;
+  severity: AuditSeverity;
+  userId: string | null;
+  /** Null when the account has since been deleted — the trail outlives it. */
+  actorName: string | null;
+  actorRole: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  patientId: string | null;
+  ipAddress: string | null;
+  requestId: string | null;
+  emergencyAccessId: string | null;
+  /** References only — field names, ids, counts. Never clinical values. */
+  metadata: Record<string, unknown> | null;
+  timestamp: string;
+}
+
+export interface ChainVerification {
+  valid: boolean;
+  checked: number;
+  brokenAt: string | null;
+  detail: string;
+}
+
+/**
+ * There is no `create`, `update` or `remove` here, and that is the requirement
+ * rather than an omission: audit records must be append-only and unreachable
+ * for modification through ordinary APIs (R6).
+ */
+export const audit = {
+  list: (query?: {
+    action?: string;
+    severity?: AuditSeverity;
+    userId?: string;
+    patientId?: string;
+    since?: string;
+    until?: string;
+    limit?: number;
+    offset?: number;
+  }) => apiList<AuditEntry, { securityEvents: number }>("/audit-logs", query),
+
+  verify: (limit?: number) =>
+    apiRequest<ChainVerification>("/audit-logs/verify", { query: { limit } }),
+};

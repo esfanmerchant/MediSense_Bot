@@ -215,6 +215,10 @@ class AuditAction(StrEnum):
     EMERGENCY_ACCESS_REVOKED = "EMERGENCY_ACCESS_REVOKED"
     ACCESS_DENIED = "ACCESS_DENIED"
     CONFIG_CHANGED = "CONFIG_CHANGED"
+    #: Reading the trail is itself a recorded action. Otherwise an administrator
+    #: browsing charts through the audit log would be the one access this system
+    #: does not record (R6).
+    AUDIT_VIEWED = "AUDIT_VIEWED"
 
 
 class AuditSeverity(StrEnum):

@@ -17,9 +17,12 @@ interface NavItem {
 /**
  * Only routes that exist.
  *
- * Later phases add the admin user and audit screens; their links go in when the
- * pages do. A nav item that leads to a 404 reads as a broken product, not as a
- * roadmap.
+ * A nav item that leads to a 404 reads as a broken product, not as a roadmap, so
+ * links go in only when the page does.
+ *
+ * The nurse entry is not an oversight. Nurses hold no standing access to
+ * patient data, so there is no patient list to link to — emergency access is
+ * the whole of what the role can reach (conflict C1).
  */
 const NAV: Record<Role, NavItem[]> = {
   PATIENT: [
@@ -41,6 +44,8 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin", label: "Overview" },
     { href: "/admin/appointments", label: "Appointments" },
     { href: "/admin/billing", label: "Billing" },
+    { href: "/admin/emergency", label: "Emergency access" },
+    { href: "/admin/audit", label: "Audit trail" },
   ],
   NURSE: [{ href: "/no-dashboard", label: "Emergency access" }],
 };

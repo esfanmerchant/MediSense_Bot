@@ -43,7 +43,7 @@ export function LanguageToggle({ onDark = false }: { onDark?: boolean }) {
               onDark ? "focus-visible:outline-white" : "focus-visible:outline-primary",
               active
                 ? onDark
-                  ? "bg-accent-bright text-[#00201c]"
+                  ? "bg-accent-bright text-[#053B38]"
                   : "bg-primary text-white"
                 : onDark
                   ? "text-white/70 hover:text-white"

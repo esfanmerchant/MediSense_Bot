@@ -152,7 +152,7 @@ function LoginForm() {
       <div className="mb-7">
         <span
           aria-hidden
-          className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-[#003178] to-[#0d47a1] text-white shadow-md"
+          className="bg-gradient-brand mb-4 grid h-12 w-12 place-items-center rounded-2xl text-white shadow-md"
         >
           <Icon name="waving_hand" filled className="text-[24px]" />
         </span>
@@ -186,23 +186,16 @@ function LoginForm() {
 
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <Field label={tr("Email", "Email")} htmlFor="email" error={error?.fieldError("email")}>
-          <div className="relative">
-            <Icon
-              name="mail"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-faint"
-            />
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              invalid={Boolean(error?.fieldError("email"))}
-              className="pl-10"
-            />
-          </div>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            invalid={Boolean(error?.fieldError("email"))}
+          />
         </Field>
 
         <Field
@@ -210,32 +203,26 @@ function LoginForm() {
           htmlFor="password"
           error={error?.fieldError("password")}
         >
-          <div className="relative">
-            <Icon
-              name="lock"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-faint"
-            />
-            <Input
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              invalid={Boolean(error?.fieldError("password"))}
-              className="pl-10 pr-12"
-            />
-            <button
-              type="button"
-              aria-label={showPassword ? tr("Hide password", "Password chhupayein") : tr("Show password", "Password dikhayein")}
-              aria-pressed={showPassword}
-              onClick={() => setShowPassword((current) => !current)}
-              className="absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-sunken hover:text-strong focus-visible:outline-2 focus-visible:outline-primary"
-            >
-              <Icon name={showPassword ? "visibility_off" : "visibility"} className="text-[20px]" />
-            </button>
-          </div>
+          <Input
+            id="password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            invalid={Boolean(error?.fieldError("password"))}
+            className="pr-12"
+          />
+          <button
+            type="button"
+            aria-label={showPassword ? tr("Hide password", "Password chhupayein") : tr("Show password", "Password dikhayein")}
+            aria-pressed={showPassword}
+            onClick={() => setShowPassword((current) => !current)}
+            className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-muted transition-colors hover:bg-sunken hover:text-strong focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            <Icon name={showPassword ? "visibility_off" : "visibility"} className="text-[20px]" />
+          </button>
         </Field>
 
         <DeviceChoice value={deviceClass} onChange={setChosen} />

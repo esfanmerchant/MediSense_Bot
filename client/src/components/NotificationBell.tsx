@@ -8,11 +8,14 @@
  * boundary once email delivery lands. Anything clinical stays behind the link.
  */
 
+import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-import { Button, cx } from "@/components/ui";
+import { Icon } from "@/components/Icon";
+import { Button, EmptyState, cx } from "@/components/ui";
 import { notifications, type Notification, type Role } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
 /** Every role that receives appointment notifications has its own list page. */
@@ -32,7 +35,19 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+/** An icon for the kind of thing that happened. */
+function iconFor(type: string): string {
+  const key = type.toLowerCase();
+  if (key.includes("appointment")) return "calendar_today";
+  if (key.includes("alert") || key.includes("vital")) return "monitor_heart";
+  if (key.includes("invoice") || key.includes("billing")) return "receipt_long";
+  if (key.includes("emergency")) return "e911_emergency";
+  if (key.includes("document")) return "description";
+  return "notifications";
+}
+
 export function NotificationBell({ role }: { role: Role }) {
+  const tr = useTr();
   const [open, setOpen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
 
@@ -81,100 +96,118 @@ export function NotificationBell({ role }: { role: Role }) {
           if (!open) void load();
         }}
         className={cx(
-          "relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md",
-            "text-muted hover:bg-sunken",
-              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+          "group relative grid h-11 w-11 place-items-center rounded-full text-muted transition-[background-color,color,transform] duration-200 hover:scale-105 hover:bg-gradient-soft hover:text-primary",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+          open && "bg-gradient-soft text-primary",
         )}
       >
-        <svg aria-hidden viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor">
-          <path
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M6 8a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 12 6 8Z M10 18a2 2 0 0 0 4 0"
-          />
-        </svg>
+        <Icon name="notifications" filled={open || unread > 0} className="icon-ring text-[24px]" />
         {unread > 0 && (
-          <span className="absolute right-1 top-1 min-w-5 rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-white">
-            {unread > 9 ? "9+" : unread}
+          <span className="absolute right-2 top-2 flex h-2.5 w-2.5">
+            <span className="pulse-dot absolute inline-flex h-full w-full rounded-full bg-critical" />
+            <span className="sr-only">{unread}</span>
           </span>
         )}
       </button>
 
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Notifications"
-          className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-line bg-card shadow-lg "
-        >
-          <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-            <p className="font-medium text-strong">Notifications</p>
-            {unread > 0 && (
-              <Button variant="ghost" className="ml-auto !min-h-9 px-2 text-sm" onClick={() => void markAll()}>
-                Mark all read
-              </Button>
-            )}
-          </div>
-
-          <div className="max-h-96 overflow-y-auto">
-            {error && (
-              <p role="alert" className="px-4 py-3 text-sm text-critical">
-                {error.message}
-              </p>
-            )}
-            {!error && items.length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-muted">
-                Nothing to catch up on.
-              </p>
-            )}
-            <ul className="divide-y divide-line">
-              {items.map((item) => (
-                <li
-                  key={item.id}
-                  className={cx("px-4 py-3", !item.readAt && "bg-accent-soft/60")}
-                >
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-strong">
-                        {item.title}
-                      </p>
-                      <p className="mt-0.5 text-sm text-muted">
-                        {item.body}
-                      </p>
-                      <p className="mt-1 text-xs text-faint">
-                        {timeAgo(item.createdAt)}
-                      </p>
-                    </div>
-                    {!item.readAt && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void notifications.markRead(item.id).then(load);
-                        }}
-                        className="shrink-0 rounded px-1.5 py-1 text-xs font-medium text-teal-800 hover:bg-teal-100 focus-visible:outline-2 focus-visible:outline-primary dark:hover:bg-teal-950"
-                      >
-                        Mark read
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {APPOINTMENTS_PATH[role] && (
-            <div className="border-t border-line px-4 py-2">
-              <Link
-                href={APPOINTMENTS_PATH[role]}
-                onClick={() => setOpen(false)}
-                className="text-sm font-medium text-teal-800 hover:underline"
-              >
-                View appointments
-              </Link>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            role="dialog"
+            aria-label="Notifications"
+            initial={{ opacity: 0, scale: 0.92, y: -6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.8 }}
+            style={{ transformOrigin: "top right" }}
+            className="glass absolute right-0 z-50 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl"
+          >
+            <div className="flex items-center gap-2 border-b border-line/70 px-4 py-3">
+              <Icon name="notifications" className="text-[20px] text-primary" />
+              <p className="font-display font-bold text-strong">{tr("Notifications", "Ittilaat")}</p>
+              {unread > 0 && (
+                <span className="rounded-full bg-critical-soft px-2 py-px text-xs font-bold tabular-nums text-critical">
+                  {unread}
+                </span>
+              )}
+              {unread > 0 && (
+                <Button variant="ghost" className="ml-auto !min-h-9 px-2 text-sm" onClick={() => void markAll()}>
+                  {tr("Mark all read", "Sab parh liye")}
+                </Button>
+              )}
             </div>
-          )}
-        </div>
-      )}
+
+            <div className="max-h-96 overflow-y-auto">
+              {error && (
+                <p role="alert" className="px-4 py-3 text-sm text-critical">
+                  {error.message}
+                </p>
+              )}
+              {!error && items.length === 0 && (
+                <div className="px-4">
+                  <EmptyState
+                    icon="notifications_off"
+                    title={tr("Nothing to catch up on", "Kuchh naya nahi")}
+                    description={tr("You are up to date.", "Aap up to date hain.")}
+                  />
+                </div>
+              )}
+              <ul className="divide-y divide-line/70">
+                {items.map((item, index) => (
+                  <motion.li
+                    key={item.id}
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(index, 6) * 0.04 }}
+                    className={cx("px-4 py-3 transition-colors", !item.readAt && "bg-gradient-soft")}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span
+                        aria-hidden
+                        className={cx(
+                          "mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl",
+                          item.readAt ? "bg-sunken text-faint" : "bg-gradient-brand text-white shadow-sm",
+                        )}
+                      >
+                        <Icon name={iconFor(item.type)} className="text-[20px]" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-strong">{item.title}</p>
+                        <p className="mt-0.5 text-sm text-muted">{item.body}</p>
+                        <p className="mt-1 text-xs text-faint">{timeAgo(item.createdAt)}</p>
+                      </div>
+                      {!item.readAt && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void notifications.markRead(item.id).then(load);
+                          }}
+                          className="shrink-0 rounded-full px-2 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary"
+                        >
+                          {tr("Mark read", "Parh liya")}
+                        </button>
+                      )}
+                    </div>
+                  </motion.li>
+                ))}
+              </ul>
+            </div>
+
+            {APPOINTMENTS_PATH[role] && (
+              <div className="border-t border-line/70 px-4 py-2.5">
+                <Link
+                  href={APPOINTMENTS_PATH[role]}
+                  onClick={() => setOpen(false)}
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                >
+                  {tr("View appointments", "Appointments dekhein")}
+                  <Icon name="arrow_forward" className="text-[16px]" />
+                </Link>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

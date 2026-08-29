@@ -75,7 +75,7 @@ function Cta({
     solid:
       "bg-primary text-white shadow-card hover:bg-primary-hover focus-visible:outline-primary",
     onDark:
-      "bg-accent-bright text-[#00201c] shadow-overlay hover:brightness-105 focus-visible:outline-white",
+      "bg-accent-bright text-[#053B38] shadow-overlay hover:brightness-105 focus-visible:outline-white",
     quiet: "border border-white/25 text-white hover:bg-white/10 focus-visible:outline-white",
   } as const;
 
@@ -357,7 +357,7 @@ export default function Home() {
       {/* ================= NAV ================= */}
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
-          scrolled ? "border-b border-white/10 bg-[#002050]/85 shadow-overlay backdrop-blur-md" : ""
+          scrolled ? "border-b border-white/10 bg-[#0A1A4D]/85 shadow-overlay backdrop-blur-md" : ""
         }`}
       >
         <div className="mx-auto flex max-w-[1200px] items-center gap-3 px-5 py-4">
@@ -380,15 +380,15 @@ export default function Home() {
       </header>
 
       {/* ================= HERO ================= */}
-      <div className="relative overflow-hidden bg-[#002050]">
+      <div className="relative overflow-hidden bg-[#0A1A4D]">
         {/* Lit space, not flat fill: two drifting glows and a fine grid. */}
         <div
           aria-hidden
-          className="animate-drift pointer-events-none absolute -left-40 -top-40 h-[38rem] w-[38rem] rounded-full bg-[#0d47a1] opacity-60 blur-[130px]"
+          className="animate-drift pointer-events-none absolute -left-40 -top-40 h-[38rem] w-[38rem] rounded-full bg-[#3B6BF0] opacity-60 blur-[130px]"
         />
         <div
           aria-hidden
-          className="animate-drift-late pointer-events-none absolute -right-32 top-24 h-[32rem] w-[32rem] rounded-full bg-[#006b5f] opacity-40 blur-[130px]"
+          className="animate-drift-late pointer-events-none absolute -right-32 top-24 h-[32rem] w-[32rem] rounded-full bg-[#0E9E98] opacity-40 blur-[130px]"
         />
         <div
           aria-hidden
@@ -679,14 +679,14 @@ export default function Home() {
         {/* ================= CLOSE ================= */}
         <section className="mx-auto max-w-[1200px] px-5 py-24">
           <Reveal>
-            <div className="relative overflow-hidden rounded-2xl bg-[#002050] px-8 py-16 text-center">
+            <div className="relative overflow-hidden rounded-2xl bg-[#0A1A4D] px-8 py-16 text-center">
               <div
                 aria-hidden
-                className="animate-drift pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[#006b5f] opacity-40 blur-[100px]"
+                className="animate-drift pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[#0E9E98] opacity-40 blur-[100px]"
               />
               <div
                 aria-hidden
-                className="animate-drift-late pointer-events-none absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-[#0d47a1] opacity-60 blur-[100px]"
+                className="animate-drift-late pointer-events-none absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-[#3B6BF0] opacity-60 blur-[100px]"
               />
               <div className="relative">
                 <h2 className="font-display text-3xl font-bold text-white sm:text-[2.6rem]">

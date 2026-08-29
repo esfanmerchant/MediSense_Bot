@@ -82,7 +82,7 @@ export default function DoctorDashboard() {
               preserveAspectRatio="none"
               className="pointer-events-none absolute inset-x-0 bottom-0 h-14 w-full opacity-30"
               fill="none"
-              stroke="#8df5e4"
+              stroke="#5EEAD4"
               strokeWidth="1.5"
               strokeLinejoin="round"
             >

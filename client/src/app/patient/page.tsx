@@ -89,7 +89,7 @@ function Welcome({
         preserveAspectRatio="none"
         className="pointer-events-none absolute inset-x-0 bottom-0 h-14 w-full opacity-30"
         fill="none"
-        stroke="#8df5e4"
+        stroke="#5EEAD4"
         strokeWidth="1.5"
         strokeLinejoin="round"
       >
@@ -141,7 +141,7 @@ function Welcome({
             <button
               type="submit"
               aria-label={tr("Ask", "Poochein")}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent-bright text-[#00201c] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent-bright text-[#053B38] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               <Icon name="arrow_forward" className="text-[22px]" />
             </button>

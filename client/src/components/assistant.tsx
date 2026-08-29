@@ -327,7 +327,7 @@ function AssistantAvatar({ className }: { className?: string }) {
     <span
       aria-hidden
       className={cx(
-        "grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#006b5f] to-[#0d47a1] text-white shadow-md",
+        "grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#0E9E98] to-[#3B6BF0] text-white shadow-md",
         className,
       )}
     >
@@ -358,7 +358,7 @@ function UserMessage({ turn }: { turn: Turn }) {
             <span className="text-faint">· {tr("not stored", "save nahi hui")}</span>
           </p>
         )}
-        <p className="whitespace-pre-line rounded-2xl rounded-br-md bg-gradient-to-br from-[#003178] to-[#0d47a1] px-4 py-3 text-[15.5px] leading-relaxed text-white shadow-md">
+        <p className="whitespace-pre-line rounded-2xl rounded-br-md bg-gradient-to-br from-[#1B4FE0] to-[#3B6BF0] px-4 py-3 text-[15.5px] leading-relaxed text-white shadow-md">
           {turn.question}
         </p>
       </div>

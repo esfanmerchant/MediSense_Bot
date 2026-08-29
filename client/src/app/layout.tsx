@@ -1,38 +1,31 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { SessionProvider } from "@/lib/session";
 import "./globals.css";
 
 /**
- * Inter, and only Inter.
+ * Plus Jakarta Sans for everything you read, Space Grotesk for everything
+ * that announces itself.
  *
- * The design system picks it for legibility in data-heavy contexts, which is
- * what most of this application is: tables of readings, doses, times. A second
- * display face would buy personality on the landing page and cost clarity on
- * every screen that matters more.
+ * Jakarta is the body and UI face: open counters, even rhythm, and a tabular
+ * figure set that keeps a column of doses and times aligned. Space Grotesk
+ * carries headings and the wordmark — its squared, slightly technical cuts
+ * echo the circuit nodes in the logo without turning a clinical screen into
+ * a poster.
  */
-const inter = Inter({
+const body = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-body",
   display: "swap",
 });
 
-/**
- * The display face, for headlines only.
- *
- * Inter stays on every data surface — the design system chose it for tables of
- * doses and times, and that holds. But headlines set in the body face read as a
- * settings page, and this product has a public front door now. Bricolage's
- * slightly flared, characterful cuts give the big type a voice without touching
- * a single clinical screen's legibility.
- */
-const display = Bricolage_Grotesque({
+const display = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-display-face",
   display: "swap",
-  weight: ["500", "600", "700", "800"],
+  weight: ["500", "600", "700"],
 });
 
 /**
@@ -55,7 +48,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ur-Latn" className={`${inter.variable} ${display.variable}`} suppressHydrationWarning>
+    <html lang="ur-Latn" className={`${body.variable} ${display.variable}`} suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -76,7 +69,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
         />
       </head>
-      <body className="bg-canvas text-strong antialiased">
+      <body className="text-strong antialiased">
         {/* Keyboard users should be able to skip the navigation on every page. */}
         <a
           href="#main"

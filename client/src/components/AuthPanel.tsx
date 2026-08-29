@@ -41,11 +41,11 @@ export function AuthPanel({ children }: { children: ReactNode }) {
       <section className="hero-navy relative overflow-hidden px-6 py-8 lg:flex lg:flex-col lg:justify-between lg:px-12 lg:py-12">
         <div
           aria-hidden
-          className="animate-drift pointer-events-none absolute -left-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-[#0d47a1] opacity-60 blur-[110px]"
+          className="animate-drift pointer-events-none absolute -left-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-[#3B6BF0] opacity-60 blur-[110px]"
         />
         <div
           aria-hidden
-          className="animate-drift-late pointer-events-none absolute -bottom-24 -right-24 h-[24rem] w-[24rem] rounded-full bg-[#006b5f] opacity-40 blur-[110px]"
+          className="animate-drift-late pointer-events-none absolute -bottom-24 -right-24 h-[24rem] w-[24rem] rounded-full bg-[#0E9E98] opacity-40 blur-[110px]"
         />
         <svg
           aria-hidden
@@ -53,7 +53,7 @@ export function AuthPanel({ children }: { children: ReactNode }) {
           preserveAspectRatio="none"
           className="pointer-events-none absolute inset-x-0 bottom-24 hidden h-16 w-full opacity-25 lg:block"
           fill="none"
-          stroke="#8df5e4"
+          stroke="#5EEAD4"
           strokeWidth="1.5"
           strokeLinejoin="round"
         >
@@ -120,7 +120,7 @@ export function AuthPanel({ children }: { children: ReactNode }) {
             <div className="mt-3 flex items-start gap-2.5">
               <span
                 aria-hidden
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#006b5f] to-[#8df5e4] text-[#00201c]"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#0E9E98] to-[#5EEAD4] text-[#053B38]"
               >
                 <Icon name="health_and_safety" filled className="text-[18px]" />
               </span>

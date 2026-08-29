@@ -51,3 +51,15 @@ if (!("EventSource" in window)) {
 import { setLang } from "@/lib/lang";
 
 setLang("en");
+
+// Layout animations measure elements with a ResizeObserver, which jsdom does
+// not provide. A no-op keeps the components mounting; nothing here asserts on
+// the motion itself.
+if (!("ResizeObserver" in window)) {
+  class NoopResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  (window as unknown as { ResizeObserver: unknown }).ResizeObserver = NoopResizeObserver;
+}

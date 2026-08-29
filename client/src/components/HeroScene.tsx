@@ -11,7 +11,7 @@
  * The scene is thematic rather than generic: ~1,400 points trace a repeating
  * ECG waveform through space, a bright pulse travels the trace the way a
  * monitor's cursor does, and a sparse ambient field gives it depth. Palette is
- * the design system's — teal `#8df5e4` and periwinkle `#b0c6ff` on the hero's
+ * the design system's — teal `#5EEAD4` and periwinkle `#b0c6ff` on the hero's
  * navy — so the 3D layer reads as the product's own light, not a stock effect.
  *
  * Failure and cost handling, because a hero must never cost the page:
@@ -92,8 +92,8 @@ export function HeroScene() {
       return { geometry, material, positions };
     };
 
-    const teal = makeTrace(0x8df5e4, 0.055, 0, 0.9);
-    const blue = makeTrace(0xb0c6ff, 0.045, -1.6, 0.45);
+    const teal = makeTrace(0x5eead4, 0.055, 0, 0.9);
+    const blue = makeTrace(0x8aa4ff, 0.045, -1.6, 0.45);
 
     // --- ambient field ------------------------------------------------------
     const fieldPositions = new Float32Array(FIELD_POINTS * 3);
@@ -105,7 +105,7 @@ export function HeroScene() {
     const fieldGeometry = new THREE.BufferGeometry();
     fieldGeometry.setAttribute("position", new THREE.BufferAttribute(fieldPositions, 3));
     const fieldMaterial = new THREE.PointsMaterial({
-      color: 0xb0c6ff,
+      color: 0x8aa4ff,
       size: 0.035,
       transparent: true,
       opacity: 0.35,

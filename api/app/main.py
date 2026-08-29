@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -28,6 +29,7 @@ from app.modules.departments.router import router as departments_router
 from app.modules.doctors.router import router as doctors_router
 from app.modules.documents.ocr_router import router as ocr_router
 from app.modules.documents.router import router as documents_router
+from app.modules.notifications import dispatcher
 from app.modules.notifications.router import router as notifications_router
 from app.modules.patients.router import router as patients_router
 from app.modules.prescriptions.router import router as prescriptions_router
@@ -52,7 +54,19 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("ai_not_configured", detail="chatbot and symptom analysis disabled")
     if not settings.email_configured:
         logger.warning("email_not_configured", detail="notifications will be logged, not sent")
+
+    # Email delivery and appointment reminders run on a background loop rather
+    # than inside requests, so a slow mail server delays a message instead of a
+    # booking. Held so shutdown can cancel it: without that the process waits on
+    # a sleeping task it will never need again.
+    dispatcher_task = dispatcher.start() if dispatcher.should_run() else None
+
     yield
+
+    if dispatcher_task is not None:
+        dispatcher_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatcher_task
     await dispose_engine()
 
 

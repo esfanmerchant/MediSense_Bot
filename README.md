@@ -99,7 +99,7 @@ api/
     │   ├── assistant/         # health assistant, symptom review
     │   ├── vitals/            # readings, threshold engine, alerts, SSE
     │   ├── billing/           # invoices, credit notes
-    │   ├── notifications/     # in-app; email delivery in Phase 12
+    │   ├── notifications/     # in-app + email, templates, dispatcher loop
     │   └── dashboard/         # one summary per role
     ├── services/              # storage, upload validation, extraction, AI safety
     └── main.py
@@ -311,6 +311,39 @@ LISTEN/NOTIFY is unavailable here because the Supabase transaction pooler does
 not carry notifications. The dashboard refetches on reconnect, so the gap costs
 latency rather than correctness.
 
+**Notifications (§31-32).** One service, two channels: `notify()` writes the
+in-app row every time and queues an email alongside it when the type warrants
+one, so no module knows how mail is sent or whether it is sent at all.
+
+**The email says less than the in-app notification it accompanies, on purpose.**
+An in-app notification is read inside the session, behind authentication, by
+someone the access-control layer has already checked — so it can say "Heart rate
+150 bpm is above the configured limit". An email crosses to a mail provider,
+sits on their servers, is indexed by their search and lands on a lock screen.
+None of that is inside the boundary the rest of this system maintains, so the
+email says *that* something happened and where to see it:
+
+    in-app:  "Heart rate 150 bpm is above the configured limit of 120 bpm."
+    email:   "A recorded reading has crossed its configured threshold."
+
+Scheduling and billing details are treated differently and deliberately: an
+appointment time and an invoice number are what a reminder is *for*, and a
+reminder that withholds the time is not a reminder. Diagnoses, medications,
+symptoms, measurements and results are never in an email.
+
+Sending happens on a background loop, never inside a request — a booking must
+not wait on an SMTP handshake, and a slow mail server must not become a slow
+hospital. Rows are claimed with `FOR UPDATE SKIP LOCKED`, so several workers can
+run the dispatcher and each message still goes to exactly one of them. A
+transient failure leaves the row `PENDING` for the next pass; a permanent one
+(refused mailbox, rejected login) fails immediately, because retrying it only
+delays the queue behind it. Retry is bounded by age rather than a counter: a
+reminder that arrives a day late tells someone about a slot they already missed.
+
+Appointment reminders are idempotent by observation — the loop asks which
+appointments already have a reminder notification and skips those, so there is
+no "reminded" flag to fall out of step with reality.
+
 **Logging.** structlog with a central redaction list. Passwords, tokens, API
 keys, cookies and extracted document text never reach a log sink. The Supabase
 service role key bypasses row-level security, so it appears only in
@@ -343,6 +376,7 @@ explicit `Z` alongside a pre-formatted clinic-local label.
 | §20-21 voice + symptom review | **done** | `lib/useSpeechRecognition.ts`, `components/assistant.tsx`, `ReportedSymptom` provenance |
 | §16-17 vitals + thresholds | **done** | `modules/vitals/`, `components/vitals.tsx` — engine, alert lifecycle, SSE |
 | §15 automated billing | **done** | `modules/billing/`, `components/billing.tsx` — invoice per completed consultation |
+| §31-32 notifications | **done** | `notifications/templates.py`, `dispatcher.py`, `services/email.py` — in-app + email |
 
 Nothing is marked complete on the strength of a UI existing — a feature counts
 only with API, database, authorization, validation, error handling, audit and
@@ -362,5 +396,5 @@ passing tests behind it.
 9. ~~Voice input — browser speech-to-text, editable transcript, provenance~~
 10. ~~Vitals — threshold engine, alerts, live updates~~
 11. ~~Billing — automatic invoice on consultation completion~~
-12. Notification delivery (email) ← next
-13. Audit, emergency access, hardening · 14. Full test pass · 15. Verification
+12. ~~Notification delivery — email templates, dispatcher, appointment reminders~~
+13. Audit, emergency access, hardening ← next · 14. Full test pass · 15. Verification

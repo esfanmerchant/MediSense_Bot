@@ -13,6 +13,7 @@ rather than at the end.
 from __future__ import annotations
 
 import inspect
+import re
 from typing import Any
 
 import pytest
@@ -21,12 +22,31 @@ from app.db.enums import Role
 from app.main import app
 from app.modules.auth.rbac import ROLE_PERMISSIONS, Permission
 
-#: Endpoints that legitimately have no authentication.
+#: Endpoints that legitimately have no access token.
 #:
-#: Both are probes. `/health` reports liveness; `/health/ready` reports which
-#: integrations are configured as booleans and never their values — a load
-#: balancer has to reach them before anyone has signed in.
-PUBLIC_PATHS = {"/api/health", "/api/health/ready"}
+#: The probes: `/health` reports liveness and `/health/ready` reports which
+#: integrations are configured as booleans, never their values — a load balancer
+#: has to reach them before anyone has signed in.
+#:
+#: The rest are the ways in. Requiring a session to sign in, register, refresh or
+#: recover a password would be a locked door with the key inside. Each carries
+#: its own credential instead: a password, a refresh cookie, or a single-use
+#: expiring reset token.
+PUBLIC_PATHS = {
+    "/api/health",
+    "/api/health/ready",
+    # Password recovery: unreachable by definition if it needed a session.
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+    # Reads the refresh cookie directly rather than an access token.
+    "/api/auth/refresh",
+    # Authenticates best-effort inside a try/except so an already-expired
+    # session can still clear its cookies. Requiring a valid token would leave
+    # a signed-out-but-not-really state that nobody can escape.
+    "/api/auth/logout",
+}
 
 #: Routes that authenticate but deliberately have no permission requirement:
 #: signing in, signing out, refreshing, and asking who you are.
@@ -36,22 +56,53 @@ AUTH_ENTRY_PATHS = {
     "/api/auth/refresh",
     "/api/auth/me",
     "/api/auth/register",
-    "/api/auth/heartbeat",
-    "/api/auth/password-reset",
-    "/api/auth/password-reset/confirm",
+    # Password recovery cannot require a session: you are locked out. The reset
+    # token *is* the credential, and it is single-use and expiring.
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
 }
 
 
+def _walk(router: Any, prefix: str = "") -> Any:
+    """Yield every real route, descending through included routers.
+
+    This FastAPI version does not flatten included routers into ``app.routes``:
+    it stores an ``_IncludedRouter`` wrapper per ``include_router`` call, and the
+    actual routes hang off ``original_router`` with their prefix in
+    ``include_context``.
+
+    Iterating ``app.routes`` directly therefore finds two health endpoints and
+    nothing else — which is exactly what this file did until the Phase 15 review
+    caught it, and every check below was passing over an empty list.
+    """
+    for route in getattr(router, "routes", []):
+        if type(route).__name__ == "_IncludedRouter":
+            inner = getattr(route, "original_router", None)
+            context = getattr(route, "include_context", None)
+            if inner is not None:
+                yield from _walk(inner, prefix + getattr(context, "prefix", ""))
+        elif getattr(route, "endpoint", None) is not None and getattr(route, "path", None):
+            methods = sorted(
+                m for m in (getattr(route, "methods", None) or []) if m != "HEAD"
+            )
+            yield methods, prefix + route.path, route.endpoint
+
+
 def api_routes() -> list[tuple[list[str], str, Any]]:
-    found = []
-    for route in app.routes:
-        path = getattr(route, "path", None)
-        endpoint = getattr(route, "endpoint", None)
-        if not path or not path.startswith("/api") or endpoint is None:
-            continue
-        methods = sorted(m for m in (getattr(route, "methods", None) or []) if m != "HEAD")
-        found.append((methods, path, endpoint))
-    return found
+    return [entry for entry in _walk(app) if entry[1].startswith("/api")]
+
+
+#: Authorization delegated to the service layer.
+#:
+#: Booking is the case in point: the router passes `auth` into `service.book`,
+#: which calls `resolve_booking_patient` — that forces a patient's own id from
+#: the session and ignores any `patientId` in the body, and requires
+#: `appointment:manage:any` from anyone else. The check is real; it just does
+#: not appear in the handler.
+#:
+#: Deliberately narrow. Matching "service." alone would pass anything that
+#: happens to call its own module, which is every endpoint here.
+DELEGATES_TO_SERVICE = re.compile(r"service\.\w+\(\s*db,\s*auth", re.DOTALL)
 
 
 def source_of(endpoint: Any) -> str:
@@ -116,7 +167,7 @@ class TestEverythingIsGuarded:
                     "auth.user_id",
                     "auth.role",
                 )
-            )
+            ) or DELEGATES_TO_SERVICE.search(source) is not None
             if not guarded:
                 weak.append(f"{','.join(methods)} {path}")
 

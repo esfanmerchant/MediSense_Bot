@@ -467,4 +467,4 @@ passing tests behind it.
 12. ~~Notification delivery — email templates, dispatcher, appointment reminders~~
 13. ~~Audit, emergency access, rate limiting, access-control review~~
 14. ~~Test pass — UI test suite, two-tier test strategy~~
-15. Requirement verification ← next
+15. ~~Requirement verification — see [VERIFICATION.md](VERIFICATION.md)~~

@@ -114,6 +114,40 @@ ocr/                           # PaddleOCR feasibility harness
 Business logic lives in `modules/*/service.py`. Routers translate HTTP to
 service calls and nothing more.
 
+## Tests
+
+Two tiers, because they answer different questions at very different speeds.
+
+**Fast tier — under a second, run on every change:**
+
+```
+cd api && .venv/Scripts/python.exe -m ruff check . && .venv/Scripts/python.exe -m mypy app
+cd api && .venv/Scripts/python.exe -m pytest tests/test_thresholds.py tests/test_assistant_safety.py     tests/test_notifications_email.py tests/test_ratelimit.py tests/test_access_control_review.py     tests/test_schedule.py tests/test_rbac.py tests/test_file_validation.py tests/test_prescription_parser.py
+npm run verify        # client typecheck, lint, UI tests, build
+```
+
+`mypy` earns its place here: it caught three of the four Phase 10 defects in
+seconds, where the database suite needed eighteen minutes to surface the same
+class of bug — a wrong attribute on a model or an enum.
+
+**Full tier — around 1h45m, run before a release:**
+
+```
+cd api && .venv/Scripts/python.exe -m pytest
+```
+
+It is slow for one reason: the Supabase database is in Tokyo and every query
+costs a measured ~149 ms round-trip. The work is almost entirely waiting, not
+computing.
+
+**UI tests** (`client/src/**/*.test.tsx`) run in jsdom and cover the safety
+properties that exist only on the client and that no server-side test can reach:
+that the AI disclaimer is always rendered and cannot be dismissed, that an
+emergency is announced to assistive technology rather than merely coloured, that
+a currency amount is never parsed into a float, that describing symptoms saves
+nothing on its own, and that a breaching vital is marked in words as well as in
+colour.
+
 ## API conventions
 
 Success: `{"success": true, "data": …}`, with `meta` on paginated lists.
@@ -432,4 +466,5 @@ passing tests behind it.
 11. ~~Billing — automatic invoice on consultation completion~~
 12. ~~Notification delivery — email templates, dispatcher, appointment reminders~~
 13. ~~Audit, emergency access, rate limiting, access-control review~~
-14. Full test pass ← next · 15. Requirement verification
+14. ~~Test pass — UI test suite, two-tier test strategy~~
+15. Requirement verification ← next

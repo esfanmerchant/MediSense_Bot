@@ -30,6 +30,7 @@ out/
 
 # --- Test / coverage ---
 coverage/
+.vitest/
 .pytest_cache/
 .ruff_cache/
 

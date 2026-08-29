@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Icon } from "@/components/Icon";
+import { Logo } from "@/components/Logo";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useReveal } from "@/lib/useReveal";
 import { useTr } from "@/lib/lang";
@@ -37,29 +38,7 @@ const HeroScene = dynamic(() => import("@/components/HeroScene"), { ssr: false }
 /* ----------------------------------------------------------------------- */
 
 function Wordmark({ onDark = false }: { onDark?: boolean }) {
-  return (
-    <span className="flex items-center gap-2.5">
-      <span
-        aria-hidden
-        className={
-          onDark
-            ? "grid h-9 w-9 place-items-center rounded-lg bg-white/10 ring-1 ring-white/20"
-            : "grid h-9 w-9 place-items-center rounded-lg bg-primary"
-        }
-      >
-        <Icon
-          name="health_and_safety"
-          filled
-          className={onDark ? "text-[20px] text-accent-bright" : "text-[20px] text-white"}
-        />
-      </span>
-      <span
-        className={`font-display text-lg font-bold tracking-tight ${onDark ? "text-white" : "text-strong"}`}
-      >
-        MediSense
-      </span>
-    </span>
-  );
+  return <Logo onDark={onDark} size="md" />;
 }
 
 function Cta({

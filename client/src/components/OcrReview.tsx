@@ -17,7 +17,8 @@
 
 import { useMemo, useState } from "react";
 
-import { Badge, Button, Card, ErrorState, Field, Input, Loading, cx } from "@/components/ui";
+import { Icon } from "@/components/Icon";
+import { Badge, Button, Card, EmptyState, ErrorState, Field, Input, Loading, cx } from "@/components/ui";
 import {
   ApiError,
   ocr as ocrApi,
@@ -106,6 +107,8 @@ export function OcrReview({
   const [override, setOverride] = useState<OcrState | null>(null);
   const [edits, setEdits] = useState<Record<number, Partial<Draft>>>({});
   const [busy, setBusy] = useState(false);
+  // Which of the two actions is in flight — the scan animation is for reading only.
+  const [activity, setActivity] = useState<"read" | "confirm" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const state = override ?? fetched.data;
@@ -118,6 +121,7 @@ export function OcrReview({
 
   const run = async () => {
     setBusy(true);
+    setActivity("read");
     setError(null);
     try {
       setOverride(await ocrApi.run(documentId));
@@ -126,11 +130,13 @@ export function OcrReview({
       setError(caught instanceof ApiError ? caught.message : "Could not read the document.");
     } finally {
       setBusy(false);
+      setActivity(null);
     }
   };
 
   const confirm = async () => {
     setBusy(true);
+    setActivity("confirm");
     setError(null);
     try {
       const medications: ConfirmedMedication[] = drafts.map((draft) => ({
@@ -146,6 +152,7 @@ export function OcrReview({
       setError(caught instanceof ApiError ? caught.message : "Could not confirm the reading.");
     } finally {
       setBusy(false);
+      setActivity(null);
     }
   };
 
@@ -155,15 +162,22 @@ export function OcrReview({
   const complete = drafts.length > 0 && drafts.every((d) => d.medication && d.dosage && d.frequency);
   const confirmed = state?.status === "CONFIRMED";
   const loading = fetched.loading && !override;
+  const reading = activity === "read" || state?.status === "PROCESSING";
 
   return (
     <Card
+      icon="document_scanner"
       title={tr("Extracted details", "Nikali gayi tafseelat")}
       description={tr(`Read automatically from ${fileName}.`, `${fileName} se khud-ba-khud parhi gayin.`)}
       action={
         state?.status !== "CONFIRMED" && (
           <Button variant="secondary" disabled={busy} onClick={() => void run()}>
-            {busy ? "Reading…" : state?.status === "EXTRACTED" ? "Read again" : "Read document"}
+            <Icon name={state?.status === "EXTRACTED" ? "refresh" : "document_scanner"} className="text-[20px]" />
+            {busy
+              ? tr("Reading…", "Parh raha hai…")
+              : state?.status === "EXTRACTED"
+                ? tr("Read again", "Dobara parhein")
+                : tr("Read document", "Document parhein")}
           </Button>
         )
       }
@@ -174,31 +188,67 @@ export function OcrReview({
         <ErrorState message={fetched.error.message} onRetry={fetched.reload} />
       )}
 
-      {state && !loading && (
-        <div className="space-y-4">
+      {reading && !loading && <ScanPanel fileName={fileName} />}
+
+      {state && !loading && !reading && (
+        <div className="space-y-5">
           <StatusLine state={state} />
 
           {state.status === "SKIPPED" && (
-            <p className="text-sm text-muted">
-              This file type cannot be read automatically. You can still open it.
+            <p className="flex items-start gap-2 rounded-xl bg-sunken px-4 py-3 text-sm text-muted">
+              <Icon name="info" className="mt-px shrink-0 text-[18px]" />
+              {tr(
+                "This file type cannot be read automatically. You can still open it.",
+                "Yeh file type khud-ba-khud nahi parhi ja sakti. Aap isay phir bhi khol sakte hain.",
+              )}
             </p>
           )}
 
           {state.status === "FAILED" && state.error && (
-            <p role="alert" className="text-sm font-medium text-critical">
+            <p
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-critical/50 bg-critical-soft px-4 py-3 text-sm font-medium text-critical"
+            >
+              <Icon name="error" className="mt-px shrink-0 text-[18px]" />
               {state.error}
             </p>
           )}
 
+          {state.status === "PENDING" && drafts.length === 0 && (
+            <EmptyState
+              icon="document_scanner"
+              title={tr("Not read yet", "Abhi parhi nahi gayi")}
+              description={tr(
+                "Press “Read document” and the medication lines will be picked out for review.",
+                "“Document parhein” dabayein, dawa ki lines review ke liye nikal aayein gi.",
+              )}
+            />
+          )}
+
           {drafts.length > 0 && (
             <>
-              <p className="rounded-md border border-warning/50 bg-warning-soft px-3 py-2 text-sm text-warning">
+              <p
+                className={cx(
+                  "flex items-start gap-2 rounded-xl border px-4 py-3 text-sm",
+                  confirmed
+                    ? "border-stable/40 bg-stable-soft text-stable"
+                    : "border-warning/50 bg-warning-soft text-warning",
+                )}
+              >
+                <Icon name={confirmed ? "verified" : "warning"} filled className="mt-px shrink-0 text-[18px]" />
                 {confirmed
-                  ? "A clinician has checked these details against the document."
-                  : "Read automatically and not yet verified. Check every field against the original before confirming — a misread dose changes the medication."}
+                  ? tr(
+                      "A clinician has checked these details against the document.",
+                      "Ek clinician ne yeh tafseelat document se mila kar jaanch li hain.",
+                    )
+                  : tr(
+                      "Read automatically and not yet verified. Check every field against the original before confirming — a misread dose changes the medication.",
+                      "Khud-ba-khud parhi gayi, abhi tasdeeq nahi hui. Tasdeeq se pehle har field asal se milayein — ghalat parhi khuraak dawa badal deti hai.",
+                    )}
               </p>
 
-              <ol className="space-y-5">
+              {/* Re-keyed on every fresh reading so the fields pop in again. */}
+              <ol key={`${state.status}-${state.confirmedAt ?? ""}-${base.length}`} className="stagger space-y-4">
                 {drafts.map((draft, index) => (
                   <li key={`${draft.sourceText}-${index}`}>
                     <MedicationDraft
@@ -212,30 +262,42 @@ export function OcrReview({
               </ol>
 
               {!confirmed && canConfirm && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button size="lg" disabled={!complete || busy} onClick={() => void confirm()}>
-                    {busy ? "Saving…" : "Confirm this reading"}
+                <div className="flex flex-wrap items-center gap-4 rounded-2xl bg-sunken p-4">
+                  <Button size="lg" disabled={!complete || busy} loading={busy} onClick={() => void confirm()}>
+                    {busy ? tr("Saving…", "Save ho raha hai…") : tr("Confirm this reading", "Is reading ki tasdeeq karein")}
+                    {!busy && <Icon name="check" className="text-[22px]" />}
                   </Button>
                   <p className="text-sm text-muted">
-                    Confirming records what the document says. It does not prescribe anything.
+                    {tr(
+                      "Confirming records what the document says. It does not prescribe anything.",
+                      "Tasdeeq sirf yeh darj karti hai ke document kya kehta hai. Yeh koi dawa tajweez nahi karti.",
+                    )}
                   </p>
                 </div>
               )}
 
               {!canConfirm && !confirmed && (
-                <p className="text-sm text-muted">
-                  Your doctor will check these details at your next appointment.
+                <p className="flex items-start gap-2 text-sm text-muted">
+                  <Icon name="stethoscope" className="mt-px shrink-0 text-[18px]" />
+                  {tr(
+                    "Your doctor will check these details at your next appointment.",
+                    "Aap ka doctor agli appointment par yeh tafseelat jaanch le ga.",
+                  )}
                 </p>
               )}
             </>
           )}
 
           {state.extractedText && (
-            <details className="rounded-md border border-line p-3">
-              <summary className="cursor-pointer text-sm font-medium text-strong">
-                Show the full text that was read
+            <details className="group rounded-xl border border-line bg-card">
+              <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold text-strong transition-colors hover:text-primary [&::-webkit-details-marker]:hidden">
+                <Icon
+                  name="expand_more"
+                  className="text-[20px] text-faint transition-transform duration-300 group-open:rotate-180"
+                />
+                {tr("Show the full text that was read", "Poora parha gaya matn dikhayein")}
               </summary>
-              <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-sm text-muted">
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap border-t border-line bg-sunken px-4 py-3 font-mono text-xs leading-relaxed text-muted">
                 {state.extractedText}
               </pre>
             </details>
@@ -246,7 +308,45 @@ export function OcrReview({
   );
 }
 
+/** A page being swept by the reader: a placeholder document under a scan line. */
+function ScanPanel({ fileName }: { fileName: string }) {
+  const tr = useTr();
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex flex-col items-center gap-5 py-6 sm:flex-row sm:justify-center sm:gap-10"
+    >
+      <div
+        aria-hidden
+        className="relative h-44 w-32 shrink-0 overflow-hidden rounded-xl border border-line bg-card shadow-card"
+      >
+        <div className="absolute inset-x-4 top-4 space-y-2.5">
+          <span className="block h-2 w-3/4 rounded-full bg-raised" />
+          <span className="block h-2 w-full rounded-full bg-sunken" />
+          <span className="block h-2 w-5/6 rounded-full bg-sunken" />
+          <span className="block h-2 w-2/3 rounded-full bg-sunken" />
+          <span className="mt-4 block h-2 w-full rounded-full bg-sunken" />
+          <span className="block h-2 w-4/5 rounded-full bg-sunken" />
+          <span className="block h-2 w-1/2 rounded-full bg-sunken" />
+        </div>
+        <span className="scan-line" />
+      </div>
+      <div className="text-center sm:text-left">
+        <p className="font-display text-lg font-bold text-strong">
+          {tr("Reading document…", "Document parha ja raha hai…")}
+        </p>
+        <p className="mt-1 text-sm text-muted">{fileName}</p>
+        <p className="mt-3 text-xs text-faint">
+          {tr("Medication lines are picked out for you to check.", "Dawa ki lines jaanch ke liye nikali ja rahi hain.")}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function StatusLine({ state }: { state: OcrState }) {
+  const tr = useTr();
   const tone =
     state.status === "CONFIRMED"
       ? "good"
@@ -257,20 +357,29 @@ function StatusLine({ state }: { state: OcrState }) {
           : "neutral";
 
   const label = {
-    PENDING: "Not read yet",
-    PROCESSING: "Reading…",
-    EXTRACTED: "Awaiting review",
-    CONFIRMED: "Checked by a clinician",
-    FAILED: "Could not be read",
-    SKIPPED: "Not machine-readable",
+    PENDING: tr("Not read yet", "Abhi parhi nahi gayi"),
+    PROCESSING: tr("Reading…", "Parh raha hai…"),
+    EXTRACTED: tr("Awaiting review", "Review ka intezar"),
+    CONFIRMED: tr("Checked by a clinician", "Clinician ne jaanch li"),
+    FAILED: tr("Could not be read", "Parhi nahi ja saki"),
+    SKIPPED: tr("Not machine-readable", "Machine se parhne ke qabil nahi"),
   }[state.status];
 
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Badge tone={tone}>{label}</Badge>
       {state.confidence !== null && (
-        <span className="text-sm tabular-nums text-muted">
-          Engine confidence {(state.confidence * 100).toFixed(0)}%
+        <span className="inline-flex items-center gap-1.5 text-sm tabular-nums text-muted">
+          <span
+            aria-hidden
+            className="h-1.5 w-20 overflow-hidden rounded-full bg-sunken"
+          >
+            <span
+              className="bg-gradient-brand block h-full rounded-full transition-[width] duration-700 ease-out"
+              style={{ width: `${Math.round(state.confidence * 100)}%` }}
+            />
+          </span>
+          {tr(`Engine confidence ${(state.confidence * 100).toFixed(0)}%`, `Engine ka aitmaad ${(state.confidence * 100).toFixed(0)}%`)}
         </span>
       )}
       {state.engine && (
@@ -295,22 +404,34 @@ function MedicationDraft({
   return (
     <div
       className={cx(
-        "rounded-md border p-4",
+        "rounded-2xl border p-5 shadow-card transition-[border-color,box-shadow] duration-200",
         draft.needsReview
-          ? "border-warning/50 bg-warning-soft/50 /20"
-          : "border-line",
+          ? "border-warning/50 bg-warning-soft/40"
+          : "border-line bg-card",
       )}
     >
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-strong">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span
+          aria-hidden
+          className={cx(
+            "grid h-8 w-8 place-items-center rounded-lg text-sm font-bold tabular-nums",
+            draft.needsReview ? "bg-warning-soft text-warning" : "bg-gradient-soft text-primary",
+          )}
+        >
+          {index + 1}
+        </span>
+        <span className="font-display text-base font-bold text-strong">
           {tr("Medication", "Dawa")} {index + 1}
         </span>
         {draft.needsReview && <Badge tone="warning">{tr("Check this one", "Isay zaroor jaanchein")}</Badge>}
       </div>
 
       {draft.sourceText && (
-        <p className="mb-3 rounded bg-sunken px-2 py-1 font-mono text-xs text-muted">
-          {tr("Read as:", "Aisa parha gaya:")} {draft.sourceText}
+        <p className="mb-4 flex items-start gap-2 rounded-xl bg-sunken px-3 py-2 font-mono text-xs text-muted">
+          <Icon name="format_quote" className="mt-px shrink-0 text-[16px] text-faint" />
+          <span>
+            {tr("Read as:", "Aisa parha gaya:")} {draft.sourceText}
+          </span>
         </p>
       )}
 

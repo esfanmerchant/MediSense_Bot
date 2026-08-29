@@ -148,7 +148,7 @@ export default function AdminDashboard() {
             {unreviewed > 0 && (
               <div
                 role="alert"
-                className="pop-in flex gap-3 rounded-2xl border border-critical/50 bg-critical-soft p-5"
+                className="edge-pulse pop-in flex flex-wrap items-center gap-3 rounded-2xl border border-critical/50 bg-critical-soft p-5"
               >
                 <Icon name="warning" filled className="shrink-0 text-[24px] text-critical" />
                 <div>
@@ -165,6 +165,13 @@ export default function AdminDashboard() {
                     )}
                   </p>
                 </div>
+                <Link
+                  href="/admin/emergency"
+                  className="ml-auto inline-flex min-h-11 items-center gap-2 rounded-xl bg-critical px-4 text-sm font-semibold text-white shadow-md transition-transform hover:scale-[1.03] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-critical"
+                >
+                  <Icon name="task_alt" className="text-[20px]" />
+                  {tr("Review now", "Abhi review karein")}
+                </Link>
               </div>
             )}
 

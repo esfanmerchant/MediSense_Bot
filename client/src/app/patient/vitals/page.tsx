@@ -10,7 +10,7 @@
 
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
-import { ErrorState, Loading } from "@/components/ui";
+import { ErrorState, SkeletonRows } from "@/components/ui";
 import { ThresholdsPanel, VitalsTable } from "@/components/vitals";
 import { useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
@@ -21,7 +21,7 @@ export default function PatientVitals() {
 
   return (
     <AppShell role="PATIENT">
-      <div id="main">
+      <div id="main" className="page-enter">
         <PageHeader
           eyebrow={tr("Patient portal", "Mareez ka portal")}
           title={tr("Vitals", "Vitals")}
@@ -31,18 +31,27 @@ export default function PatientVitals() {
           )}
         />
 
-        {loading && <Loading label={tr("Loading your readings", "Readings load ho rahi hain")} />}
+        {loading && (
+          <div role="status" aria-live="polite" className="mt-6">
+            <span className="sr-only">{tr("Loading your readings", "Readings load ho rahi hain")}…</span>
+            <SkeletonRows rows={3} />
+          </div>
+        )}
 
         {!loading && !user?.patientId && (
-          <ErrorState
-            title="No patient record"
-            message="This account is not linked to a patient record. Contact an administrator."
-          />
+          <div className="mt-6">
+            <ErrorState
+              title="No patient record"
+              message="This account is not linked to a patient record. Contact an administrator."
+            />
+          </div>
         )}
 
         {user?.patientId && (
           <div className="mt-6 space-y-6">
-            <VitalsTable patientId={user.patientId} />
+            {/* The snapshot — gauges and a trend — sits above the table, fed
+                from the same fetch, so the two never disagree. */}
+            <VitalsTable patientId={user.patientId} snapshot />
             <ThresholdsPanel patientId={user.patientId} />
           </div>
         )}

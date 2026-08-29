@@ -16,7 +16,7 @@ export default function PatientBilling() {
   const tr = useTr();
   return (
     <AppShell role="PATIENT">
-      <div id="main">
+      <div id="main" className="page-enter">
         <PageHeader
           eyebrow={tr("Patient portal", "Mareez ka portal")}
           title={tr("Billing", "Billing")}
@@ -26,7 +26,7 @@ export default function PatientBilling() {
           )}
         />
 
-        <div className="mt-6">
+        <div className="pop-in mt-6">
           <InvoicesPanel
             title={tr("Your invoices", "Aap ke invoices")}
             description={tr(

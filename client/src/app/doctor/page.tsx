@@ -9,6 +9,7 @@
  */
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
@@ -45,6 +46,52 @@ function severityTone(severity: string) {
   return "info" as const;
 }
 
+/**
+ * A small trace that keeps moving beside a reading — visually alive, not a
+ * measurement. Purely decorative and hidden from assistive technology.
+ */
+function LiveWave({ critical }: { critical: boolean }) {
+  const trace = "M0 12 H14 L18 12 L21 4 L25 20 L28 12 H40 L43 8 L46 12 H60";
+  const stroke = critical ? "#E5484D" : "#14C7C0";
+  return (
+    <svg aria-hidden viewBox="0 0 60 24" className="h-6 w-16 shrink-0 overflow-hidden" fill="none">
+      <g className="wave-live" style={{ willChange: "transform" }}>
+        <path d={trace} stroke={stroke} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+        <path
+          d={trace}
+          transform="translate(60 0)"
+          stroke={stroke}
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </g>
+    </svg>
+  );
+}
+
+/** The current minute, ticking, for the "now" line in the clinic list. */
+function useNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
+
+function NowLine({ label, time }: { label: string; time: string }) {
+  return (
+    <div aria-hidden className="pop-in relative flex items-center gap-2 py-1">
+      <span className="pulse-dot absolute -left-[1.65rem] h-2.5 w-2.5 rounded-full bg-critical" />
+      <span className="h-px flex-1 bg-critical/60" />
+      <span className="rounded-full bg-critical px-2 py-px text-[10.5px] font-bold uppercase tracking-wider text-white">
+        {label} · {time}
+      </span>
+    </div>
+  );
+}
+
 function greeting(tr: (en: string, ur: string) => string): string {
   const hour = new Date().getHours();
   if (hour < 12) return tr("Good morning", "Subah bakhair");
@@ -61,6 +108,18 @@ export default function DoctorDashboard() {
 
   const today = data?.counts.appointmentsToday ?? 0;
   const alerts = data?.counts.openAlerts ?? 0;
+  const now = useNow();
+  const nowLabel = now.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+
+  // Critical breaches float to the top; within a severity, newest first —
+  // the order a clinician scans in.
+  const sortedAlerts = [...(data?.openAlerts ?? [])].sort((a, b) => {
+    if (a.severity !== b.severity) return a.severity === "CRITICAL" ? -1 : 1;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+  // The "now" line sits after the last appointment already begun.
+  const clinic = data?.todaysAppointments ?? [];
+  const nowIndex = clinic.filter((appointment) => new Date(appointment.startTime) <= now).length;
 
   return (
     <AppShell role="DOCTOR">
@@ -200,12 +259,14 @@ export default function DoctorDashboard() {
                 />
               ) : (
                 <ul className="stagger space-y-2">
-                  {data.openAlerts.map((alert) => (
+                  {sortedAlerts.map((alert) => (
                     <li
                       key={alert.id}
                       className={cx(
-                        "flex flex-wrap items-start gap-3 rounded-xl border border-line border-l-4 bg-card p-3",
-                        alert.severity === "CRITICAL" ? "border-l-critical" : "border-l-warning",
+                        "flex flex-wrap items-start gap-3 rounded-xl border border-line border-l-4 p-3 transition-colors",
+                        alert.severity === "CRITICAL"
+                          ? "glow-critical border-l-critical bg-critical-soft/50"
+                          : "border-l-warning bg-card",
                       )}
                     >
                       <Avatar name={alert.patient.name} size="sm" className="mt-0.5" />
@@ -225,9 +286,12 @@ export default function DoctorDashboard() {
                           — {alert.message}
                         </p>
                       </div>
-                      <p className="text-sm tabular-nums text-faint">
-                        {new Date(alert.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
-                      </p>
+                      <div className="flex items-center gap-3">
+                        <LiveWave critical={alert.severity === "CRITICAL"} />
+                        <p className="text-sm tabular-nums text-faint">
+                          {new Date(alert.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -251,9 +315,16 @@ export default function DoctorDashboard() {
               {data.todaysAppointments.length === 0 ? (
                 <EmptyState icon="event_available" title={tr("Nothing scheduled", "Kuchh schedule nahi")} />
               ) : (
-                <ul className="stagger divide-y divide-line">
-                  {data.todaysAppointments.map((appointment) => (
-                    <li key={appointment.id} className="flex items-center gap-4 py-3.5">
+                <ul className="timeline stagger space-y-1">
+                  {clinic.map((appointment, index) => (
+                    <li key={appointment.id} className="relative">
+                      {index === nowIndex && <NowLine label={tr("Now", "Abhi")} time={nowLabel} />}
+                      <span
+                        aria-hidden
+                        className={cx("timeline-node", index < nowIndex && "is-accent")}
+                        style={index === nowIndex ? { top: "2.6rem" } : undefined}
+                      />
+                      <div className="flex items-center gap-4 rounded-xl px-2 py-2.5 transition-colors hover:bg-sunken/60">
                       <span className="w-14 shrink-0 rounded-lg bg-primary-soft py-1.5 text-center text-sm font-bold tabular-nums text-primary">
                         {new Date(appointment.startTime).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
                       </span>
@@ -273,8 +344,14 @@ export default function DoctorDashboard() {
                       <Badge tone={appointment.status === "CONFIRMED" ? "good" : "info"}>
                         {appointment.status.toLowerCase().replace("_", " ")}
                       </Badge>
+                      </div>
                     </li>
                   ))}
+                  {nowIndex === clinic.length && clinic.length > 0 && (
+                    <li className="relative">
+                      <NowLine label={tr("Now", "Abhi")} time={nowLabel} />
+                    </li>
+                  )}
                 </ul>
               )}
             </Card>

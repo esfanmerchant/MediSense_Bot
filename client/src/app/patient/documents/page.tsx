@@ -11,7 +11,7 @@
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { DocumentsCard } from "@/components/DocumentsCard";
-import { ErrorState, Loading } from "@/components/ui";
+import { ErrorState, SkeletonRows } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
 
@@ -21,7 +21,7 @@ export default function PatientDocuments() {
 
   return (
     <AppShell role="PATIENT">
-      <div id="main">
+      <div id="main" className="page-enter">
         <PageHeader
           eyebrow={tr("Patient portal", "Mareez ka portal")}
           title={tr("Documents", "Documents")}
@@ -31,21 +31,34 @@ export default function PatientDocuments() {
           )}
         />
 
-        {loading && <Loading label={tr("Loading your documents", "Documents load ho rahe hain")} />}
+        {loading && (
+          <div role="status" aria-live="polite" className="mt-6">
+            <span className="sr-only">{tr("Loading your documents", "Documents load ho rahe hain")}…</span>
+            <SkeletonRows rows={3} />
+          </div>
+        )}
 
         {!loading && !user?.patientId && (
-          <ErrorState
-            title="No patient record"
-            message="This account is not linked to a patient record. Contact an administrator."
-          />
+          <div className="mt-6">
+            <ErrorState
+              title={tr("No patient record", "Mareez ka record nahi")}
+              message={tr(
+                "This account is not linked to a patient record. Contact an administrator.",
+                "Yeh account kisi mareez ke record se juda nahi. Administrator se rabta karein.",
+              )}
+            />
+          </div>
         )}
 
         {user?.patientId && (
-          <div className="mt-6">
+          <div className="pop-in mt-6">
             <DocumentsCard
               patientId={user.patientId}
-              title="Your documents"
-              description="Anything you upload is visible to the doctors treating you."
+              title={tr("Your documents", "Aap ki documents")}
+              description={tr(
+                "Anything you upload is visible to the doctors treating you.",
+                "Jo kuchh aap upload karein, aap ka ilaaj karne wale doctors dekh sakte hain.",
+              )}
             />
           </div>
         )}

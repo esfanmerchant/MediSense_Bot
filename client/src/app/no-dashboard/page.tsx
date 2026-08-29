@@ -10,6 +10,7 @@
  */
 
 import { AppShell } from "@/components/AppShell";
+import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { EmergencyAccessPanel } from "@/components/emergency";
 import { Card } from "@/components/ui";
@@ -22,7 +23,7 @@ export default function NoDashboardPage() {
 
   return (
     <AppShell role="NURSE">
-      <div id="main">
+      <div id="main" className="page-enter">
         <PageHeader
           eyebrow={tr("Nursing", "Nursing")}
           title={tr("Emergency access", "Emergency access")}
@@ -40,17 +41,31 @@ export default function NoDashboardPage() {
         <div className="mt-6 space-y-6">
           <EmergencyAccessPanel />
 
-          <Card title="Why you have no patient list">
-            <p className="text-muted">
-              Access here is decided by the relationship to a patient, not by the role on the
-              account. A doctor sees the patients they treat; you see the patient in front of you,
-              for as long as you are treating them.
-            </p>
-            <p className="mt-3 text-muted">
-              That is deliberate. A standing list of every patient would be a standing risk, and
-              the emergency route gives you the same information when you actually need it —
-              with a record of why.
-            </p>
+          <Card
+            icon="shield_person"
+            className="blob-corner relative overflow-hidden"
+            title={tr("Why you have no patient list", "Aap ke paas mareezon ki list kyun nahi")}
+          >
+            <div className="relative grid gap-4 sm:grid-cols-2">
+              <p className="flex gap-3 text-muted">
+                <Icon name="diversity_1" className="mt-0.5 shrink-0 text-[22px] text-accent" />
+                <span>
+                  {tr(
+                    "Access here is decided by the relationship to a patient, not by the role on the account. A doctor sees the patients they treat; you see the patient in front of you, for as long as you are treating them.",
+                    "Yahan rasai mareez se taalluq par tay hoti hai, account ke role par nahi. Doctor apne ilaaj wale mareez dekhta hai; aap apne saamne wale mareez ko, jab tak aap unka ilaaj kar rahe hain.",
+                  )}
+                </span>
+              </p>
+              <p className="flex gap-3 text-muted">
+                <Icon name="verified_user" className="mt-0.5 shrink-0 text-[22px] text-accent" />
+                <span>
+                  {tr(
+                    "That is deliberate. A standing list of every patient would be a standing risk, and the emergency route gives you the same information when you actually need it — with a record of why.",
+                    "Yeh jaan boojh kar hai. Har mareez ki mustaqil list ek mustaqil khatra hoti; emergency raasta aap ko zaroorat ke waqt wahi maloomat deta hai — aur saath mein wajah ka record.",
+                  )}
+                </span>
+              </p>
+            </div>
           </Card>
         </div>
       </div>

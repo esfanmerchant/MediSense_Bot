@@ -9,6 +9,7 @@
  */
 
 import { AppShell } from "@/components/AppShell";
+import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { useTr } from "@/lib/lang";
 import { AuditPanel } from "@/components/audit";
@@ -17,7 +18,7 @@ export default function AdminAudit() {
   const tr = useTr();
   return (
     <AppShell role="ADMIN">
-      <div id="main">
+      <div id="main" className="page-enter">
         <PageHeader
           eyebrow={tr("Admin portal", "Intezami portal")}
           title={tr("Audit trail", "Audit trail")}
@@ -25,6 +26,12 @@ export default function AdminAudit() {
             "Every sensitive action, in order, hash-chained so tampering is detectable. Opening this page is itself recorded.",
             "Har hassas amal, tarteeb se, hash-chain mein — cherh-chharh pakri ja sakti hai. Yeh safha kholna bhi darj hota hai.",
           )}
+          actions={
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-card px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-muted shadow-card">
+              <Icon name="lock" filled className="text-[16px] text-accent" />
+              {tr("Append-only", "Sirf izafa")}
+            </span>
+          }
         />
 
         <div className="mt-6">

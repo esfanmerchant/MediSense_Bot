@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 
 import { Icon } from "@/components/Icon";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { Logo, LogoMark } from "@/components/Logo";
 import { useTr } from "@/lib/lang";
 
 export function AuthPanel({ children }: { children: ReactNode }) {
@@ -68,13 +69,7 @@ export function AuthPanel({ children }: { children: ReactNode }) {
             href="/"
             className="flex items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
-            <span
-              aria-hidden
-              className="grid h-9 w-9 place-items-center rounded-lg bg-white/10 ring-1 ring-white/20"
-            >
-              <Icon name="health_and_safety" filled className="text-[20px] text-accent-bright" />
-            </span>
-            <span className="font-display text-lg font-bold text-white">MediSense</span>
+            <Logo onDark size="md" />
           </Link>
           <LanguageToggle onDark />
         </div>
@@ -120,9 +115,9 @@ export function AuthPanel({ children }: { children: ReactNode }) {
             <div className="mt-3 flex items-start gap-2.5">
               <span
                 aria-hidden
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#0E9E98] to-[#5EEAD4] text-[#053B38]"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/90"
               >
-                <Icon name="health_and_safety" filled className="text-[18px]" />
+                <LogoMark className="h-4 w-auto" />
               </span>
               <div className="rounded-2xl rounded-tl-md bg-white/10 px-3.5 py-2.5 text-sm leading-relaxed text-white/90">
                 {tr(
@@ -144,7 +139,7 @@ export function AuthPanel({ children }: { children: ReactNode }) {
 
       {/* --- form panel ----------------------------------------------------- */}
       <section className="flex items-center justify-center px-4 py-12 sm:px-8">
-        <div className="page-enter w-full max-w-md rounded-3xl border border-line bg-card p-6 shadow-float sm:p-9">
+        <div className="glass page-enter w-full max-w-md rounded-3xl p-6 !shadow-float sm:p-9">
           {children}
         </div>
       </section>

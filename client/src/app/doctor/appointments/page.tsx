@@ -8,13 +8,26 @@
  * but the refusal is the server's to make either way (spec §34).
  */
 
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
-import { AppointmentList, AppointmentRow, isUpcoming } from "@/components/appointments";
+import { AppointmentList, AppointmentRow, formatWhen, isUpcoming } from "@/components/appointments";
 import { TimeOffCard } from "@/components/TimeOffCard";
-import { Button, Card, ErrorState, Loading, StatTile, cx } from "@/components/ui";
+import {
+  Button,
+  Card,
+  ErrorState,
+  Field,
+  IconButton,
+  SkeletonRows,
+  SkeletonTiles,
+  StatTile,
+  Textarea,
+  cx,
+} from "@/components/ui";
 import {
   ApiError,
   appointments,
@@ -34,11 +47,114 @@ const NEXT_STEP: Partial<Record<AppointmentStatus, { to: AppointmentStatus; labe
 
 const CAN_MARK_ABSENT: AppointmentStatus[] = ["REQUESTED", "CONFIRMED", "CHECKED_IN"];
 
+/** The happy path through the state machine, in order. Cancelled and no-show
+    leave it, and carry their own badge instead of a step. */
+const STEPS: { status: AppointmentStatus; label: [string, string] }[] = [
+  { status: "REQUESTED", label: ["Requested", "Darkhwast"] },
+  { status: "CONFIRMED", label: ["Confirmed", "Confirm"] },
+  { status: "CHECKED_IN", label: ["Checked in", "Check-in"] },
+  { status: "IN_PROGRESS", label: ["In progress", "Jari"] },
+  { status: "COMPLETED", label: ["Completed", "Mukammal"] },
+];
+
+const EASE = [0.16, 1, 0.3, 1] as const;
+
+/** A checkmark that draws itself, for the moment something is done. */
+function DrawnCheck({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className={cx("pop-scale h-5 w-5", className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7" className="draw-stroke" />
+    </svg>
+  );
+}
+
+/**
+ * Where a consultation sits on its path. The gradient fills the track up to
+ * the current step, and the current circle carries a slow halo.
+ */
+function StatusStepper({ status }: { status: AppointmentStatus }) {
+  const tr = useTr();
+  const index = STEPS.findIndex((step) => step.status === status);
+  if (index < 0) return null;
+  const progress = index / (STEPS.length - 1);
+  // Circle centres sit at 10%, 30%, … of the width with five equal columns.
+  const inset = 100 / STEPS.length / 2;
+
+  return (
+    <ol
+      aria-label={tr("Progress", "Pesh-raft")}
+      className="relative grid w-full max-w-xl"
+      style={{ gridTemplateColumns: `repeat(${STEPS.length}, minmax(0, 1fr))` }}
+    >
+      <span
+        aria-hidden
+        className="absolute top-3 h-0.5 -translate-y-1/2 rounded-full bg-line"
+        style={{ left: `${inset}%`, right: `${inset}%` }}
+      />
+      <span
+        aria-hidden
+        className="bg-gradient-brand absolute top-3 h-0.5 -translate-y-1/2 rounded-full transition-[width] duration-500 ease-out"
+        style={{ left: `${inset}%`, width: `${(100 - inset * 2) * progress}%` }}
+      />
+      {STEPS.map((step, position) => {
+        const state = position < index ? "done" : position === index ? "current" : "todo";
+        return (
+          <li
+            key={step.status}
+            aria-current={state === "current" ? "step" : undefined}
+            className="relative flex flex-col items-center gap-1.5 text-center"
+          >
+            <span
+              className={cx(
+                "grid h-6 w-6 place-items-center rounded-full border-2 transition-[background-color,border-color,box-shadow,transform] duration-300",
+                state === "done" && "border-transparent bg-gradient-brand text-white",
+                state === "current" &&
+                  "animate-halo scale-110 border-primary bg-card text-primary shadow-[0_0_0_4px_rgb(27_79_224/0.18)]",
+                state === "todo" && "border-line-strong bg-card text-faint",
+              )}
+            >
+              {state === "done" ? (
+                <Icon name="check" className="text-[14px]" />
+              ) : (
+                <span aria-hidden className="h-2 w-2 rounded-full bg-current" />
+              )}
+            </span>
+            <span
+              className={cx(
+                "text-[11px] font-semibold leading-tight",
+                state === "current" ? "text-primary" : state === "done" ? "text-strong" : "text-faint",
+                "hidden sm:block",
+              )}
+            >
+              {tr(...step.label)}
+            </span>
+            <span className="sr-only sm:hidden">{tr(...step.label)}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export default function DoctorAppointments() {
   const tr = useTr();
+  const reduce = useReducedMotion();
   const [refresh, setRefresh] = useState(0);
   const reloadAll = useCallback(() => setRefresh((n) => n + 1), []);
   const list = useAsync(() => appointments.list({ limit: 100 }), [refresh]);
+
+  // The consultation most recently completed here, surfaced as a success card
+  // until dismissed. The list itself is reloaded from the server as before.
+  const [completed, setCompleted] = useState<Appointment | null>(null);
 
   // Memoised from `list.data` rather than recreated inline: a fresh array on
   // every render would invalidate every memo below it.
@@ -64,7 +180,7 @@ export default function DoctorAppointments() {
 
   return (
     <AppShell role="DOCTOR">
-      <div id="main">
+      <div id="main" className="page-enter">
         <PageHeader
           eyebrow={tr("Doctor portal", "Doctor ka portal")}
           title={tr("Appointments", "Appointments")}
@@ -74,29 +190,84 @@ export default function DoctorAppointments() {
           )}
         />
 
-        {list.loading && <Loading label={tr("Loading your schedule", "Schedule load ho raha hai")} />}
-        {list.error && <ErrorState message={list.error.message} onRetry={list.reload} />}
+        {list.loading && (
+          <div role="status" aria-live="polite" className="mt-6 space-y-6">
+            <span className="sr-only">{tr("Loading your schedule", "Schedule load ho raha hai")}…</span>
+            <SkeletonTiles count={3} />
+            <SkeletonRows rows={3} />
+          </div>
+        )}
+        {list.error && (
+          <div className="mt-6">
+            <ErrorState message={list.error.message} onRetry={list.reload} />
+          </div>
+        )}
 
         {list.data && (
           <div className="mt-6 space-y-6">
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-              <StatTile label="Today" value={today.length} />
+            <div className="stagger grid grid-cols-2 gap-4 lg:grid-cols-3">
+              <StatTile label="Today" value={today.length} icon={<Icon name="today" filled />} />
               <StatTile
                 label="Awaiting confirmation"
                 value={awaiting.length}
                 tone={awaiting.length ? "warning" : "neutral"}
+                icon={<Icon name="pending_actions" filled />}
               />
-              <StatTile label="Upcoming" value={upcoming.length} />
+              <StatTile label="Upcoming" value={upcoming.length} icon={<Icon name="event_upcoming" filled />} />
             </div>
 
-            <Card title="Today" description="Everyone you are seeing today.">
+            <AnimatePresence initial={false}>
+              {completed && (
+                <motion.div
+                  key={completed.id}
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: reduce ? 0 : 0.3, ease: EASE }}
+                  className="overflow-hidden"
+                >
+                  <div
+                    role="status"
+                    className="border-gradient flex flex-wrap items-center gap-4 rounded-2xl p-5 shadow-card"
+                  >
+                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-stable-soft text-stable">
+                      <DrawnCheck className="h-7 w-7" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-base font-bold text-strong">
+                        {tr("Consultation completed", "Consultation mukammal ho gayi")}
+                      </p>
+                      <p className="mt-0.5 text-sm text-muted">
+                        {completed.patientName ?? "Patient"} ·{" "}
+                        <span className="tabular-nums">{formatWhen(completed.startTime)}</span>
+                        {completed.notes
+                          ? ` · ${tr("Notes filed", "Notes darj ho gaye")}`
+                          : ""}
+                      </p>
+                    </div>
+                    <IconButton
+                      label={tr("Dismiss", "Band karein")}
+                      icon="close"
+                      size="sm"
+                      onClick={() => setCompleted(null)}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <Card title="Today" description="Everyone you are seeing today." icon="today">
               <AppointmentList
                 appointments={today}
                 emptyTitle="Nothing scheduled today"
                 emptyDescription="Your clinic list is clear."
               >
                 {(appointment) => (
-                  <ConsultationRow appointment={appointment} onChanged={reloadAll} />
+                  <ConsultationRow
+                    appointment={appointment}
+                    onChanged={reloadAll}
+                    onCompleted={setCompleted}
+                  />
                 )}
               </AppointmentList>
             </Card>
@@ -105,26 +276,35 @@ export default function DoctorAppointments() {
               <Card
                 title="Awaiting your confirmation"
                 description="These patients have requested a time and are waiting to hear back."
+                icon="pending_actions"
               >
                 <AppointmentList appointments={awaiting} emptyTitle="Nothing waiting">
                   {(appointment) => (
-                    <ConsultationRow appointment={appointment} onChanged={reloadAll} />
+                    <ConsultationRow
+                      appointment={appointment}
+                      onChanged={reloadAll}
+                      onCompleted={setCompleted}
+                    />
                   )}
                 </AppointmentList>
               </Card>
             )}
 
-            <Card title="Upcoming">
+            <Card title="Upcoming" icon="event_upcoming">
               <AppointmentList appointments={upcoming} emptyTitle="Nothing further booked">
                 {(appointment) => (
-                  <ConsultationRow appointment={appointment} onChanged={reloadAll} />
+                  <ConsultationRow
+                    appointment={appointment}
+                    onChanged={reloadAll}
+                    onCompleted={setCompleted}
+                  />
                 )}
               </AppointmentList>
             </Card>
 
             <TimeOffCard />
 
-            <Card title="Past">
+            <Card title="Past" icon="history">
               <AppointmentList appointments={finished} emptyTitle="No past appointments">
                 {(appointment) => (
                   <AppointmentRow
@@ -145,10 +325,14 @@ export default function DoctorAppointments() {
 function ConsultationRow({
   appointment,
   onChanged,
+  onCompleted,
 }: {
   appointment: Appointment;
   onChanged: () => void;
+  /** Called with the server's answer when the step taken was completion. */
+  onCompleted?: (appointment: Appointment) => void;
 }) {
+  const reduce = useReducedMotion();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
@@ -161,7 +345,8 @@ function ConsultationRow({
     setBusy(true);
     setError(null);
     try {
-      await appointments.setStatus(appointment.id, to, withNotes || undefined);
+      const result = await appointments.setStatus(appointment.id, to, withNotes || undefined);
+      if (to === "COMPLETED") onCompleted?.(result);
       onChanged();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not update the appointment.");
@@ -180,6 +365,7 @@ function ConsultationRow({
             {step && !writing && (
               <Button
                 disabled={busy}
+                loading={busy}
                 onClick={() => {
                   // Completing is where the doctor's note belongs, so that step
                   // opens the note field rather than firing immediately.
@@ -199,40 +385,47 @@ function ConsultationRow({
         }
       />
 
-      {writing && (
-        <div className="pb-4">
-          <label
-            htmlFor={`notes-${appointment.id}`}
-            className="block text-sm font-medium text-strong"
+      <div className="-mt-1 pb-4">
+        <StatusStepper status={appointment.status} />
+      </div>
+
+      <AnimatePresence initial={false}>
+        {writing && (
+          <motion.div
+            key="notes"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: reduce ? 0 : 0.3, ease: EASE }}
+            className="overflow-hidden"
           >
-            Consultation notes
-          </label>
-          <textarea
-            id={`notes-${appointment.id}`}
-            rows={3}
-            maxLength={2000}
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            className={cx(
-              "mt-1.5 block w-full rounded-md border border-line-strong bg-card px-3 py-2.5 text-base",
-                "text-strong focus:outline-2 focus:outline-primary",
-                  "",
-            )}
-            placeholder="What was discussed, and what happens next."
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button disabled={busy} onClick={() => void advance("COMPLETED", notes)}>
-              {busy ? "Saving…" : "Complete consultation"}
-            </Button>
-            <Button variant="ghost" disabled={busy} onClick={() => setWriting(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
+            <div className="mb-4 space-y-3 rounded-2xl border border-line bg-sunken/60 p-4">
+              <Field label="Consultation notes" htmlFor={`notes-${appointment.id}`}>
+                <Textarea
+                  id={`notes-${appointment.id}`}
+                  rows={3}
+                  maxLength={2000}
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="What was discussed, and what happens next."
+                />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={busy} loading={busy} onClick={() => void advance("COMPLETED", notes)}>
+                  <Icon name="task_alt" className="text-[20px]" />
+                  {busy ? "Saving…" : "Complete consultation"}
+                </Button>
+                <Button variant="ghost" disabled={busy} onClick={() => setWriting(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {error && (
-        <p role="alert" className="pb-3 text-sm font-medium text-critical">
+        <p role="alert" className="pop-in pb-3 text-sm font-medium text-critical">
           {error}
         </p>
       )}

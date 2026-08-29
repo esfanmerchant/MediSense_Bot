@@ -38,6 +38,7 @@ import {
 } from "react";
 
 import { Icon } from "@/components/Icon";
+import { LogoMark } from "@/components/Logo";
 import {
   Badge,
   Button,
@@ -261,23 +262,50 @@ function AnswerBody({
 
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={URGENCY_TONE[answer.urgency]}>{tr(...URGENCY_LABEL[answer.urgency])}</Badge>
-        {answer.suggestedDepartment && (
-          <Badge tone="neutral">
-            {tr("Suggested:", "Tajweez:")} {answer.suggestedDepartment}
-          </Badge>
-        )}
       </div>
 
       <StreamedText text={answer.answer} animate={animate} onTick={onTick} onDone={finish} />
 
-      {revealed && !answer.emergency && answer.urgency !== "INFORMATION" && (
-        <Link
-          href="/patient/appointments"
-          className="pop-in inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line-strong bg-card px-4 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
-          <Icon name="calendar_add_on" className="text-[18px]" />
-          {tr("Book an appointment", "Appointment book karein")}
-        </Link>
+      {/* The suggestion, as its own card: what kind of care, and the way to
+          it. Urgent answers wear the critical accent and a stronger call. */}
+      {revealed && answer.emergency && (
+        <div className="pop-in flex items-center gap-3 rounded-2xl border border-critical/50 bg-critical-soft p-4">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-critical text-white shadow-md">
+            <Icon name="emergency" filled className="text-[24px]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-sm font-bold text-critical">
+              {tr("Seek immediate care", "Foran ilaaj hasil karein")}
+            </p>
+            <p className="text-xs text-strong">
+              {tr("Emergency department or your local emergency number — now.", "Emergency department ya emergency number — abhi.")}
+            </p>
+          </div>
+        </div>
+      )}
+      {revealed && !answer.emergency && (answer.suggestedDepartment || answer.urgency !== "INFORMATION") && (
+        <div className="glass pop-in flex flex-wrap items-center gap-3 rounded-2xl !shadow-card p-4">
+          <span className="bg-gradient-brand grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white shadow-md">
+            <Icon name="local_hospital" filled className="text-[24px]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
+              {tr("Suggested", "Tajweez")}
+            </p>
+            <p className="font-display text-base font-bold text-strong">
+              {answer.suggestedDepartment ?? tr("A doctor's visit", "Doctor ki visit")}
+            </p>
+          </div>
+          {answer.urgency !== "INFORMATION" && (
+            <Link
+              href="/patient/appointments"
+              className="btn-gradient inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <Icon name="calendar_add_on" className="text-[18px]" />
+              {tr("Book an appointment", "Appointment book karein")}
+            </Link>
+          )}
+        </div>
       )}
 
       <Disclaimer text={answer.disclaimer} />
@@ -327,11 +355,11 @@ function AssistantAvatar({ className }: { className?: string }) {
     <span
       aria-hidden
       className={cx(
-        "grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#0E9E98] to-[#3B6BF0] text-white shadow-md",
+        "bg-gradient-soft grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line/70 shadow-sm",
         className,
       )}
     >
-      <Icon name="health_and_safety" filled className="text-[20px]" />
+      <LogoMark className="h-5 w-auto" />
     </span>
   );
 }
@@ -358,7 +386,7 @@ function UserMessage({ turn }: { turn: Turn }) {
             <span className="text-faint">· {tr("not stored", "save nahi hui")}</span>
           </p>
         )}
-        <p className="whitespace-pre-line rounded-2xl rounded-br-md bg-gradient-to-br from-[#1B4FE0] to-[#3B6BF0] px-4 py-3 text-[15.5px] leading-relaxed text-white shadow-md">
+        <p className="bg-gradient-brand whitespace-pre-line rounded-2xl rounded-br-md px-4 py-3 text-[15.5px] leading-relaxed text-white shadow-md">
           {turn.question}
         </p>
       </div>
@@ -370,7 +398,7 @@ function AssistantMessage({ turn, onTick }: { turn: Turn; onTick?: () => void })
   return (
     <div className={cx("flex gap-3", turn.fresh && "pop-in")}>
       <AssistantAvatar className="mt-1" />
-      <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-line bg-card px-4 py-3.5 shadow-card sm:px-5">
+      <div className="glass min-w-0 flex-1 rounded-2xl rounded-tl-md px-4 py-3.5 !shadow-card sm:px-5">
         <AnswerBody answer={turn.answer} animate={turn.fresh} onTick={onTick} />
       </div>
     </div>
@@ -404,11 +432,11 @@ function Thinking({ withImage }: { withImage: boolean }) {
   return (
     <div className="pop-in flex items-center gap-3" role="status" aria-live="polite">
       <AssistantAvatar />
-      <div className="flex items-center gap-3 rounded-2xl rounded-tl-md border border-line bg-card px-4 py-3 shadow-card">
-        <span className="flex items-center gap-1" aria-hidden>
-          <span className="typing-dot h-2 w-2 rounded-full bg-accent" />
-          <span className="typing-dot h-2 w-2 rounded-full bg-accent" />
-          <span className="typing-dot h-2 w-2 rounded-full bg-accent" />
+      <div className="glass flex items-center gap-3 rounded-2xl rounded-tl-md px-4 py-3 !shadow-card">
+        <span className="flex items-center gap-1.5" aria-hidden>
+          <span className="typing-dot bg-gradient-brand h-2 w-2 rounded-full" />
+          <span className="typing-dot bg-gradient-brand h-2 w-2 rounded-full" />
+          <span className="typing-dot bg-gradient-brand h-2 w-2 rounded-full" />
         </span>
         <span className="text-sm text-muted">{tr(...phases[phase])}…</span>
       </div>
@@ -433,9 +461,9 @@ function Welcome({ onSuggest }: { onSuggest: (text: string) => void }) {
       <div className="relative">
         <span
           aria-hidden
-          className="animate-breathe absolute inset-0 rounded-full bg-accent-bright/50 blur-2xl"
+          className="animate-breathe absolute inset-0 rounded-full bg-accent-bright/40 blur-2xl"
         />
-        <AssistantAvatar className="animate-float relative h-16 w-16 [&>span]:text-[32px]" />
+        <AssistantAvatar className="animate-float relative h-20 w-20 [&>svg]:h-11" />
       </div>
       <h2 className="mt-6 font-display text-2xl font-bold text-strong">
         {tr("How can I help today?", "Aaj main kaise madad karun?")}
@@ -452,9 +480,9 @@ function Welcome({ onSuggest }: { onSuggest: (text: string) => void }) {
             <button
               type="button"
               onClick={() => onSuggest(tr(en, ur))}
-              className="hover-lift-sm flex min-h-12 w-full items-center gap-2.5 rounded-xl border border-line bg-card px-4 py-2.5 text-left text-sm text-strong shadow-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="group flex min-h-12 w-full items-center gap-2.5 rounded-full border border-line-strong bg-card px-4 py-2.5 text-left text-sm text-strong transition-[background-image,transform,box-shadow,border-color] duration-200 hover:bg-gradient-soft hover:border-primary/40 hover:scale-[1.02] hover:shadow-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
-              <Icon name="auto_awesome" className="shrink-0 text-[18px] text-accent" />
+              <Icon name="auto_awesome" className="icon-wiggle shrink-0 text-[18px] text-accent" />
               {tr(en, ur)}
             </button>
           </li>
@@ -520,10 +548,10 @@ function MicButton({
         aria-label={listening ? tr("Stop listening", "Sunna band karein") : tr("Speak your question", "Apna sawal bolein")}
         onClick={() => (listening ? speech.stop() : speech.start())}
         className={cx(
-          "relative grid h-11 w-11 place-items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+          "relative grid h-11 w-11 place-items-center rounded-full transition-[background-color,color,transform] duration-200 hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
           listening
             ? "listening-ring bg-critical text-white"
-            : "text-muted hover:bg-sunken hover:text-strong disabled:opacity-50",
+            : "mic-idle text-muted hover:bg-gradient-soft hover:text-primary disabled:opacity-50 disabled:hover:scale-100",
         )}
       >
         <Icon name={listening ? "stop" : "mic"} filled={listening} className="text-[22px]" />
@@ -758,7 +786,7 @@ export function AssistantChat({
           )}
 
           <form
-            className="relative flex items-end gap-1 rounded-2xl border border-line-strong bg-card p-1.5 shadow-card transition-[box-shadow,border-color] focus-within:border-primary focus-within:shadow-float"
+            className="glass relative flex items-end gap-1 rounded-2xl p-1.5 !shadow-card transition-[box-shadow,border-color] focus-within:border-primary focus-within:!shadow-float"
             onSubmit={(event) => {
               event.preventDefault();
               void send();
@@ -811,9 +839,9 @@ export function AssistantChat({
               {interim && !question && (
                 <span
                   aria-hidden
-                  className="pointer-events-none absolute left-2 top-2.5 text-base italic text-faint"
+                  className="stream-cursor pointer-events-none absolute left-2 top-2.5 text-base italic text-faint"
                 >
-                  {interim}…
+                  {interim}
                 </span>
               )}
             </div>
@@ -822,16 +850,17 @@ export function AssistantChat({
               type="submit"
               aria-label={tr("Send", "Bhejein")}
               disabled={busy || !question.trim()}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-white shadow-sm transition-[background-color,transform,opacity] hover:bg-primary-strong active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 disabled:hover:bg-primary"
+              className="btn-gradient grid h-11 w-11 shrink-0 place-items-center rounded-full text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40"
             >
               <Icon name="arrow_upward" className="text-[22px]" />
             </button>
           </form>
 
-          <p className="mt-2 text-center text-[11px] text-faint">
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-faint">
+            <Icon name="info" className="text-[14px]" />
             {tr(
-              "General guidance only — not a diagnosis. Enter sends, Shift+Enter starts a new line.",
-              "Sirf aam rehnumai — tashkhees nahi. Enter se bhejein, Shift+Enter se nayi line.",
+              "This is preliminary guidance, not a diagnosis. Enter sends · Shift+Enter for a new line.",
+              "Yeh ibtidai rehnumai hai, tashkhees nahi. Enter se bhejein · Shift+Enter se nayi line.",
             )}
           </p>
         </div>
@@ -890,19 +919,36 @@ function VoiceInput({
   const listening = speech.state === "listening";
 
   return (
-    <div className="space-y-2">
-      <Button
-        type="button"
-        size="lg"
-        variant={listening ? "danger" : "secondary"}
-        disabled={disabled}
-        aria-pressed={listening}
-        onClick={() => (listening ? speech.stop() : speech.start())}
-        className={cx("relative", listening && "listening-ring")}
-      >
-        <Icon name={listening ? "stop" : "mic"} filled={listening} className="text-[22px]" />
-        {listening ? tr("Stop listening", "Sunna band karein") : label}
-      </Button>
+    <div className="space-y-3">
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          disabled={disabled}
+          aria-pressed={listening}
+          aria-label={listening ? tr("Stop listening", "Sunna band karein") : label}
+          onClick={() => (listening ? speech.stop() : speech.start())}
+          className={cx(
+            "relative grid h-20 w-20 shrink-0 place-items-center rounded-full text-white transition-transform duration-200 hover:scale-105 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary disabled:opacity-50",
+            listening ? "listening-ring bg-critical shadow-float" : "btn-gradient mic-idle",
+          )}
+        >
+          <Icon name={listening ? "stop" : "mic"} filled className="text-[36px]" />
+        </button>
+        <div className="min-w-0">
+          <p className="font-display text-base font-bold text-strong">
+            {listening ? tr("Listening…", "Sun raha hai…") : label}
+          </p>
+          {listening ? (
+            <span className="voice-bars mt-1" aria-hidden>
+              <span /><span /><span /><span /><span /><span /><span />
+            </span>
+          ) : (
+            <p className="text-sm text-muted">
+              {tr("Tap and speak in your own words.", "Dabayein aur apne alfaz mein bolein.")}
+            </p>
+          )}
+        </div>
+      </div>
 
       <p role="status" aria-live="polite" className="text-sm text-muted">
         {listening
@@ -916,7 +962,11 @@ function VoiceInput({
             )}
       </p>
 
-      {speech.interim && <p className="text-sm italic text-faint">{speech.interim}…</p>}
+      {speech.interim && (
+        <p className="stream-cursor pop-in rounded-xl bg-gradient-soft px-3 py-2 text-sm italic text-strong">
+          {speech.interim}
+        </p>
+      )}
 
       {speech.error && <ErrorState title={tr("Microphone", "Microphone")} message={speech.error} />}
     </div>
@@ -1425,7 +1475,7 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
         <button
           type="button"
           onClick={() => openChat(null)}
-          className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-primary px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="btn-gradient flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           <Icon name="add_comment" className="text-[20px]" />
           {tr("New chat", "Nayi baat-cheet")}
@@ -1440,8 +1490,8 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
           className={cx(
             "flex min-h-11 w-full items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
             mode.kind === "symptoms"
-              ? "border-accent bg-accent-soft text-accent"
-              : "border-line-strong bg-card text-strong hover:bg-sunken",
+              ? "border-gradient-thick text-primary"
+              : "border-line-strong bg-card text-strong hover:bg-gradient-soft",
           )}
         >
           <Icon name="stethoscope" className="text-[20px]" />
@@ -1476,7 +1526,7 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
                   onClick={() => openChat(conversation.sessionId)}
                   className={cx(
                     "flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-                    current ? "bg-primary-soft" : "hover:bg-sunken",
+                    current ? "bg-gradient-soft" : "hover:bg-sunken/70",
                   )}
                 >
                   <Icon
@@ -1503,9 +1553,9 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
   );
 
   return (
-    <div className="flex h-[calc(100dvh-11.5rem)] min-h-[560px] overflow-hidden rounded-2xl border border-line bg-canvas shadow-card">
+    <div className="flex h-[calc(100dvh-11.5rem)] min-h-[560px] overflow-hidden rounded-3xl border border-line bg-canvas/60 shadow-overlay">
       {/* Desktop sidebar */}
-      <aside className="hidden w-72 shrink-0 border-r border-line bg-card lg:block">{sidebar}</aside>
+      <aside className="hidden w-72 shrink-0 border-r border-line/70 bg-card/70 backdrop-blur-xl lg:block">{sidebar}</aside>
 
       {/* Mobile drawer */}
       {drawer && (
@@ -1521,7 +1571,7 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-line bg-card/80 px-3 py-2 backdrop-blur sm:px-5">
+        <div className="flex items-center gap-3 border-b border-line/70 bg-card/70 px-3 py-2 backdrop-blur-xl sm:px-5">
           <button
             type="button"
             aria-label={tr("Open conversations", "Baat-cheet kholein")}
@@ -1530,14 +1580,15 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
           >
             <Icon name="history" className="text-[22px]" />
           </button>
+          <AssistantAvatar className="hidden sm:grid" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-strong">
+            <p className="truncate font-display text-sm font-bold text-strong">
               {mode.kind === "symptoms"
                 ? tr("Symptom check", "Takleef ka jaiza")
-                : (active?.title ?? tr("New chat", "Nayi baat-cheet"))}
+                : (active?.title ?? tr("MediSense Assistant", "MediSense Assistant"))}
             </p>
             <p className="text-[11px] text-faint">
-              {tr("MediSense assistant · guidance, not diagnosis", "MediSense assistant · rehnumai, tashkhees nahi")}
+              {tr("Guidance, not diagnosis", "Rehnumai, tashkhees nahi")}
             </p>
           </div>
           <span className="hidden items-center gap-1.5 rounded-full bg-stable-soft px-2.5 py-1 text-[11px] font-semibold text-stable sm:inline-flex">

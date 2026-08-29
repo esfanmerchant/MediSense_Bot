@@ -8,6 +8,7 @@
  * carrying. Everything else is a door, not a wall of data.
  */
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -17,6 +18,7 @@ import { PageHeader } from "@/components/PageHeader";
 import {
   Avatar,
   Badge,
+  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -25,7 +27,8 @@ import {
   SkeletonTiles,
   StatTile,
 } from "@/components/ui";
-import { dashboard } from "@/lib/api";
+import { VitalGauge } from "@/components/gauges";
+import { dashboard, vitals, type Vital, type VitalThreshold, type VitalType } from "@/lib/api";
 import { useLang, useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/useAsync";
@@ -51,6 +54,79 @@ function relativeDay(iso: string, tr: (en: string, ur: string) => string): strin
   if (days <= 0) return tr("Today", "Aaj");
   if (days === 1) return tr("Tomorrow", "Kal");
   return tr(`In ${days} days`, `${days} din mein`);
+}
+
+const VITALS: { key: keyof Vital; type: VitalType; unit: string; name: [string, string] }[] = [
+  { key: "heartRate", type: "HEART_RATE", unit: "bpm", name: ["Heart rate", "Dil ki raftar"] },
+  { key: "systolicBp", type: "SYSTOLIC_BP", unit: "mmHg", name: ["Systolic", "Systolic"] },
+  { key: "diastolicBp", type: "DIASTOLIC_BP", unit: "mmHg", name: ["Diastolic", "Diastolic"] },
+  { key: "oxygenSaturation", type: "OXYGEN_SATURATION", unit: "%", name: ["Oxygen", "Oxygen"] },
+  { key: "temperature", type: "TEMPERATURE", unit: "°C", name: ["Temperature", "Bukhar"] },
+  { key: "respiratoryRate", type: "RESPIRATORY_RATE", unit: "/min", name: ["Breathing", "Saans"] },
+];
+
+/**
+ * The patient's latest readings as friendly dials, against the thresholds
+ * that actually govern them. Rendered only when there is something to show:
+ * a row of empty gauges would be a row of worries.
+ */
+function HealthSnapshot({ patientId }: { patientId: string }) {
+  const tr = useTr();
+  const readings = useAsync(() => vitals.list(patientId, { limit: 30 }), [patientId]);
+  const thresholds = useAsync(() => vitals.thresholds(patientId), [patientId]);
+
+  if (readings.loading || thresholds.loading) {
+    return <SkeletonRows rows={2} />;
+  }
+  const rows = readings.data?.data ?? [];
+  const rules = new Map<VitalType, VitalThreshold>(
+    (thresholds.data?.thresholds ?? []).map((rule) => [rule.vitalType, rule]),
+  );
+  const latest = VITALS.flatMap((vital) => {
+    const reading = rows.find((row) => row[vital.key] !== null);
+    return reading
+      ? [{ vital, value: reading[vital.key] as number, recordedAt: reading.recordedAt }]
+      : [];
+  });
+  if (latest.length === 0) return null;
+
+  return (
+    <Card
+      icon="monitor_heart"
+      title={tr("Health snapshot", "Sehat ka khulasa")}
+      description={tr(
+        "Your latest readings, recorded by your care team.",
+        "Aap ki taaza readings, care team ki darj ki hui.",
+      )}
+      action={
+        <Link
+          href="/patient/vitals"
+          className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-primary hover:underline"
+        >
+          {tr("All readings", "Sab readings")}
+          <Icon name="arrow_forward" className="text-[18px]" />
+        </Link>
+      }
+    >
+      <div className="stagger grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {latest.map(({ vital, value, recordedAt }) => {
+          const rule = rules.get(vital.type);
+          return (
+            <VitalGauge
+              key={vital.type}
+              type={vital.type}
+              label={tr(...vital.name)}
+              value={value}
+              unit={vital.unit}
+              min={rule?.minValue ?? null}
+              max={rule?.maxValue ?? null}
+              recordedAt={recordedAt}
+            />
+          );
+        })}
+      </div>
+    </Card>
+  );
 }
 
 function greeting(tr: (en: string, ur: string) => string): string {
@@ -109,7 +185,8 @@ function Welcome({
             })}
           </p>
           <h2 className="mt-1 font-display text-3xl font-bold leading-tight sm:text-4xl">
-            {greeting(tr)}, <span className="text-gradient-medical">{firstName}</span>
+            {greeting(tr)}, <span className="text-gradient-medical">{firstName}</span>{" "}
+            <span aria-hidden className="animate-wave">👋</span>
           </h2>
           <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-white/80">
             {next
@@ -250,9 +327,12 @@ export default function PatientDashboard() {
               />
             </div>
 
+            {user?.patientId && <HealthSnapshot patientId={user.patientId} />}
+
             <div className="grid gap-6 lg:grid-cols-2">
               <Card
                 icon="event_upcoming"
+                variant={data.upcomingAppointments.length > 0 ? "featured" : "default"}
                 title={tr("Next appointments", "Agli appointments")}
                 description={tr("Your confirmed and requested visits.", "Aap ki confirm aur requested visits.")}
               >
@@ -261,6 +341,14 @@ export default function PatientDashboard() {
                     icon="event_available"
                     title={tr("No upcoming appointments", "Koi aane wali appointment nahi")}
                     description={tr("When you book a visit it will appear here.", "Jab aap visit book karenge to yahan nazar aayegi.")}
+                    action={
+                      <Link href="/patient/appointments">
+                        <Button>
+                          <Icon name="calendar_add_on" className="text-[20px]" />
+                          {tr("Book your first appointment", "Apni pehli appointment book karein")}
+                        </Button>
+                      </Link>
+                    }
                   />
                 ) : (
                   <ul className="stagger divide-y divide-line">
@@ -280,7 +368,8 @@ export default function PatientDashboard() {
                           </p>
                           <div className="mt-1 flex items-center justify-end gap-1.5">
                             {index === 0 && (
-                              <span className="text-xs font-semibold text-accent">
+                              <span className="bg-gradient-brand inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
+                                <Icon name="schedule" className="text-[13px]" />
                                 {relativeDay(appointment.startTime, tr)}
                               </span>
                             )}

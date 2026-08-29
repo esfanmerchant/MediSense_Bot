@@ -577,11 +577,13 @@ select:focus ~ .select-chevron {
   }
 }
 .page-enter {
-  animation: page-enter 0.35s var(--ease-out-soft) both;
+  animation: page-enter 0.35s var(--ease-out-soft) backwards;
 }
 
+/* `backwards`, not `both`: once the entrance ends the element must own its
+   transform again, or a hover lift on a staggered card silently does nothing. */
 .stagger > * {
-  animation: page-enter 0.55s var(--ease-out-soft) both;
+  animation: page-enter 0.55s var(--ease-out-soft) backwards;
 }
 .stagger > :nth-child(1) { animation-delay: 0ms; }
 .stagger > :nth-child(2) { animation-delay: 60ms; }
@@ -604,7 +606,7 @@ select:focus ~ .select-chevron {
   }
 }
 .pop-in {
-  animation: pop-in 0.32s var(--ease-out-soft) both;
+  animation: pop-in 0.32s var(--ease-out-soft) backwards;
 }
 
 @keyframes drift {

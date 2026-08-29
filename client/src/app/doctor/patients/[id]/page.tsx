@@ -9,22 +9,27 @@
  * just avoids offering a button that would be refused.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { AppShell } from "@/components/AppShell";
 import { DocumentsCard } from "@/components/DocumentsCard";
+import { Icon } from "@/components/Icon";
 import { PrescriptionRow, RecordTimeline } from "@/components/records";
 import { RecordVitals, ThresholdsPanel, VitalsTable } from "@/components/vitals";
 import {
+  Avatar,
+  Badge,
   Button,
   Card,
   EmptyState,
   ErrorState,
   Field,
   Input,
-  Loading,
+  SkeletonRows,
+  Textarea,
   cx,
 } from "@/components/ui";
 import {
@@ -34,35 +39,48 @@ import {
   records,
   type MedicalRecord,
 } from "@/lib/api";
+import { useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/useAsync";
 
-function Textarea({
-  id,
-  value,
-  onChange,
-  rows = 3,
-  placeholder,
-}: {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
-  rows?: number;
-  placeholder?: string;
-}) {
+const EASE = [0.16, 1, 0.3, 1] as const;
+
+/** A block that grows open and folds shut, instead of appearing. */
+function Expand({ open, children }: { open: boolean; children: ReactNode }) {
+  const reduce = useReducedMotion();
   return (
-    <textarea
-      id={id}
-      rows={rows}
-      value={value}
-      placeholder={placeholder}
-      onChange={(event) => onChange(event.target.value)}
-      className={cx(
-        "block w-full rounded-md border border-line-strong bg-card px-3 py-2.5 text-base",
-          "text-strong focus:outline-2 focus:outline-primary",
-            "",
+    <AnimatePresence initial={false}>
+      {open && (
+        <motion.div
+          key="body"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: reduce ? 0 : 0.3, ease: EASE }}
+          className="overflow-hidden"
+        >
+          {children}
+        </motion.div>
       )}
-    />
+    </AnimatePresence>
+  );
+}
+
+/** A checkmark that draws itself, for the moment something is saved. */
+function DrawnCheck({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className={cx("pop-scale h-5 w-5", className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7" className="draw-stroke" />
+    </svg>
   );
 }
 
@@ -70,6 +88,7 @@ export default function PatientChart() {
   const params = useParams<{ id: string }>();
   const patientId = params.id;
   const { user } = useSession();
+  const tr = useTr();
 
   const [refresh, setRefresh] = useState(0);
   const reloadAll = useCallback(() => setRefresh((n) => n + 1), []);
@@ -95,49 +114,94 @@ export default function PatientChart() {
 
   return (
     <AppShell role="DOCTOR">
-      <div id="main">
+      <div id="main" className="page-enter">
         <Link
           href="/doctor/patients"
-          className="text-sm font-medium text-teal-800 hover:underline"
+          className="group inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
-          ← Back to my patients
+          <Icon
+            name="arrow_back"
+            className="text-[18px] transition-transform duration-200 group-hover:-translate-x-0.5"
+          />
+          {tr("Back to my patients", "Mere mareezon par wapas")}
         </Link>
 
-        {(profile.loading || history.loading) && <Loading label="Loading the chart" />}
+        {(profile.loading || history.loading) && (
+          <div role="status" aria-live="polite" className="mt-4 space-y-6">
+            <span className="sr-only">Loading the chart…</span>
+            <div className="flex items-center gap-5 rounded-2xl border border-line bg-card p-6 shadow-card" aria-hidden>
+              <span className="skeleton h-14 w-14 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <span className="skeleton block h-6 w-48" />
+                <span className="skeleton block h-3 w-72" />
+              </div>
+            </div>
+            <SkeletonRows rows={2} />
+            <SkeletonRows rows={3} />
+          </div>
+        )}
 
         {denied && (
-          <ErrorState
-            title="You do not have access to this patient"
-            message="Charts are reachable only through a care relationship — an assignment, or a consultation you are treating."
-          />
+          <div className="mt-4">
+            <ErrorState
+              title="You do not have access to this patient"
+              message="Charts are reachable only through a care relationship — an assignment, or a consultation you are treating."
+            />
+          </div>
         )}
 
         {!denied && profile.error && (
-          <ErrorState message={profile.error.message} onRetry={profile.reload} />
+          <div className="mt-4">
+            <ErrorState message={profile.error.message} onRetry={profile.reload} />
+          </div>
         )}
 
         {profile.data && !denied && (
           <div className="mt-4 space-y-6">
-            <header>
-              <h1 className="text-2xl font-semibold text-strong">
-                {profile.data.name}
-              </h1>
-              <p className="mt-1 tabular-nums text-muted">
-                {profile.data.medicalRecordNumber}
-                {profile.data.bloodGroup ? ` · ${profile.data.bloodGroup}` : ""}
-                {profile.data.dateOfBirth ? ` · born ${profile.data.dateOfBirth}` : ""}
-              </p>
+            <header className="card-thread blob-corner relative overflow-hidden rounded-2xl border border-line bg-card p-6 shadow-card">
+              <div className="relative flex flex-wrap items-center gap-5">
+                <Avatar name={profile.data.name} size="lg" ring="active" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-accent">
+                    {tr("Patient chart", "Mareez ka chart")}
+                  </p>
+                  <h1 className="mt-1 font-display text-2xl font-bold text-strong">
+                    {profile.data.name}
+                  </h1>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <Badge tone="neutral">
+                      <Icon name="badge" className="text-[14px]" />
+                      <span className="tabular-nums">{profile.data.medicalRecordNumber}</span>
+                    </Badge>
+                    {profile.data.bloodGroup && (
+                      <Badge tone="info">
+                        <Icon name="bloodtype" filled className="text-[14px]" />
+                        {profile.data.bloodGroup}
+                      </Badge>
+                    )}
+                    {profile.data.dateOfBirth && (
+                      <Badge tone="neutral">
+                        <Icon name="cake" className="text-[14px]" />
+                        <span className="tabular-nums">born {profile.data.dateOfBirth}</span>
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {profile.data.allergies && (
                 <p
                   role="alert"
-                  className="mt-2 rounded-md border border-critical/40 bg-critical-soft px-3 py-2 text-sm font-medium text-critical"
+                  className="relative mt-5 flex items-start gap-2.5 rounded-xl border border-critical/40 border-l-4 border-l-critical bg-critical-soft px-4 py-3 text-sm font-medium text-critical"
                 >
-                  Allergies: {profile.data.allergies}
+                  <Icon name="warning" filled className="mt-px shrink-0 text-[18px]" />
+                  <span>Allergies: {profile.data.allergies}</span>
                 </p>
               )}
               {profile.data.chronicConditions && (
-                <p className="mt-2 text-sm text-muted">
-                  Chronic conditions: {profile.data.chronicConditions}
+                <p className="relative mt-3 flex items-start gap-2 text-sm text-muted">
+                  <Icon name="clinical_notes" className="mt-px shrink-0 text-[18px] text-faint" />
+                  <span>Chronic conditions: {profile.data.chronicConditions}</span>
                 </p>
               )}
             </header>
@@ -147,21 +211,31 @@ export default function PatientChart() {
             <Card
               title="Current medication"
               description="Check this before prescribing."
+              icon="pill"
+              action={
+                active.length > 0 && (
+                  <Badge tone="good">
+                    <span className="tabular-nums">{active.length}</span>{" "}
+                    {tr("active", "jari")}
+                  </Badge>
+                )
+              }
             >
               {active.length === 0 ? (
-                <EmptyState title="No active prescriptions" />
+                <EmptyState icon="pill_off" title="No active prescriptions" />
               ) : (
-                <ul className="divide-y divide-line">
+                <MedicationList>
                   {active.map((prescription) => (
-                    <PrescriptionRow
-                      key={prescription.id}
-                      prescription={prescription}
-                      action={
-                        <DiscontinueButton id={prescription.id} onDone={reloadAll} />
-                      }
-                    />
+                    <MedicationItem key={prescription.id}>
+                      <PrescriptionRow
+                        prescription={prescription}
+                        action={
+                          <DiscontinueButton id={prescription.id} onDone={reloadAll} />
+                        }
+                      />
+                    </MedicationItem>
                   ))}
-                </ul>
+                </MedicationList>
               )}
             </Card>
 
@@ -170,7 +244,7 @@ export default function PatientChart() {
             {/* Observations sit with the chart because that is where a doctor
                 reads a trend — beside the history that explains it. */}
             <RecordVitals patientId={patientId} onRecorded={reloadAll} />
-            <VitalsTable key={`vitals-${refresh}`} patientId={patientId} />
+            <VitalsTable key={`vitals-${refresh}`} patientId={patientId} snapshot />
             <ThresholdsPanel patientId={patientId} />
 
             <DocumentsCard
@@ -185,7 +259,7 @@ export default function PatientChart() {
               canConfirmOcr
             />
 
-            <Card title="History" description="Most recent first.">
+            <Card title="History" description="Most recent first." icon="history">
               {history.error && !denied ? (
                 <ErrorState message={history.error.message} onRetry={history.reload} />
               ) : (
@@ -205,6 +279,30 @@ export default function PatientChart() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+/** The medication list; rows grow in and fold out rather than jumping. */
+function MedicationList({ children }: { children: ReactNode }) {
+  return (
+    <ul className="divide-y divide-line">
+      <AnimatePresence initial={false}>{children}</AnimatePresence>
+    </ul>
+  );
+}
+
+function MedicationItem({ children }: { children: ReactNode }) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: "auto", opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: reduce ? 0 : 0.3, ease: EASE }}
+      className="overflow-hidden"
+    >
+      {children}
+    </motion.div>
   );
 }
 
@@ -256,53 +354,74 @@ function NewRecordForm({
     <Card
       title="New consultation note"
       description="Filed under your name. You can amend your own notes later; other clinicians cannot."
+      icon="edit_note"
       action={
         !open && (
-          <Button onClick={() => setOpen(true)}>Write a note</Button>
+          <Button onClick={() => setOpen(true)}>
+            <Icon name="add" className="text-[20px]" />
+            Write a note
+          </Button>
         )
       }
     >
-      {!open ? (
+      {!open && (
         <p className="text-sm text-muted">
           Records are permanent clinical history. Write what the next clinician needs to know.
         </p>
-      ) : (
+      )}
+      <Expand open={open}>
         <div className="space-y-4">
           <Field label="Symptoms" htmlFor="symptoms">
             <Textarea
               id="symptoms"
+              rows={3}
               value={symptoms}
-              onChange={setSymptoms}
+              onChange={(event) => setSymptoms(event.target.value)}
               placeholder="What the patient reports"
             />
           </Field>
           <Field label="Diagnosis" htmlFor="diagnosis">
-            <Textarea id="diagnosis" value={diagnosis} onChange={setDiagnosis} rows={2} />
+            <Textarea
+              id="diagnosis"
+              rows={2}
+              value={diagnosis}
+              onChange={(event) => setDiagnosis(event.target.value)}
+            />
           </Field>
           <Field label="Treatment plan" htmlFor="treatment">
-            <Textarea id="treatment" value={treatmentPlan} onChange={setTreatmentPlan} />
+            <Textarea
+              id="treatment"
+              rows={3}
+              value={treatmentPlan}
+              onChange={(event) => setTreatmentPlan(event.target.value)}
+            />
           </Field>
           <Field label="Notes" htmlFor="record-notes">
-            <Textarea id="record-notes" value={notes} onChange={setNotes} />
+            <Textarea
+              id="record-notes"
+              rows={3}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+            />
           </Field>
           <Field label="Follow-up" htmlFor="follow-up">
             <Textarea
               id="follow-up"
-              value={followUpNotes}
-              onChange={setFollowUpNotes}
               rows={2}
+              value={followUpNotes}
+              onChange={(event) => setFollowUpNotes(event.target.value)}
               placeholder="When to review, and what to check"
             />
           </Field>
 
           {error && (
-            <p role="alert" className="text-sm font-medium text-critical">
+            <p role="alert" className="pop-in text-sm font-medium text-critical">
               {error}
             </p>
           )}
 
           <div className="flex flex-wrap gap-3">
-            <Button disabled={empty || busy} onClick={() => void submit()}>
+            <Button disabled={empty || busy} loading={busy} onClick={() => void submit()}>
               {busy ? "Saving…" : "File this record"}
             </Button>
             <Button variant="ghost" disabled={busy} onClick={() => setOpen(false)}>
@@ -310,7 +429,7 @@ function NewRecordForm({
             </Button>
           </div>
         </div>
-      )}
+      </Expand>
     </Card>
   );
 }
@@ -322,6 +441,7 @@ function NewPrescriptionForm({
   patientId: string;
   onSaved: () => void;
 }) {
+  const tr = useTr();
   const [open, setOpen] = useState(false);
   const [medication, setMedication] = useState("");
   const [dosage, setDosage] = useState("");
@@ -330,6 +450,10 @@ function NewPrescriptionForm({
   const [instructions, setInstructions] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A brief drawn checkmark on the button before the form folds away.
+  const [saved, setSaved] = useState(false);
+  const settle = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(settle.current), []);
 
   const complete = medication && dosage && frequency && duration;
 
@@ -350,8 +474,12 @@ function NewPrescriptionForm({
       setFrequency("");
       setDuration("");
       setInstructions("");
-      setOpen(false);
+      setSaved(true);
       onSaved();
+      settle.current = window.setTimeout(() => {
+        setSaved(false);
+        setOpen(false);
+      }, 1100);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not save the prescription.");
     } finally {
@@ -363,13 +491,22 @@ function NewPrescriptionForm({
     <Card
       title="Prescribe"
       description="Check the current medication above first."
-      action={!open && <Button onClick={() => setOpen(true)}>New prescription</Button>}
+      icon="prescriptions"
+      action={
+        !open && (
+          <Button onClick={() => setOpen(true)}>
+            <Icon name="add" className="text-[20px]" />
+            New prescription
+          </Button>
+        )
+      }
     >
-      {!open ? (
+      {!open && (
         <p className="text-sm text-muted">
           Prescriptions are never deleted — stopping one keeps it in the patient&rsquo;s history.
         </p>
-      ) : (
+      )}
+      <Expand open={open}>
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Medication" htmlFor="medication">
@@ -411,29 +548,43 @@ function NewPrescriptionForm({
           <Field label="Instructions for the patient" htmlFor="instructions">
             <Textarea
               id="instructions"
-              value={instructions}
-              onChange={setInstructions}
               rows={2}
+              value={instructions}
+              onChange={(event) => setInstructions(event.target.value)}
               placeholder="e.g. Take after food"
             />
           </Field>
 
           {error && (
-            <p role="alert" className="text-sm font-medium text-critical">
+            <p role="alert" className="pop-in text-sm font-medium text-critical">
               {error}
             </p>
           )}
 
-          <div className="flex flex-wrap gap-3">
-            <Button disabled={!complete || busy} onClick={() => void submit()}>
-              {busy ? "Saving…" : "Prescribe"}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              disabled={!complete || busy || saved}
+              loading={busy}
+              className={cx(saved && "disabled:opacity-100")}
+              onClick={() => void submit()}
+            >
+              {saved ? (
+                <>
+                  <DrawnCheck />
+                  {tr("Prescribed", "Likh diya gaya")}
+                </>
+              ) : busy ? (
+                "Saving…"
+              ) : (
+                "Prescribe"
+              )}
             </Button>
-            <Button variant="ghost" disabled={busy} onClick={() => setOpen(false)}>
+            <Button variant="ghost" disabled={busy || saved} onClick={() => setOpen(false)}>
               Cancel
             </Button>
           </div>
         </div>
-      )}
+      </Expand>
     </Card>
   );
 }
@@ -451,7 +602,7 @@ function DiscontinueButton({ id, onDone }: { id: string; onDone: () => void }) {
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="pop-in flex gap-2">
       <Button
         variant="danger"
         disabled={busy}
@@ -488,6 +639,7 @@ function AmendControl({
   if (!open) {
     return (
       <Button variant="secondary" onClick={() => setOpen(true)}>
+        <Icon name="edit" className="text-[18px]" />
         Amend
       </Button>
     );
@@ -508,30 +660,36 @@ function AmendControl({
   };
 
   return (
-    <div className="w-full space-y-3 rounded-md border border-line p-3">
-      <p className="text-sm text-muted">
+    <div className="pop-in w-full space-y-3 rounded-2xl border border-line bg-sunken/60 p-4">
+      <p className="flex items-start gap-2 text-sm text-muted">
+        <Icon name="info" className="mt-px shrink-0 text-[16px]" />
         The amendment is recorded — the entry will be marked as amended.
       </p>
       <Field label="Diagnosis" htmlFor={`amend-diagnosis-${record.id}`}>
         <Textarea
           id={`amend-diagnosis-${record.id}`}
-          value={diagnosis}
-          onChange={setDiagnosis}
           rows={2}
+          value={diagnosis}
+          onChange={(event) => setDiagnosis(event.target.value)}
         />
       </Field>
       <Field label="Notes" htmlFor={`amend-notes-${record.id}`}>
-        <Textarea id={`amend-notes-${record.id}`} value={notes} onChange={setNotes} />
+        <Textarea
+          id={`amend-notes-${record.id}`}
+          rows={3}
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+        />
       </Field>
 
       {error && (
-        <p role="alert" className="text-sm font-medium text-critical">
+        <p role="alert" className="pop-in text-sm font-medium text-critical">
           {error}
         </p>
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Button disabled={busy} onClick={() => void submit()}>
+        <Button disabled={busy} loading={busy} onClick={() => void submit()}>
           {busy ? "Saving…" : "Save amendment"}
         </Button>
         <Button variant="ghost" disabled={busy} onClick={() => setOpen(false)}>

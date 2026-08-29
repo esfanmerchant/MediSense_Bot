@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -13,6 +14,13 @@ import { Avatar, Button, Loading, Unauthorized, cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 import { homePathFor, useSession } from "@/lib/session";
 import type { Role } from "@/lib/api";
+
+// Loaded only where it renders: the widget pulls in the whole conversation
+// component, which the doctor and admin portals never need.
+const AssistantWidget = dynamic(
+  () => import("@/components/AssistantWidget").then((module) => module.AssistantWidget),
+  { ssr: false },
+);
 
 interface NavItem {
   href: string;
@@ -586,6 +594,8 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
           {children}
         </main>
       </div>
+
+      {user.role === "PATIENT" && pathname !== "/patient/assistant" && <AssistantWidget />}
     </div>
   );
 }

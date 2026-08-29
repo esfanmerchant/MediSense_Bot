@@ -40,7 +40,7 @@ export function Card({
 }) {
   return (
     <section
-      className={cx("rounded-2xl border border-line bg-card shadow-card", className)}
+      className={cx("rounded-xl border border-line bg-card shadow-card", className)}
     >
       {(title || action) && (
         <header className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
@@ -63,16 +63,22 @@ export function Card({
 export function StatTile({
   label,
   value,
+  unit,
   hint,
   tone = "neutral",
   icon,
+  footer,
 }: {
   label: string;
   value: number | string;
+  /** Rendered smaller and baseline-aligned, the way a chart labels an axis. */
+  unit?: string;
   hint?: string;
   tone?: "neutral" | "good" | "warning" | "critical";
   /** Decorative. The label is what carries the meaning. */
   icon?: ReactNode;
+  /** A status pill, a sparkline — whatever qualifies the number. */
+  footer?: ReactNode;
 }) {
   const tones = {
     neutral: "text-strong",
@@ -82,22 +88,26 @@ export function StatTile({
   } as const;
 
   return (
-    <div className="rounded-2xl border border-line bg-card p-5 shadow-card">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-muted">{label}</p>
-          <p className={cx("mt-1 text-3xl font-bold tabular-nums", tones[tone])}>{value}</p>
-          {hint && <p className="mt-1 text-xs text-faint">{hint}</p>}
-        </div>
-        {icon && (
-          <span
-            aria-hidden
-            className="ml-auto grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sunken text-lg"
-          >
-            {icon}
-          </span>
-        )}
+    <div className="flex flex-col rounded-xl border border-line bg-card p-5 shadow-card">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        {/* Uppercase and tracked, per the design system's label style: it reads
+            as a field name rather than as prose, which is what lets the number
+            below it be the thing the eye lands on. */}
+        <span className="text-[12px] font-semibold uppercase tracking-wider text-muted">
+          {label}
+        </span>
+        {icon && <span className="shrink-0 text-xl leading-none">{icon}</span>}
       </div>
+
+      <div className="flex items-end gap-2">
+        <span className={cx("text-[36px] font-bold leading-none tabular-nums", tones[tone])}>
+          {value}
+        </span>
+        {unit && <span className="mb-1 text-sm text-muted">{unit}</span>}
+      </div>
+
+      {hint && <p className="mt-2 text-xs text-faint">{hint}</p>}
+      {footer && <div className="mt-auto pt-4">{footer}</div>}
     </div>
   );
 }

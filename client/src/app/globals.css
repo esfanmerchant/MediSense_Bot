@@ -1,101 +1,97 @@
 @import "tailwindcss";
 
 /**
- * Clinical Precision — the design system from Stitch, expressed as tokens.
+ * Clinical Precision — the Stitch design system, token for token.
  *
- * Two colours carry the whole system and they are not interchangeable:
+ * These are the exact values from the Stitch project rather than an
+ * interpretation of them. Deep navy carries the navigation and every committing
+ * action; the teal is health and positive state; status colours sit outside
+ * both and mean only what they say.
  *
- * - **Deep Trust Blue** is authority. Navigation, primary actions, the things
- *   that commit something.
- * - **Medical Teal** is health. Positive indicators, secondary actions, the
- *   things that report rather than command.
- *
- * Semantic status colours (stable / warning / critical) sit outside both and
- * are never used decoratively. A red in this interface always means a patient
- * needs attention — the moment it means "delete button", the ward stops reading
- * red as urgent, and that is how a monitoring system quietly stops working.
- *
- * Every colour is defined here as a variable rather than inline in components,
- * so the two themes stay a single set of decisions instead of hundreds.
+ * **Status colour means status.** `critical` is for something a clinician must
+ * act on — never for emphasis, never for a delete button. The moment red also
+ * means "destructive", a ward stops reading red as urgent, which is how a
+ * monitoring system quietly stops working.
  */
 
 :root {
-  /* Brand */
-  --brand-primary: #0d47a1;
-  --brand-primary-strong: #003178;
+  /* Brand — Stitch: primary #003178, primary-container #0d47a1 */
+  --brand-primary: #003178;
+  --brand-primary-hover: #0d47a1;
+  --brand-primary-active: #00429c;
   --brand-primary-soft: #d9e2ff;
   --brand-primary-on: #ffffff;
 
-  --brand-accent: #00897b;
-  --brand-accent-strong: #006b5f;
-  --brand-accent-soft: #8df5e4;
+  /* Medical teal — secondary #006b5f, secondary-fixed #8df5e4 */
+  --brand-accent: #006b5f;
+  --brand-accent-bright: #8df5e4;
+  --brand-accent-soft: #cffaf0;
 
-  /* Surfaces — the canvas is grey so white cards read as a layer of focus */
-  --surface-canvas: #f5f7fa;
+  /* Surfaces */
+  --surface-canvas: #f7f9fc;
   --surface-card: #ffffff;
-  --surface-sunken: #eceef1;
-  --surface-rail: #0b1f45;
-  --surface-rail-hover: #16336b;
+  --surface-sunken: #f2f4f7;
+  --surface-raised: #eceef1;
 
   /* Text */
   --text-strong: #191c1e;
   --text-muted: #434652;
   --text-faint: #737783;
-  --text-on-rail: #dbe4f7;
+  --text-on-rail: #ffffff;
 
-  /* Lines */
-  --line: #e2e8f0;
+  /* Lines — Stitch: outline-variant #c3c6d4, surface-variant #e0e3e6 */
+  --line: #e0e3e6;
   --line-strong: #c3c6d4;
 
-  /* Status — meaning, never decoration */
-  --status-stable: #0f766e;
-  --status-stable-soft: #d1fae5;
-  --status-warning: #b45309;
-  --status-warning-soft: #fef3c7;
+  /* Status */
+  --status-stable: #006b5f;
+  --status-stable-soft: #cffaf0;
+  --status-warning: #8a5300;
+  --status-warning-soft: #ffedcf;
   --status-critical: #ba1a1a;
   --status-critical-soft: #ffdad6;
 
+  /* Elevation — Stitch level 1 and level 2 */
   --shadow-card: 0 4px 12px rgb(0 0 0 / 0.05);
   --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.1);
 }
 
 /**
  * Night shift. The design system is specified light, but a hospital runs at
- * 3am too, and a white screen in a dark ward is its own hazard. The dark set
- * keeps every semantic role identical and only changes what it is painted on —
- * so a critical alert is still the most urgent thing on screen either way.
+ * 3am and a white screen in a dark ward is its own hazard. Every semantic role
+ * is identical across the two — only what it is painted on changes — so a
+ * critical alert is still the most urgent thing on screen either way.
  */
 @media (prefers-color-scheme: dark) {
   :root {
-    --brand-primary: #a1bbff;
-    --brand-primary-strong: #d9e2ff;
+    --brand-primary: #b0c6ff;
+    --brand-primary-hover: #d9e2ff;
+    --brand-primary-active: #00429c;
     --brand-primary-soft: #17284f;
     --brand-primary-on: #001945;
 
     --brand-accent: #70d8c8;
-    --brand-accent-strong: #8df5e4;
+    --brand-accent-bright: #8df5e4;
     --brand-accent-soft: #00332c;
 
-    --surface-canvas: #0f1417;
+    --surface-canvas: #101416;
     --surface-card: #191c1e;
     --surface-sunken: #24282b;
-    --surface-rail: #080f21;
-    --surface-rail-hover: #16264a;
+    --surface-raised: #2d3133;
 
     --text-strong: #eff1f4;
     --text-muted: #c3c6d4;
-    --text-faint: #8f939f;
-    --text-on-rail: #dbe4f7;
+    --text-faint: #9aa0ad;
 
     --line: #2d3133;
     --line-strong: #434652;
 
-    --status-stable: #6ee7b7;
-    --status-stable-soft: #052e26;
-    --status-warning: #fbbf24;
-    --status-warning-soft: #3a2a06;
+    --status-stable: #70d8c8;
+    --status-stable-soft: #00332c;
+    --status-warning: #ffb95c;
+    --status-warning-soft: #3d2a05;
     --status-critical: #ffb4ab;
-    --status-critical-soft: #47100c;
+    --status-critical-soft: #4a1410;
 
     --shadow-card: 0 4px 12px rgb(0 0 0 / 0.4);
     --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.55);
@@ -104,19 +100,24 @@
 
 @theme inline {
   --color-primary: var(--brand-primary);
-  --color-primary-strong: var(--brand-primary-strong);
+  --color-primary-hover: var(--brand-primary-hover);
+  --color-primary-active: var(--brand-primary-active);
   --color-primary-soft: var(--brand-primary-soft);
   --color-primary-on: var(--brand-primary-on);
+  /* Kept for existing call sites that mean "the darker primary". */
+  --color-primary-strong: var(--brand-primary-hover);
 
   --color-accent: var(--brand-accent);
-  --color-accent-strong: var(--brand-accent-strong);
+  --color-accent-bright: var(--brand-accent-bright);
+  --color-accent-strong: var(--brand-accent);
   --color-accent-soft: var(--brand-accent-soft);
 
   --color-canvas: var(--surface-canvas);
   --color-card: var(--surface-card);
   --color-sunken: var(--surface-sunken);
-  --color-rail: var(--surface-rail);
-  --color-rail-hover: var(--surface-rail-hover);
+  --color-raised: var(--surface-raised);
+  --color-rail: var(--brand-primary);
+  --color-rail-hover: var(--brand-primary-active);
 
   --color-strong: var(--text-strong);
   --color-muted: var(--text-muted);
@@ -152,8 +153,52 @@ body {
 h1,
 h2,
 h3 {
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   text-wrap: balance;
+}
+
+/**
+ * Material Symbols, loaded as a variable font.
+ *
+ * The design uses them throughout, and the variable axes matter: a filled icon
+ * reads as "active" and an outlined one as "available", which is how the rail
+ * marks the current page without relying on colour alone.
+ */
+.msym {
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.msym-fill {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* A slow, quiet pulse for a live indicator. Not an attention-grabber — it says
+   "this is updating", which is different from "look here". */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-breathe {
+  animation: breathe 2.4s ease-in-out infinite;
 }
 
 /* Nobody should have motion forced on them, least of all someone reading a

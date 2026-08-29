@@ -177,20 +177,20 @@ export function OcrReview({
           <StatusLine state={state} />
 
           {state.status === "SKIPPED" && (
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+            <p className="text-sm text-muted">
               This file type cannot be read automatically. You can still open it.
             </p>
           )}
 
           {state.status === "FAILED" && state.error && (
-            <p role="alert" className="text-sm font-medium text-red-700 dark:text-red-400">
+            <p role="alert" className="text-sm font-medium text-critical">
               {state.error}
             </p>
           )}
 
           {drafts.length > 0 && (
             <>
-              <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              <p className="rounded-md border border-warning/50 bg-warning-soft px-3 py-2 text-sm text-warning">
                 {confirmed
                   ? "A clinician has checked these details against the document."
                   : "Read automatically and not yet verified. Check every field against the original before confirming — a misread dose changes the medication."}
@@ -214,14 +214,14 @@ export function OcrReview({
                   <Button size="lg" disabled={!complete || busy} onClick={() => void confirm()}>
                     {busy ? "Saving…" : "Confirm this reading"}
                   </Button>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                  <p className="text-sm text-muted">
                     Confirming records what the document says. It does not prescribe anything.
                   </p>
                 </div>
               )}
 
               {!canConfirm && !confirmed && (
-                <p className="text-sm text-slate-600 dark:text-slate-400">
+                <p className="text-sm text-muted">
                   Your doctor will check these details at your next appointment.
                 </p>
               )}
@@ -229,11 +229,11 @@ export function OcrReview({
           )}
 
           {state.extractedText && (
-            <details className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
-              <summary className="cursor-pointer text-sm font-medium text-slate-800 dark:text-slate-200">
+            <details className="rounded-md border border-line p-3">
+              <summary className="cursor-pointer text-sm font-medium text-strong">
                 Show the full text that was read
               </summary>
-              <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
+              <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-sm text-muted">
                 {state.extractedText}
               </pre>
             </details>
@@ -267,12 +267,12 @@ function StatusLine({ state }: { state: OcrState }) {
     <div className="flex flex-wrap items-center gap-3">
       <Badge tone={tone}>{label}</Badge>
       {state.confidence !== null && (
-        <span className="text-sm tabular-nums text-slate-600 dark:text-slate-400">
+        <span className="text-sm tabular-nums text-muted">
           Engine confidence {(state.confidence * 100).toFixed(0)}%
         </span>
       )}
       {state.engine && (
-        <span className="text-xs text-slate-500 dark:text-slate-500">{state.engine}</span>
+        <span className="text-xs text-faint">{state.engine}</span>
       )}
     </div>
   );
@@ -294,19 +294,19 @@ function MedicationDraft({
       className={cx(
         "rounded-md border p-4",
         draft.needsReview
-          ? "border-amber-300 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20"
-          : "border-slate-200 dark:border-slate-700",
+          ? "border-warning/50 bg-warning-soft/50 /20"
+          : "border-line",
       )}
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+        <span className="text-sm font-semibold text-strong">
           Medication {index + 1}
         </span>
         {draft.needsReview && <Badge tone="warning">Check this one</Badge>}
       </div>
 
       {draft.sourceText && (
-        <p className="mb-3 rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+        <p className="mb-3 rounded bg-sunken px-2 py-1 font-mono text-xs text-muted">
           Read as: {draft.sourceText}
         </p>
       )}

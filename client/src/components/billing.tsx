@@ -75,7 +75,7 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
   return (
     <div className="space-y-4">
       {invoice.amendsInvoiceId && (
-        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+        <p className="rounded-md border border-warning/50 bg-warning-soft px-3 py-2 text-sm text-warning">
           This is a credit note correcting an earlier invoice. The original is kept as issued.
         </p>
       )}
@@ -84,7 +84,7 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
         <table className="w-full min-w-[24rem] text-sm">
           <caption className="sr-only">Invoice {invoice.invoiceNumber} line items</caption>
           <thead>
-            <tr className="border-b border-slate-200 text-left dark:border-slate-700">
+            <tr className="border-b border-line text-left">
               <th scope="col" className="py-2 pr-4 font-medium">Description</th>
               <th scope="col" className="py-2 pr-4 font-medium">Qty</th>
               <th scope="col" className="py-2 text-right font-medium">Amount</th>
@@ -92,7 +92,7 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
           </thead>
           <tbody>
             {invoice.lineItems.map((line, index) => (
-              <tr key={index} className="border-b border-slate-100 dark:border-slate-800">
+              <tr key={index} className="border-b border-line">
                 <td className="py-2 pr-4">{line.description}</td>
                 <td className="py-2 pr-4 tabular-nums">{line.quantity}</td>
                 <td className="py-2 text-right tabular-nums">
@@ -103,7 +103,7 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={2} className="py-1 pr-4 text-right text-slate-600 dark:text-slate-400">
+              <td colSpan={2} className="py-1 pr-4 text-right text-muted">
                 Subtotal
               </td>
               <td className="py-1 text-right tabular-nums">
@@ -111,14 +111,14 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
               </td>
             </tr>
             <tr>
-              <td colSpan={2} className="py-1 pr-4 text-right text-slate-600 dark:text-slate-400">
+              <td colSpan={2} className="py-1 pr-4 text-right text-muted">
                 Tax
               </td>
               <td className="py-1 text-right tabular-nums">
                 {money(invoice.taxAmount, invoice.currency)}
               </td>
             </tr>
-            <tr className="border-t border-slate-300 dark:border-slate-600">
+            <tr className="border-t border-line-strong">
               <td colSpan={2} className="py-2 pr-4 text-right font-semibold">
                 Total
               </td>
@@ -131,26 +131,26 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
       </div>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
-        <dt className="text-slate-600 dark:text-slate-400">Issued</dt>
+        <dt className="text-muted">Issued</dt>
         <dd className="tabular-nums">{when(invoice.issuedAt)}</dd>
-        <dt className="text-slate-600 dark:text-slate-400">Due</dt>
+        <dt className="text-muted">Due</dt>
         <dd className="tabular-nums">{when(invoice.dueAt)}</dd>
         {invoice.paidAt && (
           <>
-            <dt className="text-slate-600 dark:text-slate-400">Paid</dt>
+            <dt className="text-muted">Paid</dt>
             <dd className="tabular-nums">{when(invoice.paidAt)}</dd>
           </>
         )}
         {invoice.voidedAt && (
           <>
-            <dt className="text-slate-600 dark:text-slate-400">Cancelled</dt>
+            <dt className="text-muted">Cancelled</dt>
             <dd className="tabular-nums">{when(invoice.voidedAt)}</dd>
           </>
         )}
       </dl>
 
       {invoice.notes && (
-        <p className="text-sm text-slate-600 dark:text-slate-400">{invoice.notes}</p>
+        <p className="text-sm text-muted">{invoice.notes}</p>
       )}
     </div>
   );
@@ -199,7 +199,7 @@ function AdminActions({
   const settled = invoice.status === "VOID" || invoice.status === "REFUNDED";
 
   return (
-    <div className="mt-4 space-y-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+    <div className="mt-4 space-y-3 border-t border-line pt-4">
       {error && <ErrorState message={error} />}
 
       {pending === null && !settled && (
@@ -274,9 +274,9 @@ function InvoiceCard({
   const [open, setOpen] = useState(false);
 
   return (
-    <li className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+    <li className="rounded-lg border border-line bg-card p-4">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+        <span className="font-medium tabular-nums text-strong">
           {invoice.invoiceNumber}
         </span>
         <Badge tone={STATUS_TONE[invoice.status]}>{STATUS_LABEL[invoice.status]}</Badge>
@@ -285,7 +285,7 @@ function InvoiceCard({
         </span>
       </div>
 
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+      <p className="mt-1 text-sm text-muted">
         Issued {when(invoice.issuedAt)}
         {invoice.status === "OVERDUE" && ` · was due ${when(invoice.dueAt)}`}
       </p>
@@ -342,7 +342,7 @@ export function InvoicesPanel({
       action={
         outstanding !== undefined && (
           <div className="text-right">
-            <p className="text-xs text-slate-600 dark:text-slate-400">Outstanding</p>
+            <p className="text-xs text-muted">Outstanding</p>
             <p className="text-lg font-semibold tabular-nums">{outstanding}</p>
           </div>
         )

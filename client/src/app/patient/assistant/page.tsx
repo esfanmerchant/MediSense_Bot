@@ -14,10 +14,10 @@ export default function PatientAssistant() {
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+        <h1 className="text-2xl font-semibold text-strong">
           Health assistant
         </h1>
-        <p className="mt-1 max-w-2xl text-slate-600 dark:text-slate-400">
+        <p className="mt-1 max-w-2xl text-muted">
           Ask about your prescriptions and appointments, or describe how you are feeling. The
           assistant gives general guidance to help you decide what to do next — it does not
           diagnose, and it does not replace your doctor.

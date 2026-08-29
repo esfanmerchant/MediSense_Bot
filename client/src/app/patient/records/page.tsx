@@ -32,10 +32,10 @@ export default function PatientRecords() {
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+        <h1 className="text-2xl font-semibold text-strong">
           Medical history
         </h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <p className="mt-1 text-muted">
           Everything your care team has recorded. If something here looks wrong, raise it at your
           next appointment — records are written and corrected by your doctor.
         </p>
@@ -58,7 +58,7 @@ export default function PatientRecords() {
               {active.length === 0 ? (
                 <EmptyState title="No active prescriptions" />
               ) : (
-                <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                <ul className="divide-y divide-line">
                   {active.map((prescription) => (
                     <PrescriptionRow key={prescription.id} prescription={prescription} />
                   ))}
@@ -79,7 +79,7 @@ export default function PatientRecords() {
                 title="Past medication"
                 description="Medication you are no longer taking. Kept so your care team can see your full history."
               >
-                <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                <ul className="divide-y divide-line">
                   {stopped.map((prescription) => (
                     <PrescriptionRow key={prescription.id} prescription={prescription} />
                   ))}

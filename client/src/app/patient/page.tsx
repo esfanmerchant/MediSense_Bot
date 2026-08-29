@@ -21,8 +21,8 @@ export default function PatientDashboard() {
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Your health</h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-semibold text-strong">Your health</h1>
+        <p className="mt-1 text-muted">
           Appointments, prescriptions, reports and billing — all in one place.
         </p>
 
@@ -35,16 +35,19 @@ export default function PatientDashboard() {
               <StatTile
                 label="Upcoming appointments"
                 value={data.counts.upcomingAppointments ?? 0}
+                icon="📅"
               />
               <StatTile
                 label="Active prescriptions"
                 value={data.counts.activePrescriptions ?? 0}
+                icon="💊"
               />
-              <StatTile label="Documents" value={data.counts.documents ?? 0} />
+              <StatTile label="Documents" value={data.counts.documents ?? 0} icon="📄" />
               <StatTile
                 label="Unpaid invoices"
                 value={data.counts.unpaidInvoices ?? 0}
                 tone={data.counts.unpaidInvoices ? "warning" : "neutral"}
+                icon="🧾"
               />
             </div>
 
@@ -58,20 +61,20 @@ export default function PatientDashboard() {
                   description="When you book a visit it will appear here."
                 />
               ) : (
-                <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                <ul className="divide-y divide-line">
                   {data.upcomingAppointments.map((appointment) => (
                     <li key={appointment.id} className="flex flex-wrap items-center gap-3 py-3">
                       <div className="min-w-0">
-                        <p className="font-medium text-slate-900 dark:text-slate-100">
+                        <p className="font-medium text-strong">
                           {appointment.doctor.name}
                         </p>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                        <p className="text-sm text-muted">
                           {appointment.doctor.specialization}
                           {appointment.reason ? ` · ${appointment.reason}` : ""}
                         </p>
                       </div>
                       <div className="ml-auto text-right">
-                        <p className="text-sm font-medium text-slate-800 tabular-nums dark:text-slate-200">
+                        <p className="text-sm font-medium text-strong tabular-nums">
                           {formatDateTime(appointment.startTime)}
                         </p>
                         <Badge tone={appointment.status === "CONFIRMED" ? "good" : "info"}>
@@ -91,13 +94,13 @@ export default function PatientDashboard() {
               {data.activePrescriptions.length === 0 ? (
                 <EmptyState title="No active prescriptions" />
               ) : (
-                <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                <ul className="divide-y divide-line">
                   {data.activePrescriptions.map((prescription) => (
                     <li key={prescription.id} className="py-3">
-                      <p className="font-medium text-slate-900 dark:text-slate-100">
+                      <p className="font-medium text-strong">
                         {prescription.medication} · {prescription.dosage}
                       </p>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                      <p className="text-sm text-muted">
                         {prescription.frequency} for {prescription.duration} · prescribed by{" "}
                         {prescription.prescribedBy}
                       </p>

@@ -58,9 +58,9 @@ function Textarea({
       placeholder={placeholder}
       onChange={(event) => onChange(event.target.value)}
       className={cx(
-        "block w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-base",
-        "text-slate-900 focus:outline-2 focus:outline-teal-600",
-        "dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100",
+        "block w-full rounded-md border border-line-strong bg-card px-3 py-2.5 text-base",
+          "text-strong focus:outline-2 focus:outline-primary",
+            "",
       )}
     />
   );
@@ -98,7 +98,7 @@ export default function PatientChart() {
       <div id="main">
         <Link
           href="/doctor/patients"
-          className="text-sm font-medium text-teal-800 hover:underline dark:text-teal-300"
+          className="text-sm font-medium text-teal-800 hover:underline"
         >
           ← Back to my patients
         </Link>
@@ -119,10 +119,10 @@ export default function PatientChart() {
         {profile.data && !denied && (
           <div className="mt-4 space-y-6">
             <header>
-              <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+              <h1 className="text-2xl font-semibold text-strong">
                 {profile.data.name}
               </h1>
-              <p className="mt-1 tabular-nums text-slate-600 dark:text-slate-400">
+              <p className="mt-1 tabular-nums text-muted">
                 {profile.data.medicalRecordNumber}
                 {profile.data.bloodGroup ? ` · ${profile.data.bloodGroup}` : ""}
                 {profile.data.dateOfBirth ? ` · born ${profile.data.dateOfBirth}` : ""}
@@ -130,13 +130,13 @@ export default function PatientChart() {
               {profile.data.allergies && (
                 <p
                   role="alert"
-                  className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+                  className="mt-2 rounded-md border border-critical/40 bg-critical-soft px-3 py-2 text-sm font-medium text-critical"
                 >
                   Allergies: {profile.data.allergies}
                 </p>
               )}
               {profile.data.chronicConditions && (
-                <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
+                <p className="mt-2 text-sm text-muted">
                   Chronic conditions: {profile.data.chronicConditions}
                 </p>
               )}
@@ -151,7 +151,7 @@ export default function PatientChart() {
               {active.length === 0 ? (
                 <EmptyState title="No active prescriptions" />
               ) : (
-                <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                <ul className="divide-y divide-line">
                   {active.map((prescription) => (
                     <PrescriptionRow
                       key={prescription.id}
@@ -263,7 +263,7 @@ function NewRecordForm({
       }
     >
       {!open ? (
-        <p className="text-sm text-slate-600 dark:text-slate-400">
+        <p className="text-sm text-muted">
           Records are permanent clinical history. Write what the next clinician needs to know.
         </p>
       ) : (
@@ -296,7 +296,7 @@ function NewRecordForm({
           </Field>
 
           {error && (
-            <p role="alert" className="text-sm font-medium text-red-700 dark:text-red-400">
+            <p role="alert" className="text-sm font-medium text-critical">
               {error}
             </p>
           )}
@@ -366,7 +366,7 @@ function NewPrescriptionForm({
       action={!open && <Button onClick={() => setOpen(true)}>New prescription</Button>}
     >
       {!open ? (
-        <p className="text-sm text-slate-600 dark:text-slate-400">
+        <p className="text-sm text-muted">
           Prescriptions are never deleted — stopping one keeps it in the patient&rsquo;s history.
         </p>
       ) : (
@@ -419,7 +419,7 @@ function NewPrescriptionForm({
           </Field>
 
           {error && (
-            <p role="alert" className="text-sm font-medium text-red-700 dark:text-red-400">
+            <p role="alert" className="text-sm font-medium text-critical">
               {error}
             </p>
           )}
@@ -508,8 +508,8 @@ function AmendControl({
   };
 
   return (
-    <div className="w-full space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-700">
-      <p className="text-sm text-slate-600 dark:text-slate-400">
+    <div className="w-full space-y-3 rounded-md border border-line p-3">
+      <p className="text-sm text-muted">
         The amendment is recorded — the entry will be marked as amended.
       </p>
       <Field label="Diagnosis" htmlFor={`amend-diagnosis-${record.id}`}>
@@ -525,7 +525,7 @@ function AmendControl({
       </Field>
 
       {error && (
-        <p role="alert" className="text-sm font-medium text-red-700 dark:text-red-400">
+        <p role="alert" className="text-sm font-medium text-critical">
           {error}
         </p>
       )}

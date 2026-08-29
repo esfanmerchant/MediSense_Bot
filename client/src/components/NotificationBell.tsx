@@ -82,8 +82,8 @@ export function NotificationBell({ role }: { role: Role }) {
         }}
         className={cx(
           "relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-md",
-          "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
-          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
+            "text-muted hover:bg-sunken",
+              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
         )}
       >
         <svg aria-hidden viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor">
@@ -95,7 +95,7 @@ export function NotificationBell({ role }: { role: Role }) {
           />
         </svg>
         {unread > 0 && (
-          <span className="absolute right-1 top-1 min-w-5 rounded-full bg-teal-700 px-1.5 text-xs font-semibold tabular-nums text-white">
+          <span className="absolute right-1 top-1 min-w-5 rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -105,10 +105,10 @@ export function NotificationBell({ role }: { role: Role }) {
         <div
           role="dialog"
           aria-label="Notifications"
-          className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-line bg-card shadow-lg "
         >
-          <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-            <p className="font-medium text-slate-900 dark:text-slate-50">Notifications</p>
+          <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+            <p className="font-medium text-strong">Notifications</p>
             {unread > 0 && (
               <Button variant="ghost" className="ml-auto !min-h-9 px-2 text-sm" onClick={() => void markAll()}>
                 Mark all read
@@ -118,30 +118,30 @@ export function NotificationBell({ role }: { role: Role }) {
 
           <div className="max-h-96 overflow-y-auto">
             {error && (
-              <p role="alert" className="px-4 py-3 text-sm text-red-700 dark:text-red-400">
+              <p role="alert" className="px-4 py-3 text-sm text-critical">
                 {error.message}
               </p>
             )}
             {!error && items.length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-slate-600 dark:text-slate-400">
+              <p className="px-4 py-6 text-center text-sm text-muted">
                 Nothing to catch up on.
               </p>
             )}
-            <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+            <ul className="divide-y divide-line">
               {items.map((item) => (
                 <li
                   key={item.id}
-                  className={cx("px-4 py-3", !item.readAt && "bg-teal-50/60 dark:bg-teal-950/30")}
+                  className={cx("px-4 py-3", !item.readAt && "bg-accent-soft/60")}
                 >
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <p className="text-sm font-medium text-strong">
                         {item.title}
                       </p>
-                      <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
+                      <p className="mt-0.5 text-sm text-muted">
                         {item.body}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+                      <p className="mt-1 text-xs text-faint">
                         {timeAgo(item.createdAt)}
                       </p>
                     </div>
@@ -151,7 +151,7 @@ export function NotificationBell({ role }: { role: Role }) {
                         onClick={() => {
                           void notifications.markRead(item.id).then(load);
                         }}
-                        className="shrink-0 rounded px-1.5 py-1 text-xs font-medium text-teal-800 hover:bg-teal-100 focus-visible:outline-2 focus-visible:outline-teal-600 dark:text-teal-300 dark:hover:bg-teal-950"
+                        className="shrink-0 rounded px-1.5 py-1 text-xs font-medium text-teal-800 hover:bg-teal-100 focus-visible:outline-2 focus-visible:outline-primary dark:hover:bg-teal-950"
                       >
                         Mark read
                       </button>
@@ -163,11 +163,11 @@ export function NotificationBell({ role }: { role: Role }) {
           </div>
 
           {APPOINTMENTS_PATH[role] && (
-            <div className="border-t border-slate-200 px-4 py-2 dark:border-slate-700">
+            <div className="border-t border-line px-4 py-2">
               <Link
                 href={APPOINTMENTS_PATH[role]}
                 onClick={() => setOpen(false)}
-                className="text-sm font-medium text-teal-800 hover:underline dark:text-teal-300"
+                className="text-sm font-medium text-teal-800 hover:underline"
               >
                 View appointments
               </Link>

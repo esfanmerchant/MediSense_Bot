@@ -54,11 +54,11 @@ function minutesLeft(iso: string): number {
  */
 function WhatHappensNotice() {
   return (
-    <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-800 dark:bg-amber-950/40">
-      <p className="font-semibold text-amber-900 dark:text-amber-200">
+    <div className="rounded-md border border-warning/50 bg-warning-soft p-4 text-sm">
+      <p className="font-semibold text-warning">
         What happens when you do this
       </p>
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-900 dark:text-amber-200">
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-warning">
         <li>You get access to <strong>this patient only</strong>, not to any other record.</li>
         <li>It expires automatically, and you can hand it back at any time.</li>
         <li>Your reason is stored, and every record you open is counted and logged.</li>
@@ -87,21 +87,21 @@ function GrantCard({ grant, onRevoked }: { grant: EmergencyGrant; onRevoked: () 
   };
 
   return (
-    <li className="rounded-lg border border-teal-300 bg-teal-50 p-4 dark:border-teal-800 dark:bg-teal-950/40">
+    <li className="rounded-lg border border-accent/40 bg-accent-soft p-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="good">Access open</Badge>
-        <span className="text-sm text-slate-700 tabular-nums dark:text-slate-300">
+        <span className="text-sm text-muted tabular-nums">
           expires in {minutesLeft(grant.expiresAt)} min
         </span>
-        <span className="ml-auto text-sm text-slate-600 tabular-nums dark:text-slate-400">
+        <span className="ml-auto text-sm text-muted tabular-nums">
           {grant.accessCount} record{grant.accessCount === 1 ? "" : "s"} opened
         </span>
       </div>
 
-      <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{grant.reason}</p>
+      <p className="mt-2 text-sm text-muted">{grant.reason}</p>
 
       {error && (
-        <p role="alert" className="mt-2 text-sm font-medium text-red-700 dark:text-red-400">
+        <p role="alert" className="mt-2 text-sm font-medium text-critical">
           {error}
         </p>
       )}
@@ -188,7 +188,7 @@ export function EmergencyAccessPanel() {
               value={reason}
               disabled={busy}
               onChange={(event) => setReason(event.target.value)}
-              className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-2 focus:outline-offset-0 focus:outline-teal-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              className="block w-full rounded-md border border-line-strong bg-card px-3 py-2.5 text-base text-strong placeholder:text-faint focus:outline-2 focus:outline-offset-0 focus:outline-primary"
             />
           </Field>
 
@@ -197,14 +197,14 @@ export function EmergencyAccessPanel() {
           {granted && (
             <div
               role="status"
-              className="rounded-md border border-teal-300 bg-teal-50 p-4 dark:border-teal-800 dark:bg-teal-950/40"
+              className="rounded-md border border-accent/40 bg-accent-soft p-4"
             >
-              <p className="font-semibold text-teal-900 dark:text-teal-200">
+              <p className="font-semibold text-primary">
                 {granted.created
                   ? "Access granted"
                   : "You already had access to this patient"}
               </p>
-              <p className="mt-1 text-sm text-teal-900 dark:text-teal-200">{granted.notice}</p>
+              <p className="mt-1 text-sm text-primary">{granted.notice}</p>
             </div>
           )}
 
@@ -270,8 +270,8 @@ function ReviewRow({ grant, onReviewed }: { grant: EmergencyGrant; onReviewed: (
     <li
       className={
         reviewed
-          ? "rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
-          : "rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30"
+          ? "rounded-lg border border-line bg-card p-4"
+          : "rounded-lg border border-warning/50 bg-warning-soft p-4 /30"
       }
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -281,17 +281,17 @@ function ReviewRow({ grant, onReviewed }: { grant: EmergencyGrant; onReviewed: (
         <Badge tone={reviewed ? "good" : "warning"}>
           {reviewed ? "Reviewed" : "Awaiting review"}
         </Badge>
-        <span className="text-sm text-slate-700 dark:text-slate-300">
+        <span className="text-sm text-muted">
           {grant.requesterName ?? "(deleted account)"}
         </span>
-        <span className="ml-auto text-sm text-slate-600 tabular-nums dark:text-slate-400">
+        <span className="ml-auto text-sm text-muted tabular-nums">
           {when(grant.grantedAt)}
         </span>
       </div>
 
-      <p className="mt-2 text-slate-900 dark:text-slate-100">{grant.reason}</p>
+      <p className="mt-2 text-strong">{grant.reason}</p>
 
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+      <p className="mt-1 text-sm text-muted">
         {/* The count is the first thing a reviewer should weigh: one read and
             ninety reads are very different events. */}
         <span className="font-medium tabular-nums">{grant.accessCount}</span> record
@@ -300,7 +300,7 @@ function ReviewRow({ grant, onReviewed }: { grant: EmergencyGrant; onReviewed: (
       </p>
 
       {reviewed && grant.reviewNotes && (
-        <p className="mt-2 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+        <p className="mt-2 rounded-md bg-sunken px-3 py-2 text-sm text-muted">
           {grant.reviewNotes}
         </p>
       )}
@@ -362,11 +362,11 @@ export function EmergencyReviewPanel() {
       description="Every break-glass grant, and whether it has been reviewed."
       action={
         <div className="text-right">
-          <p className="text-xs text-slate-600 dark:text-slate-400">Awaiting review</p>
+          <p className="text-xs text-muted">Awaiting review</p>
           <p
             className={
               outstanding > 0
-                ? "text-lg font-semibold tabular-nums text-amber-700 dark:text-amber-400"
+                ? "text-lg font-semibold tabular-nums text-warning"
                 : "text-lg font-semibold tabular-nums"
             }
           >

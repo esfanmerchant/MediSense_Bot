@@ -15,8 +15,8 @@ export default function AdminBilling() {
   return (
     <AppShell role="ADMIN">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Billing</h1>
-        <p className="mt-1 max-w-2xl text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-semibold text-strong">Billing</h1>
+        <p className="mt-1 max-w-2xl text-muted">
           Every invoice in the hospital. An issued invoice is never edited — cancel it, or issue a
           credit note against it, and both stay on the record.
         </p>

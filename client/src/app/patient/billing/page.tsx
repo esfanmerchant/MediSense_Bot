@@ -14,8 +14,8 @@ export default function PatientBilling() {
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Billing</h1>
-        <p className="mt-1 max-w-2xl text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-semibold text-strong">Billing</h1>
+        <p className="mt-1 max-w-2xl text-muted">
           An invoice is created automatically when a consultation is completed. Payments are
           recorded by the hospital&rsquo;s billing desk.
         </p>

@@ -88,7 +88,7 @@ export function TimeOffCard() {
       }
     >
       {adding && (
-        <div className="mb-5 space-y-4 rounded-md border border-slate-200 p-4 dark:border-slate-700">
+        <div className="mb-5 space-y-4 rounded-md border border-line p-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="From" htmlFor="time-off-from">
               <Input
@@ -118,7 +118,7 @@ export function TimeOffCard() {
           </Field>
 
           {error && (
-            <p role="alert" className="text-sm font-medium text-red-700 dark:text-red-400">
+            <p role="alert" className="text-sm font-medium text-critical">
               {error}
             </p>
           )}
@@ -151,15 +151,15 @@ export function TimeOffCard() {
             description="Your published availability applies every week."
           />
         ) : (
-          <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+          <ul className="divide-y divide-line">
             {list.data.map((entry) => (
               <li key={entry.id} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0">
-                  <p className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                  <p className="font-medium tabular-nums text-strong">
                     {formatRange(entry.startsAt, entry.endsAt)}
                   </p>
                   {entry.reason && (
-                    <p className="text-sm text-slate-600 dark:text-slate-400">{entry.reason}</p>
+                    <p className="text-sm text-muted">{entry.reason}</p>
                   )}
                 </div>
                 <Button variant="ghost" className="ml-auto" onClick={() => void remove(entry.id)}>
@@ -171,7 +171,7 @@ export function TimeOffCard() {
         ))}
 
       {!adding && error && (
-        <p role="alert" className="mt-3 text-sm font-medium text-red-700 dark:text-red-400">
+        <p role="alert" className="mt-3 text-sm font-medium text-critical">
           {error}
         </p>
       )}

@@ -24,10 +24,10 @@ export function formatDate(iso: string): string {
 function Section({ label, children }: { label: string; children: string }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-500">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-faint">
         {label}
       </dt>
-      <dd className="mt-0.5 whitespace-pre-wrap text-slate-800 dark:text-slate-200">{children}</dd>
+      <dd className="mt-0.5 whitespace-pre-wrap text-strong">{children}</dd>
     </div>
   );
 }
@@ -44,16 +44,16 @@ export function RecordEntry({
   return (
     <article className="py-5">
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+        <h3 className="text-base font-semibold text-strong">
           {record.diagnosis || "Consultation note"}
         </h3>
         {record.amended && <Badge tone="info">Amended</Badge>}
-        <p className="ml-auto text-sm tabular-nums text-slate-600 dark:text-slate-400">
+        <p className="ml-auto text-sm tabular-nums text-muted">
           {formatDate(record.createdAt)}
         </p>
       </header>
 
-      <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
+      <p className="mt-0.5 text-sm text-muted">
         {record.doctorName ?? "Doctor"}
         {record.specialization ? ` · ${record.specialization}` : ""}
       </p>
@@ -69,16 +69,16 @@ export function RecordEntry({
       </dl>
 
       {prescriptions.length > 0 && (
-        <div className="mt-4 rounded-md border border-slate-200 p-3 dark:border-slate-700">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-500">
+        <div className="mt-4 rounded-md border border-line p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-faint">
             Prescribed here
           </p>
           <ul className="mt-2 space-y-1">
             {prescriptions.map((prescription) => (
-              <li key={prescription.id} className="text-sm text-slate-800 dark:text-slate-200">
+              <li key={prescription.id} className="text-sm text-strong">
                 {prescription.medication} · {prescription.dosage} · {prescription.frequency}
                 {!prescription.active && (
-                  <span className="ml-2 text-slate-500 dark:text-slate-500">(stopped)</span>
+                  <span className="ml-2 text-faint">(stopped)</span>
                 )}
               </li>
             ))}
@@ -106,7 +106,7 @@ export function RecordTimeline({
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
   }
   return (
-    <div className="divide-y divide-slate-200 dark:divide-slate-700">
+    <div className="divide-y divide-line">
       {records.map((record) => (
         <RecordEntry
           key={record.id}
@@ -128,18 +128,18 @@ export function PrescriptionRow({
   return (
     <li className="flex flex-wrap items-start gap-x-4 gap-y-2 py-3">
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-slate-900 dark:text-slate-100">
+        <p className="font-medium text-strong">
           {prescription.medication} · {prescription.dosage}
         </p>
-        <p className="text-sm text-slate-600 dark:text-slate-400">
+        <p className="text-sm text-muted">
           {prescription.frequency} for {prescription.duration}
         </p>
         {prescription.instructions && (
-          <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
+          <p className="mt-0.5 text-sm text-muted">
             {prescription.instructions}
           </p>
         )}
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-500">
+        <p className="mt-0.5 text-xs text-faint">
           Prescribed by {prescription.doctorName ?? "a doctor"}
           {prescription.startDate ? ` on ${formatDate(prescription.startDate)}` : ""}
         </p>

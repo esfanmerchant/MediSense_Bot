@@ -62,8 +62,8 @@ export default function DoctorAppointments() {
   return (
     <AppShell role="DOCTOR">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Appointments</h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-semibold text-strong">Appointments</h1>
+        <p className="mt-1 text-muted">
           Your clinic list and the consultations waiting on you.
         </p>
 
@@ -196,7 +196,7 @@ function ConsultationRow({
         <div className="pb-4">
           <label
             htmlFor={`notes-${appointment.id}`}
-            className="block text-sm font-medium text-slate-800 dark:text-slate-200"
+            className="block text-sm font-medium text-strong"
           >
             Consultation notes
           </label>
@@ -207,9 +207,9 @@ function ConsultationRow({
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             className={cx(
-              "mt-1.5 block w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-base",
-              "text-slate-900 focus:outline-2 focus:outline-teal-600",
-              "dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100",
+              "mt-1.5 block w-full rounded-md border border-line-strong bg-card px-3 py-2.5 text-base",
+                "text-strong focus:outline-2 focus:outline-primary",
+                  "",
             )}
             placeholder="What was discussed, and what happens next."
           />
@@ -225,7 +225,7 @@ function ConsultationRow({
       )}
 
       {error && (
-        <p role="alert" className="pb-3 text-sm font-medium text-red-700 dark:text-red-400">
+        <p role="alert" className="pb-3 text-sm font-medium text-critical">
           {error}
         </p>
       )}

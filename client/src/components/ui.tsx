@@ -4,6 +4,15 @@
  * The patient portal is used by elderly and visually impaired people (spec
  * §39), so the defaults here are deliberately generous: large hit targets,
  * visible focus rings, real contrast, and text that never falls below 16px.
+ *
+ * Every colour comes from a token in `globals.css` rather than a Tailwind
+ * palette name. That is what lets the whole application follow the design
+ * system — and switch to its night palette — from one file instead of hundreds.
+ *
+ * **Status colour means status.** `critical` is for something a clinician must
+ * act on, never for emphasis and never for a delete button. The moment red also
+ * means "destructive", a ward stops reading red as urgent, which is how a
+ * monitoring system quietly stops working.
  */
 
 import type { ReactNode } from "react";
@@ -31,20 +40,13 @@ export function Card({
 }) {
   return (
     <section
-      className={cx(
-        "rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900",
-        className,
-      )}
+      className={cx("rounded-2xl border border-line bg-card shadow-card", className)}
     >
       {(title || action) && (
-        <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+        <header className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0">
-            {title && (
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">{title}</h2>
-            )}
-            {description && (
-              <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">{description}</p>
-            )}
+            {title && <h2 className="text-lg font-semibold text-strong">{title}</h2>}
+            {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
           </div>
           {action && <div className="ml-auto">{action}</div>}
         </header>
@@ -63,24 +65,39 @@ export function StatTile({
   value,
   hint,
   tone = "neutral",
+  icon,
 }: {
   label: string;
   value: number | string;
   hint?: string;
   tone?: "neutral" | "good" | "warning" | "critical";
+  /** Decorative. The label is what carries the meaning. */
+  icon?: ReactNode;
 }) {
   const tones = {
-    neutral: "text-slate-900 dark:text-slate-50",
-    good: "text-emerald-700 dark:text-emerald-400",
-    warning: "text-amber-700 dark:text-amber-400",
-    critical: "text-red-700 dark:text-red-400",
+    neutral: "text-strong",
+    good: "text-stable",
+    warning: "text-warning",
+    critical: "text-critical",
   } as const;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{label}</p>
-      <p className={cx("mt-1 text-3xl font-semibold tabular-nums", tones[tone])}>{value}</p>
-      {hint && <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">{hint}</p>}
+    <div className="rounded-2xl border border-line bg-card p-5 shadow-card">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-muted">{label}</p>
+          <p className={cx("mt-1 text-3xl font-bold tabular-nums", tones[tone])}>{value}</p>
+          {hint && <p className="mt-1 text-xs text-faint">{hint}</p>}
+        </div>
+        {icon && (
+          <span
+            aria-hidden
+            className="ml-auto grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sunken text-lg"
+          >
+            {icon}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -99,11 +116,12 @@ export function Button({
   size?: "md" | "lg";
 }) {
   const variants = {
-    primary: "bg-teal-700 text-white hover:bg-teal-800 disabled:bg-teal-700/50",
-    secondary:
-      "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700",
-    danger: "bg-red-700 text-white hover:bg-red-800 disabled:bg-red-700/50",
-    ghost: "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
+    primary: "bg-primary text-primary-on hover:bg-primary-strong disabled:bg-primary/50",
+    // Outlined accent: the design system's secondary, for actions that report
+    // rather than commit.
+    secondary: "border border-line-strong bg-card text-strong hover:bg-sunken",
+    danger: "bg-critical text-white hover:opacity-90 disabled:opacity-50",
+    ghost: "text-muted hover:bg-sunken",
   } as const;
 
   // Minimum 44px height: the accessible touch-target size.
@@ -112,9 +130,9 @@ export function Button({
   return (
     <button
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
-        "disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+            "disabled:cursor-not-allowed disabled:opacity-60",
         variants[variant],
         sizes[size],
         className,
@@ -139,21 +157,18 @@ export function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <label
-        htmlFor={htmlFor}
-        className="block text-sm font-medium text-slate-800 dark:text-slate-200"
-      >
+      <label htmlFor={htmlFor} className="block text-sm font-semibold text-strong">
         {label}
       </label>
       {children}
       {hint && !error && (
-        <p id={`${htmlFor}-hint`} className="text-sm text-slate-600 dark:text-slate-400">
+        <p id={`${htmlFor}-hint`} className="text-sm text-muted">
           {hint}
         </p>
       )}
       {error && (
         // role="alert" so a screen reader announces the problem immediately.
-        <p id={`${htmlFor}-error`} role="alert" className="text-sm font-medium text-red-700 dark:text-red-400">
+        <p id={`${htmlFor}-error`} role="alert" className="text-sm font-medium text-critical">
           {error}
         </p>
       )}
@@ -170,12 +185,9 @@ export function Input({
     <input
       aria-invalid={invalid || undefined}
       className={cx(
-        "block w-full rounded-md border bg-white px-3 py-2.5 text-base text-slate-900 min-h-11",
-        "placeholder:text-slate-400 focus:outline-2 focus:outline-offset-0 focus:outline-teal-600",
-        "dark:bg-slate-800 dark:text-slate-100",
-        invalid
-          ? "border-red-500 dark:border-red-500"
-          : "border-slate-300 dark:border-slate-600",
+        "block min-h-11 w-full rounded-lg border bg-card px-3 py-2.5 text-base text-strong",
+          "placeholder:text-faint focus:outline-2 focus:outline-offset-0 focus:outline-primary",
+        invalid ? "border-critical" : "border-line-strong",
         className,
       )}
       {...props}
@@ -191,17 +203,18 @@ export function Badge({
   tone?: "neutral" | "good" | "warning" | "critical" | "info";
 }) {
   const tones = {
-    neutral: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-    good: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-    warning: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300",
-    critical: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-    info: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
+    neutral: "bg-sunken text-muted",
+    good: "bg-stable-soft text-stable",
+    warning: "bg-warning-soft text-warning",
+    critical: "bg-critical-soft text-critical",
+    info: "bg-primary-soft text-primary",
   } as const;
 
   return (
+    // Pill-shaped, to distinguish a status from a clickable button.
     <span
       className={cx(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
         tones[tone],
       )}
     >
@@ -216,10 +229,10 @@ export function Badge({
 
 export function Loading({ label = "Loading" }: { label?: string }) {
   return (
-    <div role="status" aria-live="polite" className="flex items-center gap-3 py-8 text-slate-600 dark:text-slate-400">
+    <div role="status" aria-live="polite" className="flex items-center gap-3 py-8 text-muted">
       <span
         aria-hidden
-        className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-teal-700 motion-reduce:animate-none"
+        className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-primary motion-reduce:animate-none"
       />
       <span className="text-sm">{label}…</span>
     </div>
@@ -229,11 +242,9 @@ export function Loading({ label = "Loading" }: { label?: string }) {
 export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
     <div className="py-10 text-center">
-      <p className="text-base font-medium text-slate-800 dark:text-slate-200">{title}</p>
+      <p className="text-base font-semibold text-strong">{title}</p>
       {description && (
-        <p className="mx-auto mt-1 max-w-sm text-sm text-slate-600 dark:text-slate-400">
-          {description}
-        </p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{description}</p>
       )}
     </div>
   );
@@ -249,12 +260,9 @@ export function ErrorState({
   onRetry?: () => void;
 }) {
   return (
-    <div
-      role="alert"
-      className="rounded-lg border border-red-200 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950/40"
-    >
-      <p className="font-medium text-red-900 dark:text-red-200">{title}</p>
-      <p className="mt-1 text-sm text-red-800 dark:text-red-300">{message}</p>
+    <div role="alert" className="rounded-xl border border-critical/40 bg-critical-soft p-5">
+      <p className="font-semibold text-critical">{title}</p>
+      <p className="mt-1 text-sm text-strong">{message}</p>
       {onRetry && (
         <Button variant="secondary" className="mt-3" onClick={onRetry}>
           Try again
@@ -270,7 +278,7 @@ export function Unauthorized({ message }: { message?: string }) {
       title="You do not have access to this"
       message={
         message ??
-        "Your account does not have permission to view this page. If you think that is wrong, contact an administrator."
+          "Your account does not have permission to view this page. If you think that is wrong, contact an administrator."
       }
     />
   );

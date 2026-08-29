@@ -15,8 +15,8 @@ export default function AdminAudit() {
   return (
     <AppShell role="ADMIN">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Audit trail</h1>
-        <p className="mt-1 max-w-2xl text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-semibold text-strong">Audit trail</h1>
+        <p className="mt-1 max-w-2xl text-muted">
           Every sensitive action, in order, hash-chained so tampering is detectable. Opening this
           page is itself recorded.
         </p>

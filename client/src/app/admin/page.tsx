@@ -22,10 +22,10 @@ export default function AdminDashboard() {
   return (
     <AppShell role="ADMIN">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+        <h1 className="text-2xl font-semibold text-strong">
           Hospital overview
         </h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <p className="mt-1 text-muted">
           Users, departments, activity and security events.
         </p>
 
@@ -40,13 +40,13 @@ export default function AdminDashboard() {
             {unreviewed > 0 && (
               <div
                 role="alert"
-                className="rounded-lg border border-red-300 bg-red-50 p-5 dark:border-red-800 dark:bg-red-950/50"
+                className="rounded-lg border border-critical/50 bg-critical-soft p-5"
               >
-                <p className="font-medium text-red-900 dark:text-red-200">
+                <p className="font-medium text-critical">
                   {unreviewed} emergency access {unreviewed === 1 ? "grant" : "grants"} awaiting
                   review
                 </p>
-                <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+                <p className="mt-1 text-sm text-strong">
                   Every break-glass access must be reviewed. Unreviewed grants stay on this
                   dashboard until someone signs them off.
                 </p>
@@ -54,24 +54,27 @@ export default function AdminDashboard() {
             )}
 
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-              <StatTile label="Patients" value={data.counts.patients ?? 0} />
-              <StatTile label="Doctors" value={data.counts.doctors ?? 0} />
-              <StatTile label="Departments" value={data.counts.departments ?? 0} />
+              <StatTile label="Patients" value={data.counts.patients ?? 0} icon="👤" />
+              <StatTile label="Doctors" value={data.counts.doctors ?? 0} icon="🩺" />
+              <StatTile label="Departments" value={data.counts.departments ?? 0} icon="🏥" />
               <StatTile
                 label="Suspended accounts"
                 value={data.counts.suspendedAccounts ?? 0}
                 tone={data.counts.suspendedAccounts ? "warning" : "neutral"}
+                icon="🚫"
               />
-              <StatTile label="Appointments this week" value={data.counts.appointmentsThisWeek ?? 0} />
+              <StatTile label="Appointments this week" value={data.counts.appointmentsThisWeek ?? 0} icon="📅" />
               <StatTile
                 label="Unpaid invoices"
                 value={data.counts.unpaidInvoices ?? 0}
                 tone={data.counts.unpaidInvoices ? "warning" : "neutral"}
+                icon="🧾"
               />
               <StatTile
                 label="Active emergency grants"
                 value={data.counts.activeEmergencyGrants ?? 0}
                 tone={data.counts.activeEmergencyGrants ? "critical" : "good"}
+                icon="🚨"
               />
               <StatTile
                 label="Failed sign-ins (7d)"
@@ -93,17 +96,17 @@ export default function AdminDashboard() {
                 <div className="-mx-5 overflow-x-auto px-5">
                   <table className="w-full min-w-[560px] text-sm">
                     <thead>
-                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-700">
+                      <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
                         <th className="py-2 pr-4 font-medium">Event</th>
                         <th className="py-2 pr-4 font-medium">Severity</th>
                         <th className="py-2 pr-4 font-medium">When</th>
                         <th className="py-2 font-medium">Source</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    <tbody className="divide-y divide-line">
                       {data.recentSecurityEvents.map((event) => (
                         <tr key={event.id}>
-                          <td className="py-2.5 pr-4 text-slate-900 dark:text-slate-100">
+                          <td className="py-2.5 pr-4 text-strong">
                             {ACTION_LABELS[event.action] ?? event.action}
                           </td>
                           <td className="py-2.5 pr-4">
@@ -111,7 +114,7 @@ export default function AdminDashboard() {
                               {event.severity.toLowerCase().replace("_", " ")}
                             </Badge>
                           </td>
-                          <td className="py-2.5 pr-4 tabular-nums text-slate-600 dark:text-slate-400">
+                          <td className="py-2.5 pr-4 tabular-nums text-muted">
                             {new Date(event.timestamp).toLocaleString(undefined, {
                               day: "numeric",
                               month: "short",
@@ -119,7 +122,7 @@ export default function AdminDashboard() {
                               minute: "2-digit",
                             })}
                           </td>
-                          <td className="py-2.5 tabular-nums text-slate-600 dark:text-slate-400">
+                          <td className="py-2.5 tabular-nums text-muted">
                             {event.ipAddress ?? "—"}
                           </td>
                         </tr>

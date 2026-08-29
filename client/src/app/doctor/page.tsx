@@ -26,8 +26,8 @@ export default function DoctorDashboard() {
   return (
     <AppShell role="DOCTOR">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Today</h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-semibold text-strong">Today</h1>
+        <p className="mt-1 text-muted">
           Your caseload, your clinic list, and anything needing attention now.
         </p>
 
@@ -37,18 +37,20 @@ export default function DoctorDashboard() {
         {data && (
           <div className="mt-6 space-y-6">
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-              <StatTile label="Assigned patients" value={data.counts.assignedPatients ?? 0} />
-              <StatTile label="Appointments today" value={data.counts.appointmentsToday ?? 0} />
+              <StatTile label="Assigned patients" value={data.counts.assignedPatients ?? 0} icon="👥" />
+              <StatTile label="Appointments today" value={data.counts.appointmentsToday ?? 0} icon="📅" />
               <StatTile
                 label="Open alerts"
                 value={data.counts.openAlerts ?? 0}
                 tone={data.counts.openAlerts ? "critical" : "good"}
                 hint={data.counts.openAlerts ? "Needs acknowledgement" : "Nothing outstanding"}
+                icon="🔔"
               />
               <StatTile
                 label="In progress"
                 value={data.counts.pendingConsultations ?? 0}
                 hint="Consultations not yet completed"
+                icon="🩺"
               />
             </div>
 
@@ -64,25 +66,25 @@ export default function DoctorDashboard() {
                   description="You will be notified here when a patient's readings cross a threshold."
                 />
               ) : (
-                <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                <ul className="divide-y divide-line">
                   {data.openAlerts.map((alert) => (
                     <li key={alert.id} className="flex flex-wrap items-start gap-3 py-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-slate-900 dark:text-slate-100">
+                          <p className="font-medium text-strong">
                             {alert.patient.name}
                           </p>
                           <Badge tone={severityTone(alert.severity)}>
                             {alert.severity.toLowerCase()}
                           </Badge>
                         </div>
-                        <p className="mt-0.5 text-sm text-slate-700 dark:text-slate-300">
+                        <p className="mt-0.5 text-sm text-muted">
                           {VITAL_LABELS[alert.vitalType] ?? alert.vitalType}:{" "}
                           <span className="font-medium tabular-nums">{alert.measuredValue}</span>{" "}
                           — {alert.message}
                         </p>
                       </div>
-                      <p className="text-sm text-slate-500 tabular-nums dark:text-slate-500">
+                      <p className="text-sm text-faint tabular-nums">
                         {new Date(alert.createdAt).toLocaleTimeString(undefined, {
                           hour: "2-digit",
                           minute: "2-digit",
@@ -98,20 +100,20 @@ export default function DoctorDashboard() {
               {data.todaysAppointments.length === 0 ? (
                 <EmptyState title="Nothing scheduled" />
               ) : (
-                <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                <ul className="divide-y divide-line">
                   {data.todaysAppointments.map((appointment) => (
                     <li key={appointment.id} className="flex flex-wrap items-center gap-3 py-3">
                       <div className="min-w-0">
-                        <p className="font-medium text-slate-900 dark:text-slate-100">
+                        <p className="font-medium text-strong">
                           {appointment.patient.name}
                         </p>
-                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                        <p className="text-sm text-muted">
                           {appointment.patient.medicalRecordNumber}
                           {appointment.reason ? ` · ${appointment.reason}` : ""}
                         </p>
                       </div>
                       <div className="ml-auto text-right">
-                        <p className="text-sm font-medium tabular-nums text-slate-800 dark:text-slate-200">
+                        <p className="text-sm font-medium tabular-nums text-strong">
                           {new Date(appointment.startTime).toLocaleTimeString(undefined, {
                             hour: "2-digit",
                             minute: "2-digit",

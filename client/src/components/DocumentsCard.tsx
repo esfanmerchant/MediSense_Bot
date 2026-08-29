@@ -25,10 +25,10 @@ import { useAsync } from "@/lib/useAsync";
 /** Types the engine can read. HEIC is stored but not machine-read. */
 const READABLE = new Set([
   "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/tiff",
+    "image/jpeg",
+      "image/png",
+        "image/webp",
+          "image/tiff",
 ]);
 
 const TYPE_LABELS: Record<DocumentType, string> = {
@@ -46,13 +46,13 @@ const TYPE_LABELS: Record<DocumentType, string> = {
 /** Types a person would choose when uploading; PROFILE_IMAGE is set elsewhere. */
 const CHOOSABLE: DocumentType[] = [
   "PRESCRIPTION",
-  "LAB_REPORT",
-  "BLOOD_TEST",
-  "IMAGING",
-  "MEDICAL_CERTIFICATE",
-  "REFERRAL_LETTER",
-  "DISCHARGE_SUMMARY",
-  "OTHER",
+    "LAB_REPORT",
+      "BLOOD_TEST",
+        "IMAGING",
+          "MEDICAL_CERTIFICATE",
+            "REFERRAL_LETTER",
+              "DISCHARGE_SUMMARY",
+                "OTHER",
 ];
 
 function formatSize(bytes: number): string {
@@ -124,7 +124,7 @@ export function DocumentsCard({
       {list.error && <ErrorState message={list.error.message} onRetry={list.reload} />}
 
       {error && (
-        <p role="alert" className="mb-3 text-sm font-medium text-red-700 dark:text-red-400">
+        <p role="alert" className="mb-3 text-sm font-medium text-critical">
           {error}
         </p>
       )}
@@ -136,19 +136,19 @@ export function DocumentsCard({
             description="Reports, prescriptions and scans appear here once uploaded."
           />
         ) : (
-          <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+          <ul className="divide-y divide-line">
             {list.data.data.map((document) => (
               <li key={document.id} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-900 dark:text-slate-100">
+                  <p className="font-medium text-strong">
                     {document.title || document.fileName}
                   </p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                  <p className="text-sm text-muted">
                     {TYPE_LABELS[document.documentType]} · {formatSize(document.fileSize)} ·{" "}
                     {formatDate(document.createdAt)}
                   </p>
                   {document.uploadedBy && (
-                    <p className="text-xs text-slate-500 dark:text-slate-500">
+                    <p className="text-xs text-faint">
                       Uploaded by {document.uploadedBy}
                     </p>
                   )}
@@ -233,7 +233,7 @@ function UploadForm({
   };
 
   return (
-    <div className="mb-5 space-y-4 rounded-md border border-slate-200 p-4 dark:border-slate-700">
+    <div className="mb-5 space-y-4 rounded-md border border-line p-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           label="File"
@@ -247,9 +247,9 @@ function UploadForm({
             accept={ACCEPTED_UPLOAD_TYPES}
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             className={cx(
-              "block w-full text-base text-slate-900 dark:text-slate-100",
-              "file:mr-3 file:min-h-11 file:rounded-md file:border-0 file:bg-teal-700",
-              "file:px-4 file:text-base file:font-medium file:text-white hover:file:bg-teal-800",
+              "block w-full text-base text-strong",
+                "file:mr-3 file:min-h-11 file:rounded-md file:border-0 file:bg-primary",
+                  "file:px-4 file:text-base file:font-medium file:text-white hover:file:bg-teal-800",
             )}
           />
         </Field>
@@ -259,7 +259,7 @@ function UploadForm({
             id="document-type"
             value={documentType}
             onChange={(event) => setDocumentType(event.target.value as DocumentType)}
-            className="block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 focus:outline-2 focus:outline-teal-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="block min-h-11 w-full rounded-md border border-line-strong bg-card px-3 py-2.5 text-base text-strong focus:outline-2 focus:outline-primary"
           >
             {CHOOSABLE.map((type) => (
               <option key={type} value={type}>
@@ -281,7 +281,7 @@ function UploadForm({
       </Field>
 
       {error && (
-        <p role="alert" className="text-sm font-medium text-red-700 dark:text-red-400">
+        <p role="alert" className="text-sm font-medium text-critical">
           {error}
         </p>
       )}

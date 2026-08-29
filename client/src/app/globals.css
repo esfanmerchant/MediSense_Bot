@@ -1,26 +1,170 @@
 @import "tailwindcss";
 
+/**
+ * Clinical Precision — the design system from Stitch, expressed as tokens.
+ *
+ * Two colours carry the whole system and they are not interchangeable:
+ *
+ * - **Deep Trust Blue** is authority. Navigation, primary actions, the things
+ *   that commit something.
+ * - **Medical Teal** is health. Positive indicators, secondary actions, the
+ *   things that report rather than command.
+ *
+ * Semantic status colours (stable / warning / critical) sit outside both and
+ * are never used decoratively. A red in this interface always means a patient
+ * needs attention — the moment it means "delete button", the ward stops reading
+ * red as urgent, and that is how a monitoring system quietly stops working.
+ *
+ * Every colour is defined here as a variable rather than inline in components,
+ * so the two themes stay a single set of decisions instead of hundreds.
+ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand */
+  --brand-primary: #0d47a1;
+  --brand-primary-strong: #003178;
+  --brand-primary-soft: #d9e2ff;
+  --brand-primary-on: #ffffff;
+
+  --brand-accent: #00897b;
+  --brand-accent-strong: #006b5f;
+  --brand-accent-soft: #8df5e4;
+
+  /* Surfaces — the canvas is grey so white cards read as a layer of focus */
+  --surface-canvas: #f5f7fa;
+  --surface-card: #ffffff;
+  --surface-sunken: #eceef1;
+  --surface-rail: #0b1f45;
+  --surface-rail-hover: #16336b;
+
+  /* Text */
+  --text-strong: #191c1e;
+  --text-muted: #434652;
+  --text-faint: #737783;
+  --text-on-rail: #dbe4f7;
+
+  /* Lines */
+  --line: #e2e8f0;
+  --line-strong: #c3c6d4;
+
+  /* Status — meaning, never decoration */
+  --status-stable: #0f766e;
+  --status-stable-soft: #d1fae5;
+  --status-warning: #b45309;
+  --status-warning-soft: #fef3c7;
+  --status-critical: #ba1a1a;
+  --status-critical-soft: #ffdad6;
+
+  --shadow-card: 0 4px 12px rgb(0 0 0 / 0.05);
+  --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+/**
+ * Night shift. The design system is specified light, but a hospital runs at
+ * 3am too, and a white screen in a dark ward is its own hazard. The dark set
+ * keeps every semantic role identical and only changes what it is painted on —
+ * so a critical alert is still the most urgent thing on screen either way.
+ */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --brand-primary: #a1bbff;
+    --brand-primary-strong: #d9e2ff;
+    --brand-primary-soft: #17284f;
+    --brand-primary-on: #001945;
+
+    --brand-accent: #70d8c8;
+    --brand-accent-strong: #8df5e4;
+    --brand-accent-soft: #00332c;
+
+    --surface-canvas: #0f1417;
+    --surface-card: #191c1e;
+    --surface-sunken: #24282b;
+    --surface-rail: #080f21;
+    --surface-rail-hover: #16264a;
+
+    --text-strong: #eff1f4;
+    --text-muted: #c3c6d4;
+    --text-faint: #8f939f;
+    --text-on-rail: #dbe4f7;
+
+    --line: #2d3133;
+    --line-strong: #434652;
+
+    --status-stable: #6ee7b7;
+    --status-stable-soft: #052e26;
+    --status-warning: #fbbf24;
+    --status-warning-soft: #3a2a06;
+    --status-critical: #ffb4ab;
+    --status-critical-soft: #47100c;
+
+    --shadow-card: 0 4px 12px rgb(0 0 0 / 0.4);
+    --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.55);
   }
 }
 
+@theme inline {
+  --color-primary: var(--brand-primary);
+  --color-primary-strong: var(--brand-primary-strong);
+  --color-primary-soft: var(--brand-primary-soft);
+  --color-primary-on: var(--brand-primary-on);
+
+  --color-accent: var(--brand-accent);
+  --color-accent-strong: var(--brand-accent-strong);
+  --color-accent-soft: var(--brand-accent-soft);
+
+  --color-canvas: var(--surface-canvas);
+  --color-card: var(--surface-card);
+  --color-sunken: var(--surface-sunken);
+  --color-rail: var(--surface-rail);
+  --color-rail-hover: var(--surface-rail-hover);
+
+  --color-strong: var(--text-strong);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-on-rail: var(--text-on-rail);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-stable: var(--status-stable);
+  --color-stable-soft: var(--status-stable-soft);
+  --color-warning: var(--status-warning);
+  --color-warning-soft: var(--status-warning-soft);
+  --color-critical: var(--status-critical);
+  --color-critical-soft: var(--status-critical-soft);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-overlay: var(--shadow-overlay);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--surface-canvas);
+  color: var(--text-strong);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Headlines carry slight negative tracking — the design system's "compact,
+   authoritative" look. Body text keeps default tracking so long clinical prose
+   stays comfortable. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+/* Nobody should have motion forced on them, least of all someone reading a
+   vital sign. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

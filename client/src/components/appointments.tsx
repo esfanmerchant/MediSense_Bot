@@ -84,23 +84,23 @@ export function AppointmentRow({
   return (
     <li className="flex flex-wrap items-start gap-x-4 gap-y-3 py-4">
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-slate-900 dark:text-slate-100">{counterparty}</p>
-        {detail && <p className="text-sm text-slate-600 dark:text-slate-400">{detail}</p>}
+        <p className="font-medium text-strong">{counterparty}</p>
+        {detail && <p className="text-sm text-muted">{detail}</p>}
         {appointment.reason && (
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{appointment.reason}</p>
+          <p className="mt-1 text-sm text-muted">{appointment.reason}</p>
         )}
         {appointment.cancelReason && (
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-500">
+          <p className="mt-1 text-sm text-faint">
             Cancelled: {appointment.cancelReason}
           </p>
         )}
       </div>
 
       <div className="text-right">
-        <p className="text-sm font-medium tabular-nums text-slate-800 dark:text-slate-200">
+        <p className="text-sm font-medium tabular-nums text-strong">
           {formatWhen(appointment.startTime)}
         </p>
-        <p className="text-xs text-slate-500 dark:text-slate-500">
+        <p className="text-xs text-faint">
           {appointment.durationMinutes} min
         </p>
         <div className="mt-1">
@@ -128,7 +128,7 @@ export function AppointmentList({
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
   }
   return (
-    <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+    <ul className="divide-y divide-line">
       {appointments.map((appointment) => (
         <div key={appointment.id}>{children(appointment)}</div>
       ))}
@@ -156,12 +156,12 @@ export function SlotButton({
       onClick={onSelect}
       className={cx(
         "min-h-11 rounded-md border px-3 text-sm font-medium tabular-nums transition-colors",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
         selected
-          ? "border-teal-700 bg-teal-700 text-white"
+          ? "border-teal-700 bg-primary text-white"
           : available
-            ? "border-slate-300 bg-white text-slate-900 hover:bg-teal-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-            : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 line-through dark:border-slate-800 dark:bg-slate-900 dark:text-slate-600",
+            ? "border-line-strong bg-card text-strong hover:bg-accent-soft"
+            : "cursor-not-allowed border-line bg-sunken text-faint line-through dark:text-muted",
       )}
     >
       {label}

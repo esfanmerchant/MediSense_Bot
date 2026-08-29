@@ -64,12 +64,12 @@ function EmergencyBanner() {
   return (
     <div
       role="alert"
-      className="rounded-md border-2 border-red-500 bg-red-50 px-4 py-3 dark:border-red-600 dark:bg-red-950/60"
+      className="rounded-md border-2 border-critical bg-critical-soft px-4 py-3"
     >
-      <p className="font-semibold text-red-900 dark:text-red-200">
+      <p className="font-semibold text-critical">
         This may need emergency care
       </p>
-      <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+      <p className="mt-1 text-sm text-strong">
         Do not wait for a reply here. Call your local emergency number or go to the nearest
         emergency department.
       </p>
@@ -85,7 +85,7 @@ function EmergencyBanner() {
  */
 function Disclaimer({ text }: { text: string }) {
   return (
-    <p className="mt-3 border-t border-slate-200 pt-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-400">
+    <p className="mt-3 border-t border-line pt-3 text-xs text-muted">
       {text}
     </p>
   );
@@ -105,12 +105,12 @@ function AnswerBody({ answer }: { answer: AssistantAnswer }) {
 
       {/* whitespace-pre-line: the model writes short paragraphs and they carry
           meaning — an escalation is deliberately its own paragraph. */}
-      <p className="whitespace-pre-line text-slate-800 dark:text-slate-200">{answer.answer}</p>
+      <p className="whitespace-pre-line text-strong">{answer.answer}</p>
 
       {!answer.emergency && answer.urgency !== "INFORMATION" && (
         <Link
           href="/patient/appointments"
-          className="inline-flex min-h-11 items-center text-sm font-medium text-teal-800 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 dark:text-teal-300"
+          className="inline-flex min-h-11 items-center text-sm font-medium text-teal-800 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           Book an appointment
         </Link>
@@ -147,7 +147,7 @@ function VoiceInput({
 
   if (speech.state === "unsupported") {
     return (
-      <p className="text-sm text-slate-600 dark:text-slate-400">
+      <p className="text-sm text-muted">
         This browser cannot listen for speech. Chrome, Edge and Safari can — or you can type{" "}
         {subject} below.
       </p>
@@ -172,14 +172,14 @@ function VoiceInput({
 
       {/* Announced, not merely animated: a patient who cannot see the button
           change colour still needs to know the microphone is live. */}
-      <p role="status" aria-live="polite" className="text-sm text-slate-600 dark:text-slate-400">
+      <p role="status" aria-live="polite" className="text-sm text-muted">
         {listening
           ? "Listening. Speak normally — your words appear below, and you can edit them before anything is sent."
           : "Your speech is turned into text on this device. The recording is never sent to MediSense."}
       </p>
 
       {speech.interim && (
-        <p className="text-sm italic text-slate-500 dark:text-slate-500">{speech.interim}…</p>
+        <p className="text-sm italic text-faint">{speech.interim}…</p>
       )}
 
       {speech.error && <ErrorState title="Microphone" message={speech.error} />}
@@ -257,10 +257,10 @@ export function AssistantChat() {
         <ol aria-live="polite" className="space-y-4">
           {turns.map((turn) => (
             <li key={turn.id} className="space-y-3">
-              <p className="ml-auto max-w-[85%] rounded-lg bg-teal-50 px-4 py-2.5 text-slate-900 dark:bg-teal-950 dark:text-teal-50">
+              <p className="ml-auto max-w-[85%] rounded-lg bg-accent-soft px-4 py-2.5 text-strong  ">
                 {turn.question}
               </p>
-              <div className="max-w-[95%] rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
+              <div className="max-w-[95%] rounded-lg border border-line bg-canvas px-4 py-3 /60">
                 <AnswerBody answer={turn.answer} />
               </div>
             </li>
@@ -468,7 +468,7 @@ export function SymptomReview() {
             value={text}
             disabled={busy}
             onChange={(event) => setText(event.target.value)}
-            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-2 focus:outline-offset-0 focus:outline-teal-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="block w-full rounded-md border border-line-strong bg-card px-3 py-2.5 text-base text-strong placeholder:text-faint focus:outline-2 focus:outline-offset-0 focus:outline-primary"
           />
         </Field>
 
@@ -481,21 +481,21 @@ export function SymptomReview() {
         {saved && (
           <div
             role="status"
-            className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200"
+            className="rounded-md border border-stable/40 bg-stable-soft px-4 py-3 text-sm text-stable"
           >
             {saved}
           </div>
         )}
 
         {reviewing && (
-          <div className="space-y-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+          <div className="space-y-4 border-t border-line pt-4">
             {proposal?.emergency && <EmergencyBanner />}
 
             <div>
-              <h3 className="font-medium text-slate-900 dark:text-slate-50">
+              <h3 className="font-medium text-strong">
                 {proposal?.reviewPrompt ?? "List the symptoms you want to record."}
               </h3>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              <p className="mt-1 text-sm text-muted">
                 {proposal
                   ? "This is what the assistant heard, not a medical record. Change anything that is wrong, remove anything you did not say, and add anything it missed."
                   : "Nothing has been saved yet. Add a row for each symptom, and remove any you do not want to record."}
@@ -506,7 +506,7 @@ export function SymptomReview() {
               {drafts.map((draft, index) => (
                 <li
                   key={draft.key}
-                  className="grid gap-3 rounded-md border border-slate-200 p-3 sm:grid-cols-[2fr_1fr_1fr_auto] dark:border-slate-700"
+                  className="grid gap-3 rounded-md border border-line p-3 sm:grid-cols-[2fr_1fr_1fr_auto] "
                 >
                   <Field label="Symptom" htmlFor={`symptom-${draft.key}`}>
                     <Input
@@ -559,7 +559,7 @@ export function SymptomReview() {
               </Button>
             </div>
 
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+            <p className="text-sm text-muted">
               Saved symptoms are your own account of how you feel. They are not a diagnosis, and a
               doctor decides what goes in your medical record.
             </p>
@@ -599,7 +599,7 @@ function ConsentGate({ status, onGranted }: { status: AssistantStatus; onGranted
   if (!status.providerConfigured) {
     return (
       <Card title="The assistant is unavailable">
-        <p className="text-slate-700 dark:text-slate-300">
+        <p className="text-muted">
           {status.reason ?? "The assistant is not configured on this server."} Your appointments,
           records and documents are unaffected.
         </p>
@@ -610,18 +610,18 @@ function ConsentGate({ status, onGranted }: { status: AssistantStatus; onGranted
   return (
     <Card title="Turn on the health assistant">
       <div className="space-y-4">
-        <p className="text-slate-700 dark:text-slate-300">
+        <p className="text-muted">
           To answer your questions, the assistant sends what you write — and a list of your current
           prescriptions and upcoming appointments — to an AI provider. Nothing is sent until you
           agree, and you can withdraw at any time from your profile.
         </p>
-        <p className="text-slate-700 dark:text-slate-300">
+        <p className="text-muted">
           If you use the microphone, your browser turns your speech into text on your device and
           MediSense never receives the recording. Most browsers use their own online service to do
           that, so the audio reaches the browser&rsquo;s provider rather than ours. You can always
           type instead.
         </p>
-        <p className="text-slate-700 dark:text-slate-300">
+        <p className="text-muted">
           The assistant gives general guidance. It does not diagnose, and it never replaces your
           doctor.
         </p>

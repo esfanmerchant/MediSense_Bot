@@ -14,6 +14,14 @@
       "env": {
         "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}"
       }
+    },
+    "stitch": {
+      "//": "Google Stitch — UI design generation. The key is read from the environment, never stored here: this file is committed, and a header is as much a secret as an env var.",
+      "type": "http",
+      "url": "https://stitch.googleapis.com/mcp",
+      "headers": {
+        "X-Goog-Api-Key": "${STITCH_API_KEY}"
+      }
     }
   }
 }

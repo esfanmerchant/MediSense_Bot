@@ -55,12 +55,9 @@ const SessionContext = createContext<SessionState | null>(null);
 
 export function homePathFor(role: AuthUser["role"]): string {
   switch (role) {
-    case "ADMIN":
-      return "/admin";
-    case "DOCTOR":
-      return "/doctor";
-    case "PATIENT":
-      return "/patient";
+    case "ADMIN": return"/admin";
+    case "DOCTOR": return"/doctor";
+    case "PATIENT": return"/patient";
     default:
       // NURSE has no dashboard yet — emergency access only.
       return "/no-dashboard";

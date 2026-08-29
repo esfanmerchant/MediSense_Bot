@@ -9,7 +9,7 @@ import { Button, Field, Input, Loading } from "@/components/ui";
 
 const REASONS: Record<string, string> = {
   expired: "You were signed out after a period of inactivity. Sign in again to continue.",
-  "signed-out": "Your session ended. Sign in again to continue.",
+    "signed-out":"Your session ended. Sign in again to continue.",
 };
 
 function LoginForm() {
@@ -58,8 +58,8 @@ function LoginForm() {
   return (
     <div className="w-full max-w-md">
       <div className="mb-8">
-        <h1 className="text-3xl font-semibold text-slate-900 dark:text-slate-50">MediSense</h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <h1 className="text-3xl font-semibold text-strong">MediSense</h1>
+        <p className="mt-1 text-muted">
           Sign in to your account.
         </p>
       </div>
@@ -67,7 +67,7 @@ function LoginForm() {
       {reason && REASONS[reason] && (
         <p
           role="status"
-          className="mb-5 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+          className="mb-5 rounded-md border border-warning/50 bg-warning-soft px-4 py-3 text-sm text-warning"
         >
           {REASONS[reason]}
         </p>
@@ -76,7 +76,7 @@ function LoginForm() {
       {error && (
         <p
           role="alert"
-          className="mb-5 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+          className="mb-5 rounded-md border border-critical/50 bg-critical-soft px-4 py-3 text-sm font-medium text-critical"
         >
           {error.message}
         </p>
@@ -122,7 +122,7 @@ function LoginForm() {
             id="deviceClass"
             value={deviceClass}
             onChange={(event) => setChosen(event.target.value as DeviceClass)}
-            className="block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 focus:outline-2 focus:outline-teal-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            className="block min-h-11 w-full rounded-md border border-line-strong bg-card px-3 py-2.5 text-base text-strong focus:outline-2 focus:outline-primary"
           >
             <option value="PERSONAL">My own device</option>
             <option value="SHARED_TERMINAL">A shared hospital terminal</option>
@@ -134,11 +134,11 @@ function LoginForm() {
         </Button>
       </form>
 
-      <p className="mt-6 text-sm text-slate-600 dark:text-slate-400">
+      <p className="mt-6 text-sm text-muted">
         New patient?{" "}
         <a
           href="/register"
-          className="font-medium text-teal-800 underline underline-offset-2 dark:text-teal-300"
+          className="font-medium text-teal-800 underline underline-offset-2"
         >
           Create an account
         </a>

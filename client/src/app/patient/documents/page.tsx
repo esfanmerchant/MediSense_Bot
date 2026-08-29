@@ -19,8 +19,8 @@ export default function PatientDocuments() {
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Documents</h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-semibold text-strong">Documents</h1>
+        <p className="mt-1 text-muted">
           Upload reports, prescriptions and scans so your care team can see them. Files are
           private — they open through a link that expires, and only your care team can read them.
         </p>

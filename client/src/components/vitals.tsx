@@ -188,25 +188,25 @@ function AlertRow({
       className={cx(
         "rounded-lg border p-4",
         settled
-          ? "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+          ? "border-line bg-card"
           : alert.severity === "CRITICAL"
-            ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/40"
-            : "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30",
+            ? "border-critical/50 bg-critical-soft"
+            : "border-warning/50 bg-warning-soft/30",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={SEVERITY_TONE[alert.severity]}>{SEVERITY_LABEL[alert.severity]}</Badge>
         <Badge tone={settled ? "good" : "neutral"}>{alert.status.toLowerCase()}</Badge>
         {alert.escalationLevel > 0 && <Badge tone="critical">escalated</Badge>}
-        <span className="ml-auto text-sm text-slate-600 tabular-nums dark:text-slate-400">
+        <span className="ml-auto text-sm text-muted tabular-nums">
           {when(alert.createdAt)}
         </span>
       </div>
 
-      <p className="mt-2 text-slate-900 dark:text-slate-100">{alert.message}</p>
+      <p className="mt-2 text-strong">{alert.message}</p>
 
       {error && (
-        <p role="alert" className="mt-2 text-sm font-medium text-red-700 dark:text-red-400">
+        <p role="alert" className="mt-2 text-sm font-medium text-critical">
           {error}
         </p>
       )}
@@ -288,7 +288,7 @@ export function AlertsPanel() {
 
       {rows.length > 0 && (
         <>
-          <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">
+          <p className="mb-3 text-sm text-muted">
             <span className="font-medium tabular-nums">{openCount}</span> needing attention
           </p>
           <ul className="space-y-3">
@@ -337,22 +337,22 @@ export function VitalsTable({ patientId }: { patientId: string }) {
           <table className="w-full min-w-[36rem] text-sm">
             <caption className="sr-only">Recent vital readings, newest first</caption>
             <thead>
-              <tr className="border-b border-slate-200 text-left dark:border-slate-700">
+              <tr className="border-b border-line text-left">
                 <th scope="col" className="py-2 pr-4 font-medium">
                   Recorded
                 </th>
                 {COLUMNS.map((column) => (
                   <th key={column.key} scope="col" className="py-2 pr-4 font-medium">
                     {column.label}
-                    <span className="ml-1 font-normal text-slate-500">{column.unit}</span>
+                    <span className="ml-1 font-normal text-faint">{column.unit}</span>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.map((reading) => (
-                <tr key={reading.id} className="border-b border-slate-100 dark:border-slate-800">
-                  <td className="py-2 pr-4 whitespace-nowrap tabular-nums text-slate-600 dark:text-slate-400">
+                <tr key={reading.id} className="border-b border-line">
+                  <td className="py-2 pr-4 whitespace-nowrap tabular-nums text-muted">
                     {when(reading.recordedAt)}
                   </td>
                   {COLUMNS.map((column) => {
@@ -361,12 +361,12 @@ export function VitalsTable({ patientId }: { patientId: string }) {
                     return (
                       <td key={column.key} className="py-2 pr-4 tabular-nums">
                         {value === null ? (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-faint">—</span>
                         ) : (
                           <span
                             className={cx(
                               flagged &&
-                                "rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-900 dark:bg-red-950 dark:text-red-200",
+                                "rounded bg-critical-soft px-1.5 py-0.5 font-semibold text-critical",
                             )}
                           >
                             {value}
@@ -385,7 +385,7 @@ export function VitalsTable({ patientId }: { patientId: string }) {
       )}
 
       {rules.data && rules.data.unconfigured.length > 0 && (
-        <p className="mt-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+        <p className="mt-4 rounded-md border border-warning/50 bg-warning-soft px-3 py-2 text-sm text-warning">
           No threshold is configured for {rules.data.unconfigured.join(", ").toLowerCase()}, so
           those readings will never raise an alert.
         </p>
@@ -505,24 +505,24 @@ export function RecordVitals({
         {raised.length > 0 && (
           <div
             role="alert"
-            className="rounded-md border-2 border-red-400 bg-red-50 p-4 dark:border-red-700 dark:bg-red-950/50"
+            className="rounded-md border-2 border-critical bg-critical-soft p-4"
           >
-            <p className="font-semibold text-red-900 dark:text-red-200">
+            <p className="font-semibold text-critical">
               {raised.length === 1 ? "An alert was raised" : `${raised.length} alerts were raised`}
             </p>
-            <ul className="mt-2 space-y-1 text-sm text-red-800 dark:text-red-300">
+            <ul className="mt-2 space-y-1 text-sm text-strong">
               {raised.map((alert) => (
                 <li key={alert.id}>{alert.message}</li>
               ))}
             </ul>
-            <p className="mt-2 text-sm text-red-800 dark:text-red-300">
+            <p className="mt-2 text-sm text-strong">
               The responsible doctor has been notified.
             </p>
           </div>
         )}
 
         {raised.length === 0 && !error && !busy && !anyValue && (
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="text-sm text-muted">
             Enter at least one measurement to save.
           </p>
         )}
@@ -558,7 +558,7 @@ export function ThresholdsPanel({ patientId }: { patientId: string }) {
           <table className="w-full min-w-[30rem] text-sm">
             <caption className="sr-only">Thresholds governing this patient</caption>
             <thead>
-              <tr className="border-b border-slate-200 text-left dark:border-slate-700">
+              <tr className="border-b border-line text-left">
                 <th scope="col" className="py-2 pr-4 font-medium">Vital</th>
                 <th scope="col" className="py-2 pr-4 font-medium">Range</th>
                 <th scope="col" className="py-2 pr-4 font-medium">Severity</th>
@@ -567,12 +567,12 @@ export function ThresholdsPanel({ patientId }: { patientId: string }) {
             </thead>
             <tbody>
               {fetched.data.thresholds.map((rule) => (
-                <tr key={rule.id} className="border-b border-slate-100 dark:border-slate-800">
+                <tr key={rule.id} className="border-b border-line">
                   <td className="py-2 pr-4">{rule.label}</td>
                   <td className="py-2 pr-4 tabular-nums">
                     {rule.minValue ?? "—"} to {rule.maxValue ?? "—"} {rule.unit}
                     {rule.sustainedReadings > 1 && (
-                      <span className="ml-2 text-slate-500">
+                      <span className="ml-2 text-faint">
                         after {rule.sustainedReadings} readings
                       </span>
                     )}

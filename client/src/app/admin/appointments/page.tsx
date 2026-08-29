@@ -54,8 +54,8 @@ export default function AdminAppointments() {
   return (
     <AppShell role="ADMIN">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Appointments</h1>
-        <p className="mt-1 text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-semibold text-strong">Appointments</h1>
+        <p className="mt-1 text-muted">
           Every booking in the hospital. Clinical notes and consultation outcomes stay with the
           treating doctor.
         </p>
@@ -77,7 +77,7 @@ export default function AdminAppointments() {
           <div className="ml-auto w-full sm:w-56">
             <label
               htmlFor="day"
-              className="block text-sm font-medium text-slate-800 dark:text-slate-200"
+              className="block text-sm font-medium text-strong"
             >
               On a specific day
             </label>
@@ -103,7 +103,7 @@ export default function AdminAppointments() {
               {list.data.data.length === 0 ? (
                 <EmptyState title="Nothing matches that filter" />
               ) : (
-                <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                <ul className="divide-y divide-line">
                   {list.data.data.map((appointment) => (
                     <AdminRow
                       key={appointment.id}
@@ -185,7 +185,7 @@ function AdminRow({
         }
       />
       {error && (
-        <p role="alert" className="pb-3 text-sm font-medium text-red-700 dark:text-red-400">
+        <p role="alert" className="pb-3 text-sm font-medium text-critical">
           {error}
         </p>
       )}

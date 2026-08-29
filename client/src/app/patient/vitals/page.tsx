@@ -19,8 +19,8 @@ export default function PatientVitals() {
   return (
     <AppShell role="PATIENT">
       <div id="main">
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">Vitals</h1>
-        <p className="mt-1 max-w-2xl text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-semibold text-strong">Vitals</h1>
+        <p className="mt-1 max-w-2xl text-muted">
           Observations recorded by your care team. If a reading crosses a threshold, the doctor
           responsible for you is notified automatically.
         </p>

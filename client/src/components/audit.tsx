@@ -87,7 +87,7 @@ function ChainStatus() {
       {error && <ErrorState message={error} />}
 
       {!result && !error && (
-        <p className="text-sm text-slate-600 dark:text-slate-400">
+        <p className="text-sm text-muted">
           Each entry is hashed together with the one before it, so an entry altered or removed
           directly in the database no longer verifies. This is what makes &ldquo;append-only&rdquo;
           checkable rather than merely stated.
@@ -102,16 +102,16 @@ function ChainStatus() {
           className={cx(
             "rounded-md border p-4",
             result.valid
-              ? "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40"
-              : "border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/50",
+              ? "border-stable/50 bg-stable-soft"
+              : "border-critical bg-critical-soft",
           )}
         >
           <p
             className={cx(
               "font-semibold",
               result.valid
-                ? "text-emerald-900 dark:text-emerald-200"
-                : "text-red-900 dark:text-red-200",
+                ? "text-stable"
+                : "text-critical",
             )}
           >
             {result.detail}
@@ -120,8 +120,8 @@ function ChainStatus() {
             className={cx(
               "mt-1 text-sm tabular-nums",
               result.valid
-                ? "text-emerald-800 dark:text-emerald-300"
-                : "text-red-800 dark:text-red-300",
+                ? "text-stable"
+                : "text-strong",
             )}
           >
             {result.checked} entries checked
@@ -139,11 +139,11 @@ function EntryRow({ entry }: { entry: AuditEntry }) {
   return (
     <tr
       className={cx(
-        "border-b border-slate-100 align-top dark:border-slate-800",
-        alerting && "bg-red-50/60 dark:bg-red-950/20",
+        "border-b border-line align-top",
+        alerting && "bg-critical-soft/50",
       )}
     >
-      <td className="py-2 pr-4 whitespace-nowrap tabular-nums text-slate-600 dark:text-slate-400">
+      <td className="py-2 pr-4 whitespace-nowrap tabular-nums text-muted">
         {when(entry.timestamp)}
       </td>
       <td className="py-2 pr-4">
@@ -157,15 +157,15 @@ function EntryRow({ entry }: { entry: AuditEntry }) {
       <td className="py-2 pr-4">
         {/* Null when the account has since been deleted. `userId` is
             deliberately not a foreign key — the trail outlives its subject. */}
-        {entry.actorName ?? <span className="italic text-slate-500">(deleted account)</span>}
+        {entry.actorName ?? <span className="italic text-faint">(deleted account)</span>}
         {entry.actorRole && (
-          <div className="text-xs text-slate-500">{entry.actorRole.toLowerCase()}</div>
+          <div className="text-xs text-faint">{entry.actorRole.toLowerCase()}</div>
         )}
       </td>
-      <td className="py-2 pr-4 text-slate-600 dark:text-slate-400">
+      <td className="py-2 pr-4 text-muted">
         {entry.entityType ?? "—"}
       </td>
-      <td className="py-2 text-xs text-slate-500 dark:text-slate-500">
+      <td className="py-2 text-xs text-faint">
         {entry.ipAddress ?? "—"}
       </td>
     </tr>
@@ -193,11 +193,11 @@ export function AuditPanel() {
         action={
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <p className="text-xs text-slate-600 dark:text-slate-400">Security events</p>
+              <p className="text-xs text-muted">Security events</p>
               <p
                 className={cx(
                   "text-lg font-semibold tabular-nums",
-                  securityEvents > 0 && "text-red-700 dark:text-red-400",
+                  securityEvents > 0 && "text-critical",
                 )}
               >
                 {securityEvents}
@@ -228,7 +228,7 @@ export function AuditPanel() {
             <table className="w-full min-w-[42rem] text-sm">
               <caption className="sr-only">Audit trail, newest first</caption>
               <thead>
-                <tr className="border-b border-slate-200 text-left dark:border-slate-700">
+                <tr className="border-b border-line text-left">
                   <th scope="col" className="py-2 pr-4 font-medium">When</th>
                   <th scope="col" className="py-2 pr-4 font-medium">Action</th>
                   <th scope="col" className="py-2 pr-4 font-medium">Who</th>

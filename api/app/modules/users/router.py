@@ -20,7 +20,7 @@ from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
 from app.api.responses import Page, ok, pagination
 from app.core.errors import AppError, ErrorCode, conflict, forbidden, not_found
 from app.core.security import check_password_policy, generate_opaque_token, hash_password
-from app.db.base import new_id
+from app.db.base import new_id, utcnow
 from app.db.enums import AuditAction, AuditSeverity, Role, UserStatus
 from app.db.models import Doctor, DoctorPatientAssignment, Patient, Session, User
 from app.modules.audit.service import AuditEntry, record_audit
@@ -169,6 +169,12 @@ async def create_staff_user(
         role=payload.role,
         phone=payload.phone,
         status=UserStatus.ACTIVE,
+        # Stamped here, because login refuses an account whose address has not
+        # been proved and nothing in this path ever emails a code. An
+        # administrator creating a colleague *is* the verification — the same
+        # judgement the 0006 backfill recorded for every account that predated
+        # the check. Without this, staff created today can never sign in.
+        email_verified_at=utcnow(),
     )
     db.add(user)
     await db.flush()

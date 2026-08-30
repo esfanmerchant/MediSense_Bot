@@ -29,7 +29,7 @@ function invoice(overrides: Partial<Invoice> = {}): Invoice {
     amount: "500.10",
     taxAmount: "0.20",
     totalAmount: "500.30",
-    currency: "INR",
+    currency: "PKR",
     status: "ISSUED",
     lineItems: [
       {
@@ -69,9 +69,9 @@ describe("amounts", () => {
 
     // 500.10 appears twice — as the line item and as the subtotal — which is
     // correct, so both are matched rather than asserting a single occurrence.
-    expect(screen.getAllByText("INR 500.10")).toHaveLength(2);
-    expect(screen.getByText("INR 0.20")).toBeInTheDocument();
-    expect(screen.getAllByText("INR 500.30").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("PKR 500.10")).toHaveLength(2);
+    expect(screen.getByText("PKR 0.20")).toBeInTheDocument();
+    expect(screen.getAllByText("PKR 500.30").length).toBeGreaterThan(0);
   });
 
   it("does not compute a total of its own", async () => {
@@ -82,7 +82,7 @@ describe("amounts", () => {
     render(<InvoicesPanel />);
 
     await user.click(await screen.findByRole("button", { name: /view detail/i }));
-    expect(screen.getAllByText("INR 80.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("PKR 80.00").length).toBeGreaterThan(0);
   });
 
   it("shows a credit note as negative", async () => {
@@ -98,7 +98,7 @@ describe("amounts", () => {
     ]);
     render(<InvoicesPanel />);
     // The minus sign is a real one, not a hyphen, and it is not dropped.
-    expect(await screen.findByText("−INR 500.30")).toBeInTheDocument();
+    expect(await screen.findByText("−PKR 500.30")).toBeInTheDocument();
   });
 });
 

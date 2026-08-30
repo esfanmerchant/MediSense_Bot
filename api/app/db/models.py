@@ -774,7 +774,10 @@ class Invoice(Base):
         "taxAmount", Numeric(10, 2), default=Decimal("0"), nullable=False
     )
     total_amount: Mapped[Decimal] = mapped_column("totalAmount", Numeric(10, 2), nullable=False)
-    currency: Mapped[str] = mapped_column(Text, default="INR", nullable=False)
+    #: Stored per invoice rather than read from configuration at display
+    #: time: a bill says what it was raised in, and a clinic that changes
+    #: currency must not silently restate every invoice it ever issued.
+    currency: Mapped[str] = mapped_column(Text, default="PKR", nullable=False)
     status: Mapped[enums.InvoiceStatus] = mapped_column(
         pg_enum(enums.InvoiceStatus, "InvoiceStatus"), default=enums.InvoiceStatus.DRAFT, nullable=False
     )

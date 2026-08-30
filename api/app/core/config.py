@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     CLINIC_TIMEZONE: str = "Asia/Karachi"
 
     # --- Billing ---------------------------------------------------------
-    INVOICE_CURRENCY: str = "INR"
+    INVOICE_CURRENCY: str = "PKR"
     #: Tax applied to a consultation fee, as a percentage. Configuration rather
     #: than a literal: rates differ by jurisdiction and change, and a number
     #: compiled into the billing code is one nobody can correct without a

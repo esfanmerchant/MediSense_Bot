@@ -20,7 +20,8 @@ change their own licence number after it was checked.
 
 from __future__ import annotations
 
-from datetime import datetime
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -33,6 +34,7 @@ from app.db.enums import (
     AuditAction,
     AuditSeverity,
     DoctorApplicationStatus,
+    DoctorDocumentKind,
     NotificationType,
     Role,
     UserStatus,
@@ -53,9 +55,7 @@ from app.services import email as email_service
 from app.services import email_templates
 
 #: What an administrator needs in front of them before a decision is even
-#: possible. Documents are deliberately *not* on this list: storage can be down,
-#: and an applicant stuck unable to submit because an upload failed is worse
-#: than a reviewer who rejects with "we still need your certificate".
+#: possible.
 REQUIRED_FIELDS: tuple[tuple[str, str], ...] = (
     ("full_name", "fullName"),
     ("phone", "phone"),
@@ -67,10 +67,45 @@ REQUIRED_FIELDS: tuple[tuple[str, str], ...] = (
     ("consultation_fee", "consultationFee"),
 )
 
+#: The files an administrator needs in hand, all four of them.
+#:
+#: This list used to be empty, on the reasoning that storage can be down and an
+#: applicant stuck unable to submit because an upload failed is worse than a
+#: reviewer who rejects with "we still need your certificate". The product owner
+#: has decided the other way, and the reason is stronger: an administrator
+#: cannot verify an identity or a qualification without the files, so an
+#: application without them is not reviewable and should not exist. Each one
+#: answers a different question — the certificate says the registration is live,
+#: the degree says the qualification is real, the national ID says the person is
+#: the one those two name, and the photograph is what a patient will see.
+#:
+#: The cost is accepted rather than avoided: a storage outage now blocks
+#: submission outright, where before it only delayed a decision. That is
+#: preferred to a queue of applications nobody can act on.
+REQUIRED_DOCUMENTS: tuple[DoctorDocumentKind, ...] = (
+    DoctorDocumentKind.REGISTRATION_CERTIFICATE,
+    DoctorDocumentKind.DEGREE,
+    DoctorDocumentKind.NATIONAL_ID,
+    DoctorDocumentKind.PHOTO,
+)
+
+#: Nobody practising today holds a degree older than this, and the floor is what
+#: turns a mistyped "195" or "20" into a message rather than a stored absurdity.
+MIN_QUALIFICATION_YEAR = 1950
+
+#: How far past today a year may still be plausible. A five-year degree started
+#: this year finishes well after it, and people list the course they are on.
+MAX_QUALIFICATION_YEARS_AHEAD = 7
+
 #: Statuses an applicant may still edit. SUBMITTED is excluded so the version a
 #: reviewer is reading cannot change under them; APPROVED because it has become
 #: a credentialing record.
 EDITABLE = (DoctorApplicationStatus.DRAFT, DoctorApplicationStatus.REJECTED)
+
+
+def max_qualification_year() -> int:
+    """Computed per call, not at import: a running process outlives a New Year."""
+    return datetime.now(UTC).year + MAX_QUALIFICATION_YEARS_AHEAD
 
 
 async def load_or_create(db: AsyncSession, user: User) -> DoctorApplication:
@@ -146,8 +181,11 @@ async def save_draft(
     elif "availability" in changed:
         changed["availability"] = []
 
-    if "qualifications" in changed and changed["qualifications"] is None:
-        changed["qualifications"] = []
+    if "qualifications" in changed:
+        # Re-serialized from the parsed models rather than taken from the dump,
+        # because ``model_dump`` gives snake_case and the stored JSONB speaks the
+        # same camelCase the API does.
+        changed["qualifications"] = [entry.as_stored() for entry in payload.qualifications or []]
 
     if "consultation_fee" in changed and changed["consultation_fee"] is not None:
         changed["consultation_fee"] = Decimal(str(changed["consultation_fee"]))
@@ -174,6 +212,84 @@ def missing_fields(application: DoctorApplication) -> list[str]:
     return missing
 
 
+def qualification_issues(entries: Iterable[Any]) -> list[dict[str, Any]]:
+    """Years that are not years, and years that run backwards.
+
+    **Asked here rather than on the draft model, and that placement is the whole
+    point.** The form autosaves on a debounce while somebody is typing, so a
+    person entering 2015 sends 2, then 20, then 201; a range check on the field
+    would refuse each of those saves and tell them their draft was lost. A year
+    that is wrong for a moment costs nothing, and it is only wrong at all if it
+    is still wrong when they submit — which is exactly when this runs.
+
+    Every issue is reported against ``qualifications`` rather than an indexed
+    path, because that is the name of the step the client sends them back to.
+    Entries that are not objects are skipped: a row written before the years
+    existed has no year to be wrong about.
+    """
+    ceiling = max_qualification_year()
+    issues: list[dict[str, Any]] = []
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        # The client prefixes each detail with its field label, so these read as
+        # "Qualifications: <this>" and have to be whole sentences rather than
+        # fragments. The title is quoted because a real one has commas in it.
+        title = str(entry.get("title") or "").strip()
+        name = f'"{title}"' if title else "This qualification"
+        start, end = entry.get("startYear"), entry.get("endYear")
+        years = [value for value in (start, end) if isinstance(value, int)]
+
+        if any(not MIN_QUALIFICATION_YEAR <= year <= ceiling for year in years):
+            issues.append(
+                {
+                    "field": "qualifications",
+                    "message": (
+                        f"{name} needs a year between {MIN_QUALIFICATION_YEAR} "
+                        f"and {ceiling}."
+                    ),
+                }
+            )
+        elif isinstance(start, int) and isinstance(end, int) and start > end:
+            # Only when both years are otherwise sound: telling somebody their
+            # dates are out of order *and* out of range is two complaints about
+            # one typo.
+            issues.append(
+                {
+                    "field": "qualifications",
+                    "message": f"{name} has a start year after its end year.",
+                }
+            )
+
+    return issues
+
+
+def missing_documents(kinds: Iterable[DoctorDocumentKind]) -> list[str]:
+    """Which of the four required kinds are not attached.
+
+    Returned in ``REQUIRED_DOCUMENTS`` order rather than the order they happen
+    to be missing in, so the client points at the first gap in the same place
+    every time.
+    """
+    held = set(kinds)
+    return [str(kind) for kind in REQUIRED_DOCUMENTS if kind not in held]
+
+
+async def _attached_kinds(db: AsyncSession, application_id: str) -> list[DoctorDocumentKind]:
+    return list(
+        (
+            await db.execute(
+                select(DoctorApplicationDocument.kind).where(
+                    DoctorApplicationDocument.application_id == application_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
 async def submit(
     db: AsyncSession, application: DoctorApplication, user: User, ctx: RequestContext
 ) -> DoctorApplication:
@@ -184,13 +300,28 @@ async def submit(
     """
     require_editable(application)
 
-    missing = missing_fields(application)
-    if missing:
+    # One refusal listing everything, in the order the steps appear, rather than
+    # a profile check that passes and an upload check that fails on the next
+    # attempt.
+    details: list[dict[str, Any]] = [
+        {"field": field, "message": "This is required before you can submit."}
+        for field in missing_fields(application)
+    ]
+    details += qualification_issues(application.qualifications or [])
+    details += [
+        {"field": kind, "message": "Upload this document before you can submit."}
+        for kind in missing_documents(await _attached_kinds(db, application.id))
+    ]
+    if details:
+        # VALIDATION_ERROR rather than PROFILE_INCOMPLETE: that code is one of
+        # the three doctor-gate states, and the client routes on it globally.
+        # "Your form is missing three things" is not "you may not use the
+        # portal", and conflating them misleads the next reader of the code.
         raise AppError(
             422,
-            ErrorCode.PROFILE_INCOMPLETE,
-            "Your application is missing some required details.",
-            [{"field": field, "message": "This is required before you can submit."} for field in missing],
+            ErrorCode.VALIDATION_ERROR,
+            "Your application is not ready to submit yet.",
+            details,
         )
 
     application.status = DoctorApplicationStatus.SUBMITTED
@@ -274,6 +405,53 @@ async def _tell_the_administrators(
 # ---------------------------------------------------------------------------
 
 
+#: A year range is a range, not a subtraction, so it takes an en dash. Written as
+#: an escape because in source an en dash and a hyphen look alike.
+_EN_DASH = "\u2013"
+
+
+def render_qualification(entry: Any) -> str:
+    """One stored qualification as a line of free text.
+
+    Forgiving about what it is handed, for the same reason ``parse_windows`` is:
+    this column is JSONB, and a row written before the years existed — or by
+    hand in the database — must not be able to fail an approval. A bare string
+    is still a qualification and comes back as itself.
+
+    Half a date is worth showing, so a missing year degrades rather than hides
+    the entry: an end year alone reads as that year on its own, a start year
+    alone reads as an open-ended range — which is what a course still being
+    taken is — and an entry with neither is simply its title.
+    """
+    if isinstance(entry, str):
+        return entry.strip()
+    if not isinstance(entry, dict):
+        return ""
+
+    title = str(entry.get("title") or "").strip()
+    if not title:
+        return ""
+
+    start, end = entry.get("startYear"), entry.get("endYear")
+    if start and end:
+        return f"{title} ({start}{_EN_DASH}{end})"
+    if start:
+        return f"{title} ({start}{_EN_DASH})"
+    if end:
+        return f"{title} ({end})"
+    return title
+
+
+def render_qualifications(entries: Iterable[Any]) -> str | None:
+    """The whole list as the one free-text line ``Doctor.qualifications`` holds.
+
+    ``None`` rather than an empty string when there is nothing, so the column
+    says "not stated" instead of "stated to be blank".
+    """
+    rendered = [line for line in (render_qualification(entry) for entry in entries) if line]
+    return ", ".join(rendered) or None
+
+
 def require_reviewable(application: DoctorApplication) -> None:
     if application.status != DoctorApplicationStatus.SUBMITTED:
         raise conflict(
@@ -322,8 +500,9 @@ async def approve(
     doctor.license_number = registration
     doctor.department_id = application.department_id
     # Doctor.qualifications is free text — that is the shape the original schema
-    # has — so the list an applicant built one line at a time is joined here.
-    doctor.qualifications = ", ".join(application.qualifications) or None
+    # has — so the list an applicant built one entry at a time, years and all, is
+    # rendered down to one line here.
+    doctor.qualifications = render_qualifications(application.qualifications or [])
     doctor.years_experience = application.years_experience
     doctor.consultation_fee = application.consultation_fee or Decimal("0")
     doctor.availability = application.availability or []

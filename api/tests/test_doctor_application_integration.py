@@ -12,17 +12,21 @@ flow produces, and those are removed again. The applicant is created by these
 tests and deleted afterwards, taking its application, documents and sessions
 with it.
 
-Document upload is not exercised here: it needs Supabase Storage, and a test
-that puts real objects in a real bucket to prove a database transition is a test
-that leaves litter behind. ``test_file_validation.py`` covers the inspection
-every upload goes through.
+The *upload* endpoint is not exercised here: it needs Supabase Storage, and a
+test that puts real objects in a real bucket to prove a database transition is a
+test that leaves litter behind. ``test_file_validation.py`` covers the
+inspection every upload goes through. Submission now requires all four
+credential kinds, though, so the rows those uploads would have written are
+inserted directly — the storage columns name a path that was never created,
+which is exactly right for a test that must not touch a bucket, and every row
+cascades away with the applicant.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -31,10 +35,23 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import ratelimit
-from app.db.base import utcnow
-from app.db.enums import AuditAction, DoctorApplicationStatus, UserStatus
-from app.db.models import AuditLog, Doctor, DoctorApplication, Notification, User
+from app.db.base import new_id, utcnow
+from app.db.enums import (
+    AuditAction,
+    DoctorApplicationStatus,
+    DoctorDocumentKind,
+    UserStatus,
+)
+from app.db.models import (
+    AuditLog,
+    Doctor,
+    DoctorApplication,
+    DoctorApplicationDocument,
+    Notification,
+    User,
+)
 from app.modules.auth import twofactor
+from app.modules.doctor_applications.service import REQUIRED_DOCUMENTS
 from tests.conftest import requires_db
 
 pytestmark = requires_db
@@ -45,6 +62,10 @@ KNOWN_CODE = "424242"
 ADMIN = "admin@example.com"
 DEMO_PASSWORD = "Demo@Pass123"
 
+#: The en dash a year range takes, written as an escape because in source an
+#: en dash and a hyphen look alike.
+DASH = "\u2013"
+
 #: A complete application. Anything missing from this is what ``submit`` refuses.
 COMPLETE: dict[str, Any] = {
     "fullName": "Ayesha Iqbal",
@@ -53,7 +74,14 @@ COMPLETE: dict[str, Any] = {
     "address": "12 Jail Road, Lahore",
     "registrationNumber": "",  # filled per test so it stays unique
     "specialization": "Cardiology",
-    "qualifications": ["MBBS, King Edward Medical University", "FCPS Cardiology"],
+    "qualifications": [
+        {
+            "title": "MBBS, King Edward Medical University",
+            "startYear": 2015,
+            "endYear": 2020,
+        },
+        {"title": "FCPS Cardiology", "startYear": 2021, "endYear": 2025},
+    ],
     "yearsExperience": 9,
     "previousHospital": "Services Hospital",
     "consultationFee": 2500,
@@ -70,6 +98,43 @@ def unique_registration() -> str:
     return f"PMC-TEST-{uuid.uuid4().hex[:10].upper()}"
 
 
+async def _attach_documents(
+    db: AsyncSession, application_id: str, kinds: tuple[DoctorDocumentKind, ...]
+) -> None:
+    """The credential rows an upload would have written, without the upload.
+
+    ``POST .../documents`` puts a real object in a real bucket, and none of these
+    tests is about storage — so the row is written straight to the table and its
+    storage path names a file that was never created. They cascade away with the
+    application, which cascades with the applicant.
+    """
+    for kind in kinds:
+        db.add(
+            DoctorApplicationDocument(
+                id=new_id(),
+                application_id=application_id,
+                kind=kind,
+                storage_path=f"{application_id}/{kind}.pdf",
+                file_name=f"{str(kind).lower()}.pdf",
+                mime_type="application/pdf",
+                file_size=2048,
+            )
+        )
+    await db.commit()
+
+
+async def _drop_documents(
+    db: AsyncSession, application_id: str, kind: DoctorDocumentKind
+) -> None:
+    await db.execute(
+        delete(DoctorApplicationDocument).where(
+            DoctorApplicationDocument.application_id == application_id,
+            DoctorApplicationDocument.kind == kind,
+        )
+    )
+    await db.commit()
+
+
 @pytest.fixture(autouse=True)
 def _fresh_rate_limits() -> None:
     ratelimit.reset()
@@ -84,11 +149,16 @@ def sign_in(client: TestClient, email: str, password: str) -> dict[str, Any]:
 
 @pytest.fixture
 async def applicant(client: TestClient, db: AsyncSession) -> AsyncIterator[dict[str, Any]]:
-    """A verified doctor account holding an empty DRAFT application, signed in.
+    """A verified doctor account holding a DRAFT application, signed in.
 
     Created through the real registration and verification endpoints rather than
     by writing rows, so what these tests drive is the flow an applicant actually
     walks.
+
+    The draft arrives with all four credential documents attached, because
+    submission refuses without them and most tests here are about what happens
+    *after* a submission. The tests that are about the documents take them away
+    again.
     """
     email = unique_email()
     created = client.post(
@@ -115,20 +185,29 @@ async def applicant(client: TestClient, db: AsyncSession) -> AsyncIterator[dict[
     assert verified.status_code == 200, verified.text
 
     user_id = verified.json()["data"]["user"]["id"]
-    yield {"email": email, "id": user_id, "registration": unique_registration()}
 
-    client.cookies.clear()
+    # Reading it is what creates it, and the documents need its id.
+    assert client.get("/api/doctor/application").status_code == 200
     application_id = (
         await db.execute(select(DoctorApplication.id).where(DoctorApplication.user_id == user_id))
-    ).scalar_one_or_none()
-    if application_id:
-        # The administrator's notifications hang off *their* user row, so they
-        # do not cascade with the applicant and have to go explicitly.
-        await db.execute(
-            delete(Notification).where(
-                Notification.link.like(f"%doctor-applications/{application_id}")
-            )
+    ).scalar_one()
+    await _attach_documents(db, application_id, REQUIRED_DOCUMENTS)
+
+    yield {
+        "email": email,
+        "id": user_id,
+        "applicationId": application_id,
+        "registration": unique_registration(),
+    }
+
+    client.cookies.clear()
+    # The administrator's notifications hang off *their* user row, so they do not
+    # cascade with the applicant and have to go explicitly.
+    await db.execute(
+        delete(Notification).where(
+            Notification.link.like(f"%doctor-applications/{application_id}")
         )
+    )
     await db.execute(delete(User).where(User.id == user_id))
     await db.commit()
 
@@ -205,10 +284,269 @@ class TestTheDraft:
         response = client.post("/api/doctor/application/submit")
         assert response.status_code == 422
         body = response.json()["error"]
-        assert body["code"] == "PROFILE_INCOMPLETE"
+        assert body["code"] == "VALIDATION_ERROR"
         assert {detail["field"] for detail in body["details"]} >= {
             "registrationNumber",
             "nationalId",
+        }
+
+
+class TestQualificationYears:
+    """A qualification is a title and the years it spans, both years optional.
+
+    Optional because the form is assembled over several sittings: somebody types
+    the degree before they remember the dates, and a draft save that refuses
+    half a qualification is a draft that gets abandoned.
+
+    Which is why **the draft accepts any year and submission judges it.** The
+    form autosaves on a debounce, so a person typing 2015 sends 2, then 20, then
+    201; refusing those saves would lose their work over a number they were
+    halfway through entering.
+    """
+
+    @pytest.mark.parametrize(
+        ("entry", "expected"),
+        [
+            (
+                {"title": "MBBS, King Edward", "startYear": 2015, "endYear": 2020},
+                {"title": "MBBS, King Edward", "startYear": 2015, "endYear": 2020},
+            ),
+            # A course somebody is still on: a start and no end.
+            (
+                {"title": "FCPS Cardiology", "startYear": 2024},
+                {"title": "FCPS Cardiology", "startYear": 2024, "endYear": None},
+            ),
+            # Remembered as a year of completion and nothing else.
+            (
+                {"title": "Diploma in Cardiology", "endYear": 2022},
+                {"title": "Diploma in Cardiology", "startYear": None, "endYear": 2022},
+            ),
+            # The degree typed before the dates were remembered at all.
+            (
+                {"title": "MRCP"},
+                {"title": "MRCP", "startYear": None, "endYear": None},
+            ),
+            # Explicit nulls mean the same thing as omitting them.
+            (
+                {"title": "MRCP", "startYear": None, "endYear": None},
+                {"title": "MRCP", "startYear": None, "endYear": None},
+            ),
+        ],
+    )
+    def test_a_draft_saves_whatever_years_it_was_given(
+        self, client: TestClient, applicant: dict, entry: dict, expected: dict
+    ) -> None:
+        response = client.put("/api/doctor/application", json={"qualifications": [entry]})
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["qualifications"] == [expected]
+
+    @pytest.mark.parametrize("half_typed", [2, 20, 201])
+    def test_a_year_still_being_typed_does_not_lose_the_draft(
+        self, client: TestClient, applicant: dict, half_typed: int
+    ) -> None:
+        """The regression this guards: an autosave refused mid-keystroke.
+
+        Somebody entering 2015 sends 2, then 20, then 201 on the way there. Each
+        one has to save, or the banner says their draft was lost because they
+        typed a digit.
+        """
+        response = client.put(
+            "/api/doctor/application",
+            json={"qualifications": [{"title": "MBBS", "startYear": half_typed}]},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["qualifications"][0]["startYear"] == half_typed
+
+    @pytest.mark.parametrize("year", [1949, 1800, 0, 3000])
+    def test_a_year_outside_the_plausible_range_is_refused_at_submit(
+        self, client: TestClient, applicant: dict, year: int
+    ) -> None:
+        saved = client.put(
+            "/api/doctor/application",
+            json={
+                **_complete_payload(applicant["registration"]),
+                "qualifications": [{"title": "MBBS", "startYear": year}],
+            },
+        )
+        # Saving it is fine. Submitting it is not.
+        assert saved.status_code == 200, saved.text
+
+        response = client.post("/api/doctor/application/submit")
+        assert response.status_code == 422, response.text
+        body = response.json()["error"]
+        assert body["code"] == "VALIDATION_ERROR"
+        # Named for the step the client sends them back to.
+        assert [detail["field"] for detail in body["details"]] == ["qualifications"]
+        # It has to say what a year may be, and which entry is wrong.
+        assert "1950" in body["details"][0]["message"]
+        assert "MBBS" in body["details"][0]["message"]
+
+    def test_a_year_far_enough_ahead_for_a_course_in_progress_is_accepted(
+        self, client: TestClient, applicant: dict
+    ) -> None:
+        """People list the degree they are three years into finishing."""
+        ends = datetime.now(UTC).year + 4
+        saved = client.put(
+            "/api/doctor/application",
+            json={
+                **_complete_payload(applicant["registration"]),
+                "qualifications": [{"title": "FCPS Cardiology", "endYear": ends}],
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["data"]["qualifications"][0]["endYear"] == ends
+        assert client.post("/api/doctor/application/submit").status_code == 200
+
+    def test_a_qualification_that_ends_before_it_starts_is_refused_at_submit(
+        self, client: TestClient, applicant: dict
+    ) -> None:
+        saved = client.put(
+            "/api/doctor/application",
+            json={
+                **_complete_payload(applicant["registration"]),
+                "qualifications": [{"title": "MBBS", "startYear": 2020, "endYear": 2015}],
+            },
+        )
+        assert saved.status_code == 200, saved.text
+
+        response = client.post("/api/doctor/application/submit")
+        assert response.status_code == 422
+        body = response.json()["error"]
+        assert body["code"] == "VALIDATION_ERROR"
+        assert body["details"][0]["field"] == "qualifications"
+        assert "start year" in body["details"][0]["message"].lower()
+
+    def test_a_bare_string_qualification_is_refused(
+        self, client: TestClient, applicant: dict
+    ) -> None:
+        """The shape changed; a client still sending the old one must hear so."""
+        response = client.put(
+            "/api/doctor/application",
+            json={"qualifications": ["MBBS, King Edward Medical University"]},
+        )
+        assert response.status_code == 422
+
+    def test_a_title_is_still_required(self, client: TestClient, applicant: dict) -> None:
+        response = client.put(
+            "/api/doctor/application",
+            json={"qualifications": [{"startYear": 2015, "endYear": 2020}]},
+        )
+        assert response.status_code == 422
+
+    async def test_the_reviewer_sees_the_years(
+        self, client: TestClient, db: AsyncSession, applicant: dict
+    ) -> None:
+        """Unchanged objects, not a rendered string — the years are the point."""
+        _submit_complete(client, applicant)
+
+        sign_in(client, ADMIN, DEMO_PASSWORD)
+        response = client.get(f"/api/admin/doctor-applications/{applicant['applicationId']}")
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["qualifications"][0] == {
+            "title": "MBBS, King Edward Medical University",
+            "startYear": 2015,
+            "endYear": 2020,
+        }
+        client.cookies.clear()
+
+    async def test_approval_writes_half_known_dates_without_inventing_the_rest(
+        self, client: TestClient, db: AsyncSession, applicant: dict
+    ) -> None:
+        saved = client.put(
+            "/api/doctor/application",
+            json={
+                **_complete_payload(applicant["registration"]),
+                "qualifications": [
+                    {"title": "MBBS", "startYear": 2010, "endYear": 2015},
+                    {"title": "FCPS Cardiology", "startYear": 2016},
+                    {"title": "Diploma", "endYear": 2019},
+                    {"title": "MRCP"},
+                ],
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        assert client.post("/api/doctor/application/submit").status_code == 200
+
+        sign_in(client, ADMIN, DEMO_PASSWORD)
+        approved = client.post(
+            f"/api/admin/doctor-applications/{applicant['applicationId']}/approve", json={}
+        )
+        assert approved.status_code == 200, approved.text
+        client.cookies.clear()
+
+        doctor = (
+            await db.execute(select(Doctor).where(Doctor.user_id == applicant["id"]))
+        ).scalar_one()
+        assert doctor.qualifications == (
+            f"MBBS (2010{DASH}2015), FCPS Cardiology (2016{DASH}), "
+            "Diploma (2019), MRCP"
+        )
+
+
+class TestTheRequiredDocuments:
+    """All four kinds, or there is nothing to review.
+
+    An administrator cannot verify an identity or a qualification without the
+    files, so an application without them is not reviewable and should not
+    exist. The accepted cost is that a storage outage now blocks submission
+    rather than only delaying a decision.
+    """
+
+    @pytest.mark.parametrize("kind", list(DoctorDocumentKind))
+    async def test_submission_is_refused_while_one_kind_is_missing(
+        self, client: TestClient, db: AsyncSession, applicant: dict, kind: DoctorDocumentKind
+    ) -> None:
+        await _drop_documents(db, applicant["applicationId"], kind)
+
+        saved = client.put(
+            "/api/doctor/application", json=_complete_payload(applicant["registration"])
+        )
+        assert saved.status_code == 200, saved.text
+
+        response = client.post("/api/doctor/application/submit")
+        assert response.status_code == 422, response.text
+        body = response.json()["error"]
+        assert body["code"] == "VALIDATION_ERROR"
+        # Named, so the client can point at the step that is short a file.
+        fields = {detail["field"] for detail in body["details"]}
+        assert fields == {str(kind)}
+        assert all(detail["message"] for detail in body["details"])
+
+        row = await _application(db, applicant["id"])
+        assert row.status == DoctorApplicationStatus.DRAFT
+
+    async def test_an_application_with_no_documents_at_all_names_all_four(
+        self, client: TestClient, db: AsyncSession, applicant: dict
+    ) -> None:
+        for kind in DoctorDocumentKind:
+            await _drop_documents(db, applicant["applicationId"], kind)
+
+        client.put("/api/doctor/application", json=_complete_payload(applicant["registration"]))
+        response = client.post("/api/doctor/application/submit")
+        assert response.status_code == 422
+        fields = {detail["field"] for detail in response.json()["error"]["details"]}
+        assert fields == {str(kind) for kind in REQUIRED_DOCUMENTS}
+
+    async def test_a_missing_document_is_reported_beside_a_missing_field(
+        self, client: TestClient, db: AsyncSession, applicant: dict
+    ) -> None:
+        """One refusal listing everything, not two attempts to find it all out."""
+        await _drop_documents(db, applicant["applicationId"], DoctorDocumentKind.PHOTO)
+        client.put("/api/doctor/application", json={"specialization": "Cardiology"})
+
+        response = client.post("/api/doctor/application/submit")
+        assert response.status_code == 422
+        fields = {detail["field"] for detail in response.json()["error"]["details"]}
+        assert "PHOTO" in fields
+        assert "registrationNumber" in fields
+
+    async def test_submission_succeeds_once_all_four_are_present(
+        self, client: TestClient, db: AsyncSession, applicant: dict
+    ) -> None:
+        data = _submit_complete(client, applicant)
+        assert data["status"] == "SUBMITTED"
+        assert {document["kind"] for document in data["documents"]} == {
+            str(kind) for kind in REQUIRED_DOCUMENTS
         }
 
 
@@ -489,7 +827,11 @@ class TestReview:
         assert doctor.years_experience == 9
         assert float(doctor.consultation_fee) == 2500
         assert doctor.availability[0]["startTime"] == "09:00"
-        assert "MBBS" in (doctor.qualifications or "")
+        # The free-text column carries the years across, en dash and all.
+        assert doctor.qualifications == (
+            f"MBBS, King Edward Medical University (2015{DASH}2020), "
+            f"FCPS Cardiology (2021{DASH}2025)"
+        )
 
         user = (await db.execute(select(User).where(User.id == applicant["id"]))).scalar_one()
         await db.refresh(user)

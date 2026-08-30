@@ -1421,6 +1421,30 @@ export interface ApplicationDocument {
 }
 
 /**
+ * One line of a doctor's education, with the years it ran.
+ *
+ * The years are as optional as everything else in a draft: somebody types the
+ * degree before they remember the dates, and an autosave must never be refused
+ * for it. So a year that has not been typed travels as `null`, exactly like a
+ * blank text field, and never as `0` or an empty string.
+ */
+export interface QualificationEntry {
+  title: string;
+  startYear: number | null;
+  endYear: number | null;
+}
+
+/**
+ * What a stored qualification may look like on the way *in*.
+ *
+ * Qualifications used to be bare strings. The backend migration rewrites them
+ * into objects, but a page that was open across the deploy will read one shape
+ * while it was written the other, so reading stays tolerant of both. Writing is
+ * not: what the form sends is always an object.
+ */
+export type StoredQualification = QualificationEntry | string;
+
+/**
  * Everything a doctor fills in, all optional until they submit.
  *
  * `null` is meaningful and distinct from omission: an omitted key leaves the
@@ -1436,7 +1460,7 @@ export interface DoctorApplicationDraft {
   registrationNumber?: string | null;
   specialization?: string | null;
   departmentId?: string | null;
-  qualifications?: string[];
+  qualifications?: QualificationEntry[];
   yearsExperience?: number | null;
   previousHospital?: string | null;
   consultationFee?: number | null;
@@ -1448,7 +1472,15 @@ export interface DoctorApplicationDraft {
   }>;
 }
 
-export interface DoctorApplication extends DoctorApplicationDraft {
+/**
+ * The same draft as it comes back from the server — tolerant where the write
+ * side is strict, because only reading has to cope with the old shape.
+ */
+export interface StoredApplicationDraft extends Omit<DoctorApplicationDraft, "qualifications"> {
+  qualifications?: StoredQualification[];
+}
+
+export interface DoctorApplication extends StoredApplicationDraft {
   id: string;
   status: ApplicationStatus;
   submittedAt: string | null;

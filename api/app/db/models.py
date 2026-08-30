@@ -324,11 +324,14 @@ class DoctorApplication(Base):
     department_id: Mapped[str | None] = mapped_column(
         "departmentId", Text, ForeignKey("departments.id", ondelete="SET NULL", onupdate="CASCADE")
     )
-    #: A list of strings. ``Doctor.qualifications`` is free text because that is
-    #: what the original schema had; an application collects them one at a time
-    #: so the review screen can show them as a list, and they are joined on
-    #: approval.
-    qualifications: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    #: ``[{ title, startYear, endYear }]``, the years nullable because a draft is
+    #: assembled over several sittings. ``Doctor.qualifications`` is free text
+    #: because that is what the original schema had; an application collects them
+    #: one at a time so the review screen can show each degree against the years
+    #: it spans, and they are rendered into that one line on approval.
+    qualifications: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, nullable=False
+    )
     years_experience: Mapped[int | None] = mapped_column("yearsExperience", Integer)
     previous_hospital: Mapped[str | None] = mapped_column("previousHospital", Text)
     consultation_fee: Mapped[Decimal | None] = mapped_column("consultationFee", Numeric(10, 2))

@@ -37,6 +37,8 @@ import {
   type ApplicationStatus,
   type DoctorApplication,
   type DoctorApplicationDraft,
+  type QualificationEntry,
+  type StoredQualification,
 } from "@/lib/api";
 import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
@@ -138,6 +140,47 @@ export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * One stored qualification, whichever shape it is in.
+ *
+ * A row written before the years existed is a bare string. Both the applicant's
+ * review and the administrator's drawer read whatever is stored, so both go
+ * through here rather than each guessing at the shape.
+ */
+export function normalizeQualification(entry: StoredQualification): QualificationEntry {
+  if (typeof entry === "string") return { title: entry, startYear: null, endYear: null };
+  return {
+    title: entry.title ?? "",
+    startYear: entry.startYear ?? null,
+    endYear: entry.endYear ?? null,
+  };
+}
+
+/**
+ * "MBBS, King Edward Medical University · 2015–2020".
+ *
+ * Degrades on its own, and never hides an entry for want of a date: a passing
+ * year alone is that year, a start year alone keeps its en dash and stays open
+ * — which is what a course somebody is still on actually is — and an entry with
+ * neither is simply its title. The dash is an en dash throughout, because a
+ * span of years is a range and not a subtraction. The server renders the same
+ * three cases the same way when it flattens the list onto a doctor's record.
+ */
+export function formatQualification(entry: StoredQualification): string {
+  const { title, startYear, endYear } = normalizeQualification(entry);
+  const name = title.trim();
+  const years =
+    startYear !== null && endYear !== null
+      ? `${startYear}–${endYear}`
+      : startYear !== null
+        ? `${startYear}–`
+        : endYear !== null
+          ? String(endYear)
+          : "";
+  if (!years) return name;
+  return name ? `${name} · ${years}` : years;
 }
 
 export function formatDateTime(iso: string): string {

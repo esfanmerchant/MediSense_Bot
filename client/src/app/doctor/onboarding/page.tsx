@@ -25,6 +25,7 @@ import {
   ApiError,
   doctorApplication,
   type ApplicationDocument,
+  type ApplicationDocumentKind,
   type ApplicationStatus,
   type DoctorApplication,
 } from "@/lib/api";
@@ -34,6 +35,7 @@ import { useSession } from "@/lib/session";
 import { StepDocuments } from "@/components/doctorApplication/DocumentsStep";
 import {
   DraftIndicator,
+  KIND_META,
   Notice,
   RedirectNotice,
   STEPS,
@@ -49,11 +51,48 @@ import {
   StepReview,
   emptyForm,
   formFrom,
+  missingDocumentKinds,
   toDraft,
   type FormState,
 } from "@/components/doctorApplication/steps";
 
-/** Which step a server-side field error belongs to. */
+/**
+ * Which step a server-side field error belongs to.
+ *
+ * A missing document comes back as one detail per kind, with the kind itself as
+ * the field — `REGISTRATION_CERTIFICATE`, not `documents` — so each of the four
+ * names has to lead back to step four on its own.
+ */
+/**
+ * The name a person recognises, for a field the server named in its own terms.
+ *
+ * A missing photograph came back as `PHOTO` in monospace, which is a column
+ * name, not a thing anyone uploaded. The document kinds already carry a
+ * bilingual label beside their dropzone; this is the same one, so the error and
+ * the box it points at say the same words. Anything unmapped falls back to the
+ * server's name — an unfamiliar word beats no word.
+ */
+function fieldLabel(field: string, tr: (en: string, ur: string) => string): string {
+  const kind = KIND_META[field as ApplicationDocumentKind];
+  if (kind) return tr(...kind.label);
+  const known: Record<string, [string, string]> = {
+    fullName: ["Full name", "Poora naam"],
+    phone: ["Phone number", "Phone number"],
+    nationalId: ["National ID (CNIC)", "Shanakhti card (CNIC)"],
+    address: ["Address", "Pata"],
+    registrationNumber: ["Registration number", "Registration number"],
+    specialization: ["Specialization", "Specialization"],
+    departmentId: ["Department", "Department"],
+    yearsExperience: ["Years of experience", "Tajruba (saal)"],
+    previousHospital: ["Previous hospital", "Pichla hospital"],
+    consultationFee: ["Consultation fee", "Consultation fee"],
+    qualifications: ["Qualifications", "Taleemi liyaqat"],
+    documents: ["Documents", "Documents"],
+  };
+  const label = known[field];
+  return label ? tr(...label) : field;
+}
+
 const FIELD_STEP: Record<string, number> = {
   fullName: 0,
   phone: 0,
@@ -67,6 +106,10 @@ const FIELD_STEP: Record<string, number> = {
   consultationFee: 1,
   qualifications: 2,
   documents: 3,
+  REGISTRATION_CERTIFICATE: 3,
+  DEGREE: 3,
+  NATIONAL_ID: 3,
+  PHOTO: 3,
 };
 
 export default function DoctorOnboardingPage() {
@@ -441,7 +484,7 @@ function Wizard() {
                               {submitError.details.map((detail, index) => (
                                 <li key={`${detail.field ?? "general"}-${index}`}>
                                   {detail.field && (
-                                    <span className="font-mono text-xs">{detail.field}: </span>
+                                    <span className="font-semibold">{fieldLabel(detail.field, tr)}: </span>
                                   )}
                                   {detail.message}
                                 </li>
@@ -465,6 +508,11 @@ function Wizard() {
               nextLabel={
                 step === 3 ? tr("Review", "Dekh lein") : tr("Continue", "Aage barhein")
               }
+              // The one gate in the flow. All four documents are required, the
+              // server refuses a submission without them, and the step itself
+              // names what is still missing — so this button is never a dead
+              // end, only the last thing that has not been earned yet.
+              nextDisabled={step === 3 && missingDocumentKinds(documents).length > 0}
             />
           )}
           {step === 4 && (

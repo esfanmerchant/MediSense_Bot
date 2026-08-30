@@ -38,7 +38,7 @@ import {
   useDocumentViewer,
   useThumbnails,
 } from "@/components/doctorApplication/shared";
-import { StepHeading } from "@/components/doctorApplication/steps";
+import { StepHeading, missingDocumentKinds } from "@/components/doctorApplication/steps";
 
 /** A photograph is a photograph; the rest may be a scan or a PDF. */
 function acceptFor(kind: ApplicationDocumentKind): string {
@@ -65,6 +65,12 @@ export function StepDocuments({
 
   const { urls, adopt } = useThumbnails(documents, doctorApplication.documentUrl);
   const viewer = useDocumentViewer(doctorApplication.documentUrl);
+
+  // All four are required, and the server refuses a submission that is short of
+  // one. Saying which ones are missing, here, is what keeps the disabled
+  // Continue button from being a dead end.
+  const missing = missingDocumentKinds(documents);
+  const missingNames = missing.map((kind) => tr(...KIND_META[kind].label)).join(", ");
 
   const setState = (kind: ApplicationDocumentKind, next: Partial<KindState>) =>
     setStates((current) => ({
@@ -164,10 +170,17 @@ export function StepDocuments({
                   </h3>
                   <p className="text-xs text-muted">{tr(...meta.hint)}</p>
                 </div>
-                {files.length > 0 && (
+                {files.length > 0 ? (
                   <Badge tone="good">
                     <Icon name="check" className="text-[13px]" />
                     {tr("Uploaded", "Ho gaya")}
+                  </Badge>
+                ) : (
+                  // Neutral, not a warning: nothing is wrong yet on a form
+                  // somebody has only just opened. It states the requirement.
+                  <Badge tone="neutral">
+                    <Icon name="asterisk" className="text-[13px]" />
+                    {tr("Required", "Zaroori")}
                   </Badge>
                 )}
               </header>
@@ -317,6 +330,32 @@ export function StepDocuments({
           {viewer.error}
         </p>
       )}
+
+      {/* Why the Continue button will not press. A live region, so finishing
+          the last upload announces itself rather than silently unlocking. */}
+      <div role="status" className="mt-5">
+        {missing.length > 0 ? (
+          <p className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm font-medium text-warning">
+            <Icon name="folder_open" className="mt-px shrink-0 text-[18px]" />
+            <span>
+              {tr(
+                `All four documents are needed before you can continue. Still to upload: ${missingNames}.`,
+                `Aage barhne se pehle chaaron documents darkaar hain. Abhi upload karni hain: ${missingNames}.`,
+              )}
+            </span>
+          </p>
+        ) : (
+          <p className="flex items-center gap-2 px-1 text-sm font-medium text-strong">
+            <span
+              aria-hidden
+              className="pop-scale grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-white"
+            >
+              <Icon name="check" className="text-[14px]" />
+            </span>
+            {tr("All four documents are here.", "Chaaron documents mojood hain.")}
+          </p>
+        )}
+      </div>
 
       <AnimatePresence>
         {viewer.viewing && (

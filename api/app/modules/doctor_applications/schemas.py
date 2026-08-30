@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -11,12 +11,37 @@ from app.modules.appointments.schedule import AvailabilityWindow
 
 _PHONE = re.compile(r"^\+?[\d\s-]{7,20}$")
 
-#: One line of a qualification list — "MBBS, King Edward Medical University".
-Qualification = Annotated[str, Field(min_length=1, max_length=200)]
-
 
 class _Base(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
+
+
+class Qualification(_Base):
+    """One line of a qualification list, and the years it spans.
+
+    Both years are optional, nullable, and **deliberately unconstrained here**.
+    This form autosaves on a debounce while somebody is typing, so a person
+    entering 2015 sends 2, then 20, then 201 — and a range check on the field
+    would turn each of those keystrokes into a refused save and a banner saying
+    the draft was lost. That is the failure this whole model is shaped to avoid:
+    nothing is required until submission, and a year is not an exception.
+
+    So the draft takes any integer, and ``service.qualification_issues`` asks
+    whether these are real years once, at submit, alongside every other
+    completeness question. Do not move the check back onto the field.
+    """
+
+    title: Annotated[str, Field(min_length=1, max_length=200)]
+    start_year: int | None = Field(default=None, alias="startYear")
+    end_year: int | None = Field(default=None, alias="endYear")
+
+    def as_stored(self) -> dict[str, Any]:
+        """The JSONB shape held on ``DoctorApplication.qualifications``.
+
+        Written in the same camelCase the API speaks, so the row a reviewer
+        reads and the JSON a client posted are the same object.
+        """
+        return {"title": self.title, "startYear": self.start_year, "endYear": self.end_year}
 
 
 class ApplicationUpdate(_Base):
@@ -43,9 +68,7 @@ class ApplicationUpdate(_Base):
     department_id: Annotated[str, Field(max_length=64)] | None = Field(
         default=None, alias="departmentId"
     )
-    qualifications: (
-        Annotated[list[Qualification], Field(max_length=20)] | None
-    ) = None
+    qualifications: Annotated[list[Qualification], Field(max_length=20)] | None = None
     years_experience: Annotated[int, Field(ge=0, le=70)] | None = Field(
         default=None, alias="yearsExperience"
     )

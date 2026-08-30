@@ -37,6 +37,7 @@ import {
   StatusChip,
   SummaryField,
   formatDateTime,
+  formatQualification,
   formatSize,
   useDocumentViewer,
   useEscapeShield,
@@ -431,12 +432,15 @@ export function ReviewDrawer({
                   <p className="text-sm italic text-faint">{tr("None given", "Koi nahi")}</p>
                 ) : (
                   <ul className="flex flex-wrap gap-2">
-                    {(current.qualifications ?? []).map((value, index) => (
+                    {/* Through the shared formatter, so the reviewer reads the
+                        line exactly as the applicant saw it — years and all,
+                        whichever shape the row was stored in. */}
+                    {(current.qualifications ?? []).map(formatQualification).map((line, index) => (
                       <li
-                        key={`${value}-${index}`}
+                        key={`${line}-${index}`}
                         className="border-gradient-fill rounded-full px-3 py-1 text-xs font-semibold text-strong"
                       >
-                        {value}
+                        {line}
                       </li>
                     ))}
                   </ul>

@@ -1173,7 +1173,7 @@ function SymptomCard({
       <div className="flex items-start gap-3">
         <span
           aria-hidden
-          className="bg-gradient-brand mt-5 grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white shadow-sm"
+          className="mt-5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-bold text-white shadow-sm"
         >
           {index + 1}
         </span>

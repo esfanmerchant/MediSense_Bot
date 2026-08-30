@@ -544,7 +544,7 @@ export function Hero({ primaryHref, primaryLabel }: { primaryHref: string; prima
               >
                 <span
                   aria-hidden
-                  className="bg-gradient-brand grid h-6 w-6 shrink-0 place-items-center rounded-full text-white shadow-sm"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-white shadow-sm"
                 >
                   <Icon name="check" className="text-[15px]" />
                 </span>

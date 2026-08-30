@@ -28,6 +28,16 @@ import {
 
 import { Icon } from "@/components/Icon";
 
+/**
+ * Small confirmation marks are solid, never the ramp.
+ *
+ * The 135° gradient needs room to read as a gradient. Inside a 20–36px circle
+ * it only ever shows its two ends, so a tick comes out royal blue on one edge
+ * and teal on the other — which reads as a rendering fault rather than as a
+ * brand. Ticks, checkboxes, switch tracks and step circles therefore take the
+ * brand blue flat; the ramp stays where it has the space to be itself: buttons,
+ * panels, headlines, the large success mark.
+ */
 export function cx(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(" ");
 }
@@ -638,7 +648,7 @@ export function Checkbox({
       <input type="checkbox" className="peer sr-only" {...props} />
       <span
         aria-hidden
-        className="check-box mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border-2 border-line-strong bg-card transition-[border-color,background-color,box-shadow] duration-200 peer-checked:border-transparent peer-checked:bg-gradient-brand peer-focus-visible:shadow-focus group-hover:border-primary"
+        className="check-box mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border-2 border-line-strong bg-card transition-[border-color,background-color,box-shadow] duration-200 peer-checked:border-transparent peer-checked:bg-primary peer-focus-visible:shadow-focus group-hover:border-primary"
       >
         <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none">
           <path

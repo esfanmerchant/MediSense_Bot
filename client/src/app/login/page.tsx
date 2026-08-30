@@ -102,7 +102,7 @@ function DeviceChoice({
               {active && (
                 <span
                   aria-hidden
-                  className="bg-gradient-brand pop-scale absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full text-white shadow-sm ring-2 ring-card"
+                  className="pop-scale absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-primary text-white shadow-sm ring-2 ring-card"
                 >
                   <Icon name="check" className="text-[13px]" />
                 </span>

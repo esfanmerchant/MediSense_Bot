@@ -243,7 +243,7 @@ export function Switch({
         className={cx(
           "relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-          checked ? "bg-gradient-brand" : "bg-line-strong",
+          checked ? "bg-primary" : "bg-line-strong",
         )}
       >
         <motion.span
@@ -355,8 +355,9 @@ export function Stepper({
                 "relative z-10 grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 text-sm font-bold transition-colors",
                 reachable &&
                   "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-                done && "bg-gradient-brand border-transparent text-white",
-                active && "border-transparent bg-gradient-brand text-white shadow-glow",
+                // Solid, not the ramp: see the note on `checkFill` in ui.tsx.
+                done && "border-transparent bg-primary text-white",
+                active && "border-transparent bg-primary text-white shadow-glow",
                 !done && !active && "border-line-strong bg-card text-faint",
               )}
             >

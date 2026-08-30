@@ -59,6 +59,14 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("ai_not_configured", detail="chatbot and symptom analysis disabled")
     if not settings.email_configured:
         logger.warning("email_not_configured", detail="notifications will be logged, not sent")
+    else:
+        # Which mailbox this process will send from, said once at startup.
+        # Settings are read when the process starts, so a `.env` edited after
+        # that changes nothing until a restart — and the readiness probe
+        # cannot tell the difference, because "a user and a password are set"
+        # is true of the old ones too. One line here turns an invisible stale
+        # process into an obvious one.
+        logger.info("email_ready", sender=settings.SMTP_USER, host=settings.SMTP_HOST)
 
     # Email delivery and appointment reminders run on a background loop rather
     # than inside requests, so a slow mail server delays a message instead of a

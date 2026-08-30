@@ -20,10 +20,10 @@
 import { useId } from "react";
 
 import { Icon } from "@/components/Icon";
-import { GradientText } from "@/components/brand/GradientText";
+import { cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 
-import { SectionHead, Shell, useInView } from "./parts";
+import { SectionHead, Shell, useStagger } from "./parts";
 
 /** A run, a jog to a node, a run — alternating above and below the line. */
 const SEGMENT_UP = "M0 22 H30 L38 8 H62 L70 22 H100";
@@ -79,7 +79,7 @@ function Connector({ index, drawn }: { index: number; drawn: boolean }) {
 
 export function HowItWorks() {
   const tr = useTr();
-  const [ref, drawn] = useInView<HTMLOListElement>(0.15);
+  const { ref, className, seen: drawn } = useStagger<HTMLOListElement>(0.15);
 
   const steps: { icon: string; title: string; body: string }[] = [
     {
@@ -125,23 +125,21 @@ export function HowItWorks() {
   ];
 
   return (
-    <section id="kaise" className="scroll-mt-24 py-24">
-      <Shell>
+    <section id="kaise" className="relative scroll-mt-24 overflow-hidden py-24">
+      <Shell className="relative">
         <SectionHead
           eyebrow={tr("How it works", "Kaise chalta hai")}
-          title={
-            <>
-              {tr("How this", "Yeh kaise")}{" "}
-              <GradientText>{tr("actually works", "kaam karta hai")}</GradientText>
-            </>
-          }
+          title={[
+            tr("How this", "Yeh kaise"),
+            { text: tr("actually works", "kaam karta hai"), gradient: true },
+          ]}
           lede={tr(
             "One sentence from you, and it is already where it needs to be by the time you sit down.",
             "Aap ka ek jumla — aur baithne se pehle hi woh apni sahi jagah pahunch chuka hota hai.",
           )}
         />
 
-        <ol ref={ref} className="relative mt-14 grid gap-6 md:grid-cols-5">
+        <ol ref={ref} className={cx("relative mt-14 grid gap-6 md:grid-cols-5", className)}>
           {steps.map((step, index) => (
             <li key={step.title} className="relative flex gap-4 md:flex-col md:gap-0">
               {index < steps.length - 1 && <Connector index={index} drawn={drawn} />}
@@ -159,9 +157,12 @@ export function HowItWorks() {
                 />
               )}
 
+              {/* Each step arrives just behind the trace that reaches it, so
+                  the eye follows the route rather than five boxes at once. */}
               <span
                 aria-hidden
-                className="bg-gradient-brand relative z-10 grid h-14 w-14 shrink-0 place-items-center rounded-2xl p-[2px] shadow-card"
+                className="bg-gradient-brand ms-pop relative z-10 grid h-14 w-14 shrink-0 place-items-center rounded-2xl p-[2px] shadow-card"
+                style={{ animationDelay: `${index * 300}ms` }}
               >
                 <span className="grid h-full w-full place-items-center rounded-[14px] bg-card text-primary">
                   <Icon name={step.icon} filled className="text-[24px]" />
@@ -169,13 +170,24 @@ export function HowItWorks() {
               </span>
 
               <div className="md:mt-6">
-                <p className="mono-caps text-[0.6rem] text-faint">
+                <p
+                  className="ms-fade mono-caps text-[0.6rem] text-faint"
+                  style={{ animationDelay: `${index * 300 + 90}ms` }}
+                >
                   {tr("Step", "Qadam")} {String(index + 1).padStart(2, "0")}
                 </p>
-                <h3 className="mt-1.5 font-display text-[16px] font-bold leading-snug text-strong">
+                <h3
+                  className="ms-fade mt-1.5 font-display text-[16px] font-bold leading-snug text-strong"
+                  style={{ animationDelay: `${index * 300 + 150}ms` }}
+                >
                   {step.title}
                 </h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-muted">{step.body}</p>
+                <p
+                  className="ms-fade mt-1.5 text-sm leading-relaxed text-muted"
+                  style={{ animationDelay: `${index * 300 + 210}ms` }}
+                >
+                  {step.body}
+                </p>
               </div>
             </li>
           ))}

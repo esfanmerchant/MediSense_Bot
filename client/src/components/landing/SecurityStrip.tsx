@@ -17,10 +17,11 @@ import { Icon } from "@/components/Icon";
 import { CircuitNodes } from "@/components/brand/CircuitNodes";
 import { useTr } from "@/lib/lang";
 
-import { Reveal, Shell } from "./parts";
+import { Eyebrow, GradientRule, Parallax, Rise, Shell, SplitText, useStagger } from "./parts";
 
 export function SecurityStrip() {
   const tr = useTr();
+  const { ref: headRef, className: headMotion } = useStagger<HTMLDivElement>();
 
   const points: { icon: string; label: string; body: string }[] = [
     {
@@ -59,9 +60,11 @@ export function SecurityStrip() {
 
   return (
     <section id="hifazat" className="relative scroll-mt-24 overflow-hidden bg-[#071129] py-24">
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-50">
+      {/* The machine room's own field, lagging the scroll — the depth cue the
+          navy gets that a white section has to earn. */}
+      <Parallax speed={110} className="pointer-events-none absolute inset-x-0 -inset-y-20 opacity-50">
         <CircuitNodes density="med" tone="white" />
-      </div>
+      </Parallax>
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
@@ -72,26 +75,30 @@ export function SecurityStrip() {
       />
 
       <Shell className="relative">
-        <Reveal>
-          <p className="mono-caps inline-flex items-center gap-2 text-[0.7rem] text-[#5EEAD4]">
-            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#5EEAD4]" />
-            {tr("Security", "Hifazat")}
-          </p>
+        <div ref={headRef} className={headMotion}>
+          <Eyebrow tone="light">{tr("Security", "Hifazat")}</Eyebrow>
           <h2 className="mt-4 max-w-2xl font-display text-[2rem] font-bold leading-[1.12] text-white sm:text-[2.6rem]">
-            {tr("Built to be trusted with this", "Itni hifazat ke aap bharosa kar sakein")}
+            <SplitText
+              parts={[tr("Built to be trusted with this", "Itni hifazat ke aap bharosa kar sakein")]}
+              start={180}
+            />
           </h2>
-          <p className="mt-4 max-w-[56ch] text-[17px] leading-relaxed text-white/70">
+          <GradientRule className="mt-5 max-w-[7rem]" style={{ transitionDelay: "540ms" }} />
+          <p
+            className="ms-fade mt-5 max-w-[56ch] text-[17px] leading-relaxed text-white/70"
+            style={{ animationDelay: "620ms" }}
+          >
             {tr(
               "Specifics, because “bank-grade security” means nothing. Each of these is a property the system can be tested against, not a promise.",
               "Waade nahi, tafseelat — kyunke “bank jaisi security” ka koi matlab nahi hota. Neeche di gayi har baat aisi hai jise test kiya ja sakta hai.",
             )}
           </p>
-        </Reveal>
+        </div>
 
         <ul className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {points.map((point, index) => (
             <li key={point.label} className="h-full">
-              <Reveal delay={index * 90} className="h-full">
+              <Rise delay={index * 90} y={30} className="h-full">
                 <div className="glass-dark group h-full rounded-2xl p-5 transition-colors duration-300 hover:bg-white/[0.14]">
                   <span
                     aria-hidden
@@ -104,7 +111,7 @@ export function SecurityStrip() {
                   </h3>
                   <p className="mt-2 text-sm leading-relaxed text-white/65">{point.body}</p>
                 </div>
-              </Reveal>
+              </Rise>
             </li>
           ))}
         </ul>

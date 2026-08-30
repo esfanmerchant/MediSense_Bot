@@ -17,11 +17,10 @@
 
 import { Icon } from "@/components/Icon";
 import { EcgLine } from "@/components/brand/EcgLine";
-import { GradientText } from "@/components/brand/GradientText";
 import { cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 
-import { Reveal, SectionHead, Shell } from "./parts";
+import { Grain, Parallax, Rise, SectionHead, Shell } from "./parts";
 
 /* ------------------------------------------------------------------ */
 /* Tile shell                                                          */
@@ -46,7 +45,7 @@ function Tile({
   return (
     <article
       className={cx(
-        "hover-lift-sm group flex flex-col rounded-2xl border border-line bg-card p-6 shadow-card",
+        "hover-lift-sm ms-edge group flex flex-col overflow-hidden rounded-2xl border border-line bg-card p-6 shadow-card",
         className,
       )}
     >
@@ -198,16 +197,25 @@ export function Bento() {
   const tr = useTr();
 
   return (
-    <section id="kya-karta-hai" className="scroll-mt-24 border-y border-line bg-sunken py-24">
-      <Shell>
+    <section
+      id="kya-karta-hai"
+      className="relative scroll-mt-24 overflow-hidden border-y border-line bg-sunken py-24"
+    >
+      {/* The logo's circuit routing as a flat texture, drifting against the
+          scroll. It is the one thing that stops the sunken band reading as a
+          slightly greyer rectangle in light mode. */}
+      <Parallax speed={90} className="pointer-events-none absolute inset-0">
+        <div className="circuit-pattern-light absolute inset-x-0 -inset-y-16 opacity-70 dark:opacity-40" />
+      </Parallax>
+      <Grain />
+
+      <Shell className="relative">
         <SectionHead
           eyebrow={tr("Capabilities", "Salahiyatein")}
-          title={
-            <>
-              {tr("Everything a visit", "Ilaaj ka har qadam,")}{" "}
-              <GradientText>{tr("touches", "ek jagah")}</GradientText>
-            </>
-          }
+          title={[
+            tr("Everything a visit", "Ilaaj ka har qadam,"),
+            { text: tr("touches", "ek jagah"), gradient: true },
+          ]}
           lede={tr(
             "Not a folder of features — one path a patient actually walks, from booking to paying, with the clinical safety built into each step rather than bolted on.",
             "Yeh features ki fehrist nahi — woh rasta hai jo mareez sach mein tay karta hai, booking se bill tak. Aur hifazat har qadam ke andar bani hai, upar se lagai nahi gayi.",
@@ -215,7 +223,7 @@ export function Bento() {
         />
 
         <div className="mt-12 grid gap-5 md:grid-cols-3">
-          <Reveal className="md:col-span-2 md:row-span-2">
+          <Rise className="md:col-span-2 md:row-span-2" y={34}>
             <Tile
               className="h-full"
               demoClassName="min-h-[200px]"
@@ -235,9 +243,9 @@ export function Bento() {
                 />
               }
             />
-          </Reveal>
+          </Rise>
 
-          <Reveal delay={70}>
+          <Rise delay={70} y={34}>
             <Tile
               className="h-full"
               icon="mic"
@@ -250,9 +258,9 @@ export function Bento() {
                 <VoiceDemo caption={tr("Listening", "Sun raha hai")} />
               }
             />
-          </Reveal>
+          </Rise>
 
-          <Reveal delay={140}>
+          <Rise delay={140} y={34}>
             <Tile
               className="h-full"
               icon="document_scanner"
@@ -265,9 +273,9 @@ export function Bento() {
                 <OcrDemo caption={tr("Report", "Report")} />
               }
             />
-          </Reveal>
+          </Rise>
 
-          <Reveal delay={210}>
+          <Rise delay={210} y={34}>
             <Tile
               className="h-full"
               icon="monitor_heart"
@@ -280,9 +288,9 @@ export function Bento() {
                 <VitalsDemo caption={tr("Threshold breached", "Had paar ho gayi")} />
               }
             />
-          </Reveal>
+          </Rise>
 
-          <Reveal delay={280}>
+          <Rise delay={280} y={34}>
             <Tile
               className="h-full"
               icon="receipt_long"
@@ -302,9 +310,9 @@ export function Bento() {
                 />
               }
             />
-          </Reveal>
+          </Rise>
 
-          <Reveal delay={350}>
+          <Rise delay={350} y={34}>
             <Tile
               className="h-full"
               icon="policy"
@@ -317,7 +325,7 @@ export function Bento() {
                 <AuditDemo caption={tr("Append-only", "Sirf barhta hai")} />
               }
             />
-          </Reveal>
+          </Rise>
         </div>
       </Shell>
     </section>

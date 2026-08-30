@@ -36,17 +36,15 @@ export default function Home() {
 
   // Someone already signed in should be shown their own door, not a signup
   // form they will bounce off.
+  // Two words at most, everywhere. A call to action that has to be read is
+  // not a call to action; the sentence above it already did the arguing.
   const primaryHref = user ? homePathFor(user.role) : "/register";
   const heroLabel = loading
     ? "…"
     : user
-      ? tr("Go to your dashboard", "Apne dashboard par jayein")
-      : tr("Get started — free", "Shuru karein — bilkul muft");
-  const navLabel = loading
-    ? "…"
-    : user
       ? tr("Dashboard", "Dashboard")
       : tr("Get started", "Shuru karein");
+  const navLabel = heroLabel;
 
   return (
     <div className="min-h-screen bg-canvas">

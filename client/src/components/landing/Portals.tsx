@@ -21,8 +21,7 @@ import { Icon } from "@/components/Icon";
 import { cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 
-import { Reveal, SectionHead, Shell } from "./parts";
-import { GradientText } from "@/components/brand/GradientText";
+import { Grain, Rise, SectionHead, Shell } from "./parts";
 
 /* ------------------------------------------------------------------ */
 /* The drawings                                                        */
@@ -203,16 +202,28 @@ export function Portals() {
   ];
 
   return (
-    <section id="portals" className="scroll-mt-24 py-24">
-      <Shell>
+    <section id="portals" className="relative scroll-mt-24 overflow-hidden py-24">
+      {/* One ramp wash behind the grid, so three white cards are not floating
+          on nothing. It drifts, which is the whole difference on a light page
+          between depth and a gradient somebody applied once. */}
+      <div
+        aria-hidden
+        className="ms-aurora pointer-events-none absolute inset-0"
+      >
+        <span
+          className="ms-aurora-b animate-drift-late"
+          style={{ right: "-10%", top: "8%", width: "44%", paddingBottom: "44%" }}
+        />
+      </div>
+      <Grain />
+
+      <Shell className="relative">
         <SectionHead
           eyebrow={tr("Three portals", "Teen portals")}
-          title={
-            <>
-              {tr("Three portals,", "Teen portals,")}{" "}
-              <GradientText>{tr("one record", "ek record")}</GradientText>
-            </>
-          }
+          title={[
+            tr("Three portals,", "Teen portals,"),
+            { text: tr("one record", "ek record"), gradient: true },
+          ]}
           lede={tr(
             "Everyone sees exactly what their job needs and nothing more. That is not a setting — it is how the system is built.",
             "Har shakhs sirf wohi dekhta hai jo us ke kaam ke liye zaroori hai — is se zyada kuchh nahi. Yeh koi setting nahi, system isi tarah banaya gaya hai.",
@@ -221,8 +232,8 @@ export function Portals() {
 
         <div className="mt-12 grid gap-5 md:grid-cols-3">
           {portals.map((portal, index) => (
-            <Reveal key={portal.key} delay={index * 110} className="h-full">
-              <article className="hover-lift group flex h-full flex-col rounded-2xl border border-line bg-card p-6 shadow-card">
+            <Rise key={portal.key} delay={index * 110} y={34} className="h-full">
+              <article className="hover-lift ms-edge group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-card p-6 shadow-card">
                 <span
                   aria-hidden
                   className="bg-gradient-brand grid h-12 w-12 shrink-0 place-items-center rounded-full p-[2px]"
@@ -256,7 +267,7 @@ export function Portals() {
                   ))}
                 </ul>
               </article>
-            </Reveal>
+            </Rise>
           ))}
         </div>
       </Shell>

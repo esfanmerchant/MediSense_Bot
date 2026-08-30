@@ -23,7 +23,7 @@ import { useId } from "react";
 import { CountUp } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 
-import { Shell, useInView } from "./parts";
+import { GradientRule, Shell, useStagger } from "./parts";
 
 /** A short trace under each readout, drawn once as the band arrives. */
 function Baseline({ seen, delay }: { seen: boolean; delay: number }) {
@@ -62,7 +62,9 @@ function Baseline({ seen, delay }: { seen: boolean; delay: number }) {
 
 export function StatsBand() {
   const tr = useTr();
-  const [ref, seen] = useInView<HTMLDivElement>(0, "0px 0px 20% 0px");
+  // One observer for both jobs: it arms the count-up before the band arrives
+  // (so the reset to zero is never watchable) and releases the text motion.
+  const { ref, className, seen } = useStagger<HTMLDivElement>(0, "0px 0px 20% 0px");
 
   const stats: { value: number; unit?: string; label: string; caption: string }[] = [
     {
@@ -89,22 +91,48 @@ export function StatsBand() {
   ];
 
   return (
-    <section className="border-y border-line bg-card">
-      <Shell>
-        <div ref={ref} className="grid grid-cols-2 md:grid-cols-4 md:divide-x md:divide-line">
-          {stats.map((stat, index) => (
-            <div key={stat.label} className="px-3 py-9 md:px-7">
-              <p className="mono-caps text-[10px] text-faint">{stat.label}</p>
-              <p className="mt-2 flex items-baseline gap-1 font-mono text-[2.5rem] font-bold leading-none tabular-nums text-strong">
-                {seen ? <CountUp value={stat.value} /> : stat.value}
-                {stat.unit && (
-                  <span className="text-[1.25rem] font-semibold text-accent">{stat.unit}</span>
-                )}
-              </p>
-              <Baseline seen={seen} delay={index * 140} />
-              <p className="mt-1 text-[13px] leading-snug text-muted">{stat.caption}</p>
-            </div>
-          ))}
+    <section className="relative overflow-hidden border-y border-line bg-card">
+      {/* On white a plain card band is a white rectangle between two white
+          rectangles. A wash of the ramp at a twelfth of its strength is the
+          difference between a section and a seam. */}
+      <div
+        aria-hidden
+        className="bg-gradient-soft pointer-events-none absolute inset-0 opacity-60"
+      />
+      <Shell className="relative">
+        <div ref={ref} className={className}>
+          <GradientRule className="max-w-[9rem]" />
+          <div className="grid grid-cols-2 md:grid-cols-4 md:divide-x md:divide-line">
+            {stats.map((stat, index) => (
+              <div
+                key={stat.label}
+                className="group px-3 py-9 transition-transform duration-300 ease-out hover:-translate-y-0.5 md:px-7"
+              >
+                <p
+                  className="ms-pop mono-caps text-[10px] text-faint"
+                  style={{ animationDelay: `${index * 90}ms` }}
+                >
+                  {stat.label}
+                </p>
+                <p
+                  className="ms-pop mt-2 flex items-baseline gap-1 font-mono text-[2.5rem] font-bold leading-none tabular-nums text-strong"
+                  style={{ animationDelay: `${index * 90 + 70}ms` }}
+                >
+                  {seen ? <CountUp value={stat.value} /> : stat.value}
+                  {stat.unit && (
+                    <span className="text-[1.25rem] font-semibold text-accent">{stat.unit}</span>
+                  )}
+                </p>
+                <Baseline seen={seen} delay={index * 140} />
+                <p
+                  className="ms-fade mt-1 text-[13px] leading-snug text-muted"
+                  style={{ animationDelay: `${index * 90 + 220}ms` }}
+                >
+                  {stat.caption}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       </Shell>
     </section>

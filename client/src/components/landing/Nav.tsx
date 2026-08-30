@@ -24,6 +24,8 @@ import { Logo } from "@/components/brand/Logo";
 import { cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 
+import { useScrollProgress } from "./parts";
+
 export function Nav({
   primaryHref,
   primaryLabel,
@@ -35,6 +37,7 @@ export function Nav({
 }) {
   const tr = useTr();
   const [scrolled, setScrolled] = useState(false);
+  const progress = useScrollProgress();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -46,12 +49,20 @@ export function Nav({
   return (
     <header
       className={cx(
-        "fixed inset-x-0 top-0 z-50 transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300",
+        "page-enter fixed inset-x-0 top-0 z-50 transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300",
         scrolled
           ? "border-b border-line bg-[var(--surface-glass)] shadow-sm backdrop-blur-xl"
           : "border-b border-transparent",
       )}
     >
+      {/* How far down the document the reader is, in the brand ramp. On white
+          this is the one always-on accent the bar can carry without shouting;
+          it stays out of sight until the page has actually moved. */}
+      <span
+        aria-hidden
+        className="ms-progress absolute inset-x-0 bottom-0 h-[2px] transition-opacity duration-300"
+        style={{ transform: `scaleX(${progress})`, opacity: scrolled ? 1 : 0 }}
+      />
       <div
         className={cx(
           "mx-auto flex w-full max-w-[1180px] items-center gap-3 px-5 transition-[height] duration-300 ease-out",

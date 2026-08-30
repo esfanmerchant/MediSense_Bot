@@ -18,7 +18,7 @@ import { EcgLine } from "@/components/brand/EcgLine";
 import { Logo } from "@/components/brand/Logo";
 import { useTr } from "@/lib/lang";
 
-import { Shell } from "./parts";
+import { Rise, Shell } from "./parts";
 
 export function Footer() {
   const tr = useTr();
@@ -64,7 +64,7 @@ export function Footer() {
       </div>
 
       <Shell className="py-14">
-        <div className="grid gap-10 lg:grid-cols-[1.3fr_2.4fr]">
+        <Rise y={18} scale={1} className="grid gap-10 lg:grid-cols-[1.3fr_2.4fr]">
           <div>
             <Logo variant="full" size="md" />
             <p className="mt-4 max-w-[34ch] text-sm leading-relaxed text-muted">
@@ -94,7 +94,7 @@ export function Footer() {
               </div>
             ))}
           </div>
-        </div>
+        </Rise>
 
         <div className="mt-12 flex flex-wrap items-center gap-4 border-t border-line pt-6">
           <p className="text-xs text-faint">

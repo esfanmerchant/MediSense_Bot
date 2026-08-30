@@ -1385,18 +1385,25 @@ export interface ApplicationDocument {
   verified: boolean;
 }
 
-/** Everything a doctor fills in, all optional until they submit. */
+/**
+ * Everything a doctor fills in, all optional until they submit.
+ *
+ * `null` is meaningful and distinct from omission: an omitted key leaves the
+ * stored value alone, an explicit null clears it. An empty string is neither —
+ * the server's own rule is "two characters or more, or nothing", so a cleared
+ * field must travel as null.
+ */
 export interface DoctorApplicationDraft {
-  fullName?: string;
-  phone?: string;
-  nationalId?: string;
-  address?: string;
-  registrationNumber?: string;
-  specialization?: string;
+  fullName?: string | null;
+  phone?: string | null;
+  nationalId?: string | null;
+  address?: string | null;
+  registrationNumber?: string | null;
+  specialization?: string | null;
   departmentId?: string | null;
   qualifications?: string[];
   yearsExperience?: number | null;
-  previousHospital?: string;
+  previousHospital?: string | null;
   consultationFee?: number | null;
   availability?: Array<{
     dayOfWeek: number;

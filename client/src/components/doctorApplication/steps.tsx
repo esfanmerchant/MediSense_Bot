@@ -122,6 +122,20 @@ export function formFrom(draft: DoctorApplicationDraft): FormState {
   };
 }
 
+/**
+ * An empty field is absent, not an empty string.
+ *
+ * The server describes a name, a registration number and a specialization as
+ * "two characters or more, or nothing at all". Sending `""` satisfies neither,
+ * so every autosave from a half-filled form came back 422 — which is exactly
+ * what a draft save must never do, since the whole point is that the form is
+ * incomplete while you are filling it in.
+ */
+function textOrNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
 function numberOrNull(value: string): number | null {
   const trimmed = value.trim();
   if (trimmed === "") return null;
@@ -131,18 +145,18 @@ function numberOrNull(value: string): number | null {
 
 export function toDraft(form: FormState): DoctorApplicationDraft {
   return {
-    fullName: form.fullName.trim(),
-    phone: form.phone.trim(),
-    nationalId: form.nationalId.trim(),
-    address: form.address.trim(),
-    registrationNumber: form.registrationNumber.trim(),
-    specialization: form.specialization.trim(),
-    departmentId: form.departmentId === "" ? null : form.departmentId,
+    fullName: textOrNull(form.fullName),
+    phone: textOrNull(form.phone),
+    nationalId: textOrNull(form.nationalId),
+    address: textOrNull(form.address),
+    registrationNumber: textOrNull(form.registrationNumber),
+    specialization: textOrNull(form.specialization),
+    departmentId: textOrNull(form.departmentId),
     qualifications: form.qualifications
       .map((item) => item.value.trim())
       .filter((value) => value.length > 0),
     yearsExperience: numberOrNull(form.yearsExperience),
-    previousHospital: form.previousHospital.trim(),
+    previousHospital: textOrNull(form.previousHospital),
     consultationFee: numberOrNull(form.consultationFee),
     availability: form.availability,
   };

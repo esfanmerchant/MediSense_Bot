@@ -94,6 +94,7 @@ const NAV: Record<Role, NavGroup[]> = {
       items: [
         { href: "/doctor/patients", label: ["My patients", "Mere mareez"], icon: "group" },
         { href: "/doctor/appointments", label: ["Appointments", "Appointments"], icon: "calendar_today" },
+        { href: "/doctor/availability", label: ["Availability", "Dastyabi"], icon: "event_available" },
         { href: "/doctor/alerts", label: ["Alerts", "Alerts"], icon: "notifications_active" },
       ],
     },
@@ -429,7 +430,7 @@ function AccountMenu({
   variant,
   collapsed = false,
 }: {
-  user: { name: string; email: string; role: Role };
+  user: { name: string; email: string; role: Role; avatarUrl: string | null };
   onSignOut: () => void;
   onNavigate?: () => void;
   /** `card` is the rail's foot (opens upward); `avatar` is the header. */
@@ -491,7 +492,7 @@ function AccountMenu({
         {/* A 2px gradient ring: the one place the brand touches a person's own
             initials, so the card reads as *theirs* rather than as a row. */}
         <span aria-hidden className="bg-gradient-brand grid shrink-0 place-items-center rounded-full p-[2px]">
-          <Avatar name={user.name} size="sm" />
+          <Avatar name={user.name} src={user.avatarUrl} size="sm" />
         </span>
 
         {variant === "card" && !collapsed && (
@@ -534,7 +535,7 @@ function AccountMenu({
             )}
           >
             <div className="bg-gradient-soft flex items-center gap-3 rounded-xl p-3">
-              <Avatar name={user.name} />
+              <Avatar name={user.name} src={user.avatarUrl} />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-strong">{user.name}</p>
                 <p className="truncate text-xs text-muted">{user.email}</p>
@@ -607,7 +608,7 @@ function Rail({
   groups: NavGroup[];
   pathname: string;
   emergencyHref?: string;
-  user: { name: string; email: string; role: Role };
+  user: { name: string; email: string; role: Role; avatarUrl: string | null };
   collapsed?: boolean;
   onToggle?: () => void;
   onNavigate?: () => void;

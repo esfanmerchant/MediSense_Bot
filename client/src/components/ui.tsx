@@ -350,16 +350,34 @@ export function QuickAction({
     person is always the same colour — recognisable in a list at a glance. */
 export function Avatar({
   name,
+  src,
   size = "md",
   ring,
   className,
 }: {
   name: string;
+  /**
+   * The person's picture, if they have one.
+   *
+   * Always a short-lived signed link — the bucket it comes from is private and
+   * there is no permanent address for a face. Which is exactly why a broken
+   * image is an ordinary event here rather than a bug: a tab left open past the
+   * link's few minutes will fail to load it, and the answer is the initials
+   * this component already drew, not an empty circle or a broken-image icon.
+   */
+  src?: string | null;
   size?: "sm" | "md" | "lg";
   /** A status ring: green for active, grey for inactive. */
   ring?: "active" | "inactive";
   className?: string;
 }) {
+  // Which link failed, rather than a boolean "it failed". A fresh URL for the
+  // same person is a fresh chance: with a flag, one expired link would keep the
+  // initials showing until the component unmounted, and re-signing would fix
+  // nothing.
+  const [failed, setFailed] = useState<string | null>(null);
+  const showPicture = Boolean(src) && failed !== src;
+
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -385,14 +403,29 @@ export function Avatar({
     <span
       aria-hidden
       className={cx(
-        "grid shrink-0 place-items-center rounded-full font-bold",
+        "grid shrink-0 place-items-center overflow-hidden rounded-full font-bold",
         palettes[hash % palettes.length],
         sizes[size],
         ring && rings[ring],
         className,
       )}
     >
-      {initials || "?"}
+      {showPicture ? (
+        // A plain <img>, not next/image, and deliberately. next/image proxies
+        // through the Next server and caches what it fetches — which for a
+        // private, minutes-long signed link would mean putting somebody's face
+        // in a shared cache under a URL that outlives their session. The whole
+        // point of signing the link is that it is not cacheable.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src ?? undefined}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setFailed(src ?? null)}
+        />
+      ) : (
+        initials || "?"
+      )}
     </span>
   );
 }

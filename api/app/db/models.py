@@ -54,6 +54,11 @@ class User(Base):
         pg_enum(enums.UserStatus, "UserStatus"), nullable=False, default=enums.UserStatus.ACTIVE
     )
 
+    #: Where this person's picture lives in the private avatars bucket, or NULL.
+    #: A path, never a URL: the bucket has no public address, so the only thing
+    #: worth storing is the key a signed link is minted from per response.
+    avatar_path: Mapped[str | None] = mapped_column("avatarPath", Text)
+
     email_verified_at: Mapped[datetime | None] = mapped_column("emailVerifiedAt", DateTime)
     last_login_at: Mapped[datetime | None] = mapped_column("lastLoginAt", DateTime)
     failed_login_count: Mapped[int] = mapped_column("failedLoginCount", Integer, default=0, nullable=False)

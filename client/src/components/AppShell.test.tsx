@@ -27,7 +27,7 @@ import { AppShell } from "@/components/AppShell";
 import type { AuthUser, Role } from "@/lib/api";
 import * as session from "@/lib/session";
 
-function user(role: Role): AuthUser {
+function user(role: Role, avatarUrl: string | null = null): AuthUser {
   // Fully typed rather than cast: a field added to AuthUser should fail the
   // typecheck here, not be silently absent from every shell test.
   return {
@@ -40,12 +40,13 @@ function user(role: Role): AuthUser {
     permissions: [],
     patientId: role === "PATIENT" ? "p1" : null,
     doctorId: role === "DOCTOR" ? "d1" : null,
+    avatarUrl,
   };
 }
 
-function signedInAs(role: Role) {
+function signedInAs(role: Role, avatarUrl: string | null = null) {
   vi.spyOn(session, "useSession").mockReturnValue({
-    user: user(role),
+    user: user(role, avatarUrl),
     loading: false,
     signOut: vi.fn(),
     showWarning: false,
@@ -259,5 +260,42 @@ describe("a doctor whose registration is not approved", () => {
 
     expect(screen.getByText("caseload")).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalledWith("/doctor/onboarding");
+  });
+});
+
+/**
+ * The picture is set in one place and has to appear in all of them.
+ *
+ * The shell draws the rail's avatar and the header's from the same session
+ * user, so this is the test that the change made in settings actually reaches
+ * the rest of the product rather than only the circle that was clicked.
+ */
+describe("the profile picture", () => {
+  const PICTURE = "https://storage.example/avatars/u1/a1.png?token=abc";
+
+  it("is drawn in the shell when the session carries one", () => {
+    signedInAs("PATIENT", PICTURE);
+    const { container } = render(
+      <AppShell role="PATIENT">
+        <p>content</p>
+      </AppShell>,
+    );
+
+    const pictures = [...container.querySelectorAll("img")].filter(
+      (image) => image.getAttribute("src") === PICTURE,
+    );
+    expect(pictures.length).toBeGreaterThan(0);
+  });
+
+  it("leaves the initials alone when there is none", () => {
+    signedInAs("PATIENT");
+    const { container } = render(
+      <AppShell role="PATIENT">
+        <p>content</p>
+      </AppShell>,
+    );
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getAllByText("TU").length).toBeGreaterThan(0);
   });
 });

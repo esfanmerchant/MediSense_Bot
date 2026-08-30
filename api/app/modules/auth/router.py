@@ -31,6 +31,7 @@ from app.modules.auth.schemas import (
     TwoFactorVerifyRequest,
     VerifyEmailRequest,
 )
+from app.services import avatars
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -116,7 +117,20 @@ def _set_trusted_device_cookie(response: Response, token: str, max_age: int) -> 
     )
 
 
-def _user_payload(user: service.AuthenticatedUser) -> dict[str, Any]:
+async def _user_payload(user: service.AuthenticatedUser) -> dict[str, Any]:
+    """Who the session belongs to.
+
+    Async only because of ``avatarUrl``. The bucket holding profile pictures is
+    private, so there is no stored URL to hand over: the link is signed here,
+    for this response, and expires in minutes. Minting it with the session is
+    what keeps "can see this face" tied to "is signed in as this person" — a URL
+    kept in the row would still work after they signed out, on a shared ward
+    machine, in a browser somebody else is now using.
+
+    A picture that cannot be signed comes back as ``null`` rather than failing
+    the request; see ``avatars.signed_url_for`` for why that tolerance belongs
+    on this path in particular.
+    """
     return {
         "id": user.id,
         "name": user.name,
@@ -127,6 +141,7 @@ def _user_payload(user: service.AuthenticatedUser) -> dict[str, Any]:
         "patientId": user.patient_id,
         "doctorId": user.doctor_id,
         "permissions": user.permissions,
+        "avatarUrl": await avatars.signed_url_for(user.avatar_path),
     }
 
 
@@ -139,14 +154,14 @@ def _session_payload(tokens: service.SessionTokens) -> dict[str, Any]:
     }
 
 
-def _signed_in_payload(response: Response, result: service.SignedIn) -> dict[str, Any]:
+async def _signed_in_payload(response: Response, result: service.SignedIn) -> dict[str, Any]:
     _set_auth_cookies(response, result.tokens)
     if result.trusted_device_token and result.trusted_device_expires_in_seconds:
         _set_trusted_device_cookie(
             response, result.trusted_device_token, result.trusted_device_expires_in_seconds
         )
     return {
-        "user": _user_payload(result.user),
+        "user": await _user_payload(result.user),
         "session": _session_payload(result.tokens),
         "redirectTo": result.redirect_to,
     }
@@ -182,7 +197,7 @@ async def verify_email(
     result = await service.verify_email(
         db, str(payload.email), payload.code, str(payload.device_class), _ctx(request)
     )
-    return {"success": True, "data": _signed_in_payload(response, result)}
+    return {"success": True, "data": await _signed_in_payload(response, result)}
 
 
 @router.post("/resend-code")
@@ -227,7 +242,7 @@ async def login(
 
     return {
         "success": True,
-        "data": {"requires2FA": False, **_signed_in_payload(response, result)},
+        "data": {"requires2FA": False, **await _signed_in_payload(response, result)},
     }
 
 
@@ -242,7 +257,7 @@ async def verify_two_factor(
     result = await service.verify_two_factor(
         db, payload.challenge_id, payload.code, payload.remember_device, _ctx(request)
     )
-    return {"success": True, "data": _signed_in_payload(response, result)}
+    return {"success": True, "data": await _signed_in_payload(response, result)}
 
 
 @router.post("/2fa/resend")
@@ -293,7 +308,7 @@ async def logout(request: Request, response: Response, db: DbSession) -> dict[st
 @router.get("/me")
 async def me(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
     user = await service.get_authenticated_user(db, auth.user_id)
-    return {"success": True, "data": {"user": _user_payload(user)}}
+    return {"success": True, "data": {"user": await _user_payload(user)}}
 
 
 @router.post("/forgot-password")

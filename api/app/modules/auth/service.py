@@ -124,6 +124,11 @@ class AuthenticatedUser:
     permissions: list[str]
     patient_id: str | None = None
     doctor_id: str | None = None
+    #: The storage key for their picture, or None. A *path*, not a link: the
+    #: router mints a signed URL from it per response, because the bucket is
+    #: private and a link that outlived the session would be a way to read
+    #: somebody's face after they signed out.
+    avatar_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -170,6 +175,7 @@ def _to_authenticated(
         permissions=sorted(str(p) for p in permissions_for(user.role)),
         patient_id=patient_id,
         doctor_id=doctor_id,
+        avatar_path=user.avatar_path,
     )
 
 

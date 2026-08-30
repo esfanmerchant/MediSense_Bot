@@ -264,6 +264,14 @@ export interface AuthUser {
   patientId: string | null;
   doctorId: string | null;
   permissions: string[];
+  /**
+   * A short-lived signed link to the person's picture, or null.
+   *
+   * Minted with the session rather than stored as a URL: the bucket is private,
+   * so there is no permanent address to keep, and a link that outlived the
+   * session would be a way to read a face after signing out.
+   */
+  avatarUrl: string | null;
 }
 
 export interface SessionInfo {
@@ -453,7 +461,54 @@ export interface TimeOff {
   reason: string | null;
 }
 
+/** One recurring weekly window — "Tuesdays 09:00–17:00, in 30-minute slots". */
+export interface AvailabilityWindow {
+  /** ISO weekday: Monday is 1, Sunday is 7. */
+  dayOfWeek: number;
+  /** "HH:MM", 24-hour, in the clinic's timezone. */
+  startTime: string;
+  endTime: string;
+  slotMinutes: number;
+}
+
+/** The lengths the scheduler will divide a window into. */
+export const SLOT_MINUTES = [10, 15, 20, 30, 45, 60] as const;
+
+export interface DoctorProfile {
+  id: string;
+  name: string;
+  specialization: string;
+  qualifications: string | null;
+  yearsExperience: number | null;
+  consultationFee: number;
+  acceptingPatients: boolean;
+  /**
+   * The weeks a patient books against. Empty means no slots are generated at
+   * all — a doctor who has not set this is invisible to the booking screen.
+   */
+  availability: AvailabilityWindow[];
+  department: { id: string; name: string; code: string } | null;
+}
+
 export const doctors = {
+  /** The signed-in doctor's own professional record. */
+  me: () => apiRequest<DoctorProfile>("/doctors/me"),
+
+  /**
+   * Edits that record. Every field is optional; an omitted one is left alone.
+   *
+   * `availability` is validated server-side for overlaps, because two windows
+   * covering the same minute produce the same slot twice and two patients then
+   * collide on one appointment with nothing to say which booking was wrong.
+   */
+  updateMe: (input: {
+    specialization?: string;
+    qualifications?: string;
+    yearsExperience?: number;
+    acceptingPatients?: boolean;
+    availability?: AvailabilityWindow[];
+  }) => apiRequest<DoctorProfile>("/doctors/me", { method: "PATCH", body: input }),
+
   myPatients: (query?: { limit?: number; offset?: number }) =>
     apiList<PatientSummary>("/doctors/me/patients", query),
 
@@ -1354,6 +1409,26 @@ export interface ActiveSession {
 }
 
 export const account = {
+  /**
+   * Replaces the signed-in person's picture.
+   *
+   * Multipart, because the browser has to send bytes. The server inspects them
+   * the way it inspects a medical document — size, sniffed type, declared-type
+   * agreement — and stores it in a private bucket; the URL that comes back is
+   * short-lived and minted per request.
+   */
+  setAvatar: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiMultipart<{ avatarUrl: string; expiresInSeconds: number }>("/account/avatar", form);
+  },
+
+  removeAvatar: () => apiRequest<{ removed: boolean }>("/account/avatar", { method: "DELETE" }),
+
+  /** A fresh signed link for the current picture, or null if there is none. */
+  avatar: () =>
+    apiRequest<{ avatarUrl: string | null; expiresInSeconds: number | null }>("/account/avatar"),
+
   twoFactor: () => apiRequest<TwoFactorStatus>("/account/2fa"),
 
   /**

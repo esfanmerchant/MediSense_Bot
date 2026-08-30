@@ -9,13 +9,13 @@
  */
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { AppointmentList, AppointmentRow, formatWhen, isUpcoming } from "@/components/appointments";
-import { TimeOffCard } from "@/components/TimeOffCard";
 import {
   Button,
   Card,
@@ -188,6 +188,17 @@ export default function DoctorAppointments() {
             "Your clinic list and the consultations waiting on you.",
             "Aaj ki clinic list aur woh consultations jo aap ke intezar mein hain.",
           )}
+          actions={
+            // Leave moved to the availability page, beside the recurring hours
+            // it interrupts. This is the trail from where it used to live.
+            <Link
+              href="/doctor/availability"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 font-semibold text-primary transition-colors hover:bg-gradient-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <Icon name="event_available" className="text-[20px]" />
+              {tr("Availability & time off", "Dastyabi aur chhutti")}
+            </Link>
+          }
         />
 
         {list.loading && (
@@ -301,8 +312,6 @@ export default function DoctorAppointments() {
                 )}
               </AppointmentList>
             </Card>
-
-            <TimeOffCard />
 
             <Card title="Past" icon="history">
               <AppointmentList appointments={finished} emptyTitle="No past appointments">

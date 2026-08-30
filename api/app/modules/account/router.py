@@ -1,4 +1,4 @@
-"""Account security: second factors, and the sessions signed into this account.
+"""The settings a person keeps for themselves: a picture, second factors, sessions.
 
 Everything here acts on **the caller's own account and nothing else**. There is
 no user id in any path: the subject comes from the session, so there is no
@@ -15,16 +15,19 @@ these endpoints exist under, so "you are signed in" is nowhere near enough.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, File, Request, Response, UploadFile
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip
 from app.api.responses import ok
+from app.core.config import settings
 from app.core.errors import bad_request, not_found
-from app.db.enums import TwoFactorMethod
+from app.db.base import new_id
+from app.db.enums import AuditAction, TwoFactorMethod
 from app.db.models import Session, TrustedDevice, User
+from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth import service
 from app.modules.auth.router import TRUSTED_DEVICE_COOKIE
 from app.modules.auth.schemas import (
@@ -34,6 +37,8 @@ from app.modules.auth.schemas import (
     TwoFactorStartRequest,
 )
 from app.modules.auth.twofactor import mask_email
+from app.services import avatars, storage
+from app.services.files import FileRejectedError
 
 router = APIRouter(prefix="/account", tags=["account"])
 
@@ -236,3 +241,171 @@ async def revoke_session(
 
     await service.revoke_session(db, session_id, "REVOKED_BY_USER")
     return ok({"id": session_id, "revoked": True})
+
+
+# ---------------------------------------------------------------------------
+# Profile picture
+# ---------------------------------------------------------------------------
+
+
+async def _audit_avatar(
+    request: Request,
+    db: DbSession,
+    auth: CurrentAuth,
+    metadata: dict[str, Any],
+) -> None:
+    """Record a change to the caller's own picture.
+
+    ``USER_UPDATED`` rather than an action of its own. The enum reserves its
+    dedicated names for the changes that alter what it takes to *become* this
+    user — enabling a second factor, disabling one, reissuing the codes that
+    bypass it — and filing a profile picture beside those would flatten the
+    distinction the log exists to keep. A picture is a profile edit, and the
+    metadata says which field moved and in which direction.
+
+    Field, direction, type and size. Never the file name: people name a photo
+    after themselves, and a name is not something the trail needs in order to
+    answer who changed what, and when.
+    """
+    await record_audit(
+        db,
+        AuditEntry(
+            action=AuditAction.USER_UPDATED,
+            user_id=auth.user_id,
+            actor_role=auth.role,
+            entity_type="User",
+            # Subject and actor are the same person by construction: there is no
+            # user id in the path, so this endpoint cannot act on anyone else.
+            entity_id=auth.user_id,
+            ip_address=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            request_id=getattr(request.state, "request_id", None),
+            metadata=metadata,
+        ),
+    )
+
+
+@router.get("/avatar")
+async def get_avatar(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
+    """A fresh signed link to the caller's own picture, or nulls if there is none.
+
+    This exists because the link handed out with the session expires in minutes
+    while a tab stays open for hours. It is how a client asks for another one
+    without signing in again.
+
+    Not audited. It reads one row belonging to the caller and hands back a link
+    to their own face; recording it would add an entry for every idle tab that
+    re-signed a link, which makes the trail worse at the question it is for.
+    """
+    user = await _own_account(db, auth.user_id)
+    url = await avatars.signed_url_for(user.avatar_path)
+    return ok(
+        {
+            "avatarUrl": url,
+            # Null, not zero, when there is nothing to expire: a client that
+            # schedules a refresh from this should have nothing to schedule.
+            "expiresInSeconds": settings.SUPABASE_SIGNED_URL_TTL_SECONDS if url else None,
+        }
+    )
+
+
+@router.post("/avatar")
+async def set_avatar(
+    request: Request,
+    auth: CurrentAuth,
+    db: DbSession,
+    file: Annotated[UploadFile, File()],
+) -> dict[str, Any]:
+    """Replace the caller's picture with the uploaded image.
+
+    The order is the one the documents module established, for the same reason:
+    validate, store, write the row, and remove the object again if the row write
+    fails, so a half-finished upload cannot leave a file in a bucket that nothing
+    references and nobody will ever account for.
+
+    Replacement adds one step. The new picture is written to a **new** key, and
+    the old object is deleted only once the column points at the new one — so a
+    replacement that fails part-way leaves the previous picture whole, rather
+    than a row pointing at an object that was overwritten and then rolled back.
+    That last delete is best-effort by design: ``storage.remove`` returns False
+    instead of raising, because an orphan in a private bucket is a cleanup
+    problem, and failing the request over it would report failure for a change
+    the person can already see happened.
+    """
+    user = await _own_account(db, auth.user_id)
+
+    content = await file.read()
+    try:
+        inspected = avatars.inspect_avatar(
+            content, declared_mime=file.content_type, original_name=file.filename
+        )
+    except FileRejectedError as exc:
+        raise bad_request(str(exc)) from exc
+
+    bucket = settings.SUPABASE_AVATARS_BUCKET
+    previous = user.avatar_path
+    path = avatars.object_path(auth.user_id, new_id(), inspected.extension)
+
+    await storage.upload(bucket, path, content, inspected.detected_mime)
+
+    try:
+        user.avatar_path = path
+        await db.flush()
+        await _audit_avatar(
+            request,
+            db,
+            auth,
+            {
+                "field": "avatarPath",
+                "change": "SET",
+                "mimeType": inspected.detected_mime,
+                "fileSize": inspected.size,
+                "replaced": previous is not None,
+            },
+        )
+    except Exception:
+        await storage.remove(bucket, path)
+        raise
+
+    if previous and previous != path:
+        await storage.remove(bucket, previous)
+
+    # Signed strictly here rather than through ``avatars.signed_url_for``: this
+    # URL *is* the answer, and a 200 carrying a null link would report success
+    # while leaving the person looking at their initials. On a session payload
+    # the same failure is worth swallowing, because there the picture is
+    # decoration on a response that must not fail; here it is the response.
+    url = await storage.signed_url(bucket, path)
+    return ok({"avatarUrl": url, "expiresInSeconds": settings.SUPABASE_SIGNED_URL_TTL_SECONDS})
+
+
+@router.delete("/avatar")
+async def remove_avatar(request: Request, auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
+    """Take the picture down: the column is cleared and the object deleted.
+
+    Not a soft delete, unlike a medical document. A document a clinician has
+    already read is part of what informed their decision and the trail must
+    still be able to name it. A profile picture informed nothing, and somebody
+    asking a hospital system to stop holding a photograph of their face should
+    have it deleted rather than hidden.
+
+    The column is cleared **before** the object goes. The other order opens a
+    window in which the row names an object that no longer exists and every
+    session response tries to sign a dead path; this way the worst case is an
+    orphan nobody can reach — the bucket is private, and no row names the key
+    any more.
+
+    Idempotent: removing a picture that is not there succeeds with
+    ``removed: false``, so a double-click is not an error.
+    """
+    user = await _own_account(db, auth.user_id)
+    path = user.avatar_path
+    if not path:
+        return ok({"removed": False})
+
+    user.avatar_path = None
+    await db.flush()
+    await _audit_avatar(request, db, auth, {"field": "avatarPath", "change": "REMOVED"})
+
+    await storage.remove(settings.SUPABASE_AVATARS_BUCKET, path)
+    return ok({"removed": True})

@@ -3,20 +3,26 @@
 /**
  * Who the account says you are.
  *
- * **Read-only, and it says so.** There is no endpoint that lets a person edit
- * their own name, email or phone — in a hospital those are identity fields that
- * a records office owns, and the one route that touches them is an
+ * **The record is read-only, and it says so.** There is no endpoint that lets a
+ * person edit their own name, email or phone — in a hospital those are identity
+ * fields that a records office owns, and the one route that touches them is an
  * administrator changing an account's status. Rendering an editable form over a
  * Save button that cannot save would be a lie told politely, so the fields are
  * presented as what they are: a record, with a sentence saying where it is
  * changed.
+ *
+ * The picture is the exception, and it is a real one rather than a crack in the
+ * rule: it identifies nobody and appears on no record, so it belongs to the
+ * person rather than to the records office. It is the only thing on this screen
+ * that can be changed from this screen.
  */
 
 import Link from "next/link";
 
 import { Icon } from "@/components/Icon";
 import { EcgLine } from "@/components/brand/EcgLine";
-import { Avatar, Badge, Card, cx } from "@/components/ui";
+import { AvatarEditor } from "@/components/settings/AvatarEditor";
+import { Badge, Card, cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
 import type { Role } from "@/lib/api";
@@ -61,7 +67,7 @@ function Detail({
 
 export function ProfileTab({ role }: { role: Role }) {
   const tr = useTr();
-  const { user } = useSession();
+  const { user, refreshUser } = useSession();
   if (!user) return null;
 
   const active = user.status === "ACTIVE";
@@ -71,9 +77,11 @@ export function ProfileTab({ role }: { role: Role }) {
     <div className="space-y-6">
       <Card>
         <div className="flex flex-wrap items-center gap-4">
-          <span aria-hidden className="bg-gradient-brand grid shrink-0 place-items-center rounded-full p-[2px]">
-            <Avatar name={user.name} size="lg" />
-          </span>
+          {/* Refreshing the session rather than patching one avatar: the
+              picture appears in the rail, the header and the profile menu too,
+              and they should all change together or the product looks like it
+              half-applied the edit. */}
+          <AvatarEditor name={user.name} avatarUrl={user.avatarUrl} onChanged={refreshUser} />
           <div className="min-w-0">
             <h2 className="font-display text-xl font-bold text-strong">{user.name}</h2>
             <p className="mt-0.5 truncate text-sm text-muted">{user.email}</p>
@@ -133,8 +141,8 @@ export function ProfileTab({ role }: { role: Role }) {
         <Icon name="lock" className="mt-0.5 shrink-0 text-[20px] text-muted" />
         <p className="text-sm leading-relaxed text-muted">
           {tr(
-            "These details cannot be edited here. They are identity fields on a medical record, and the system offers no endpoint for changing your own — ask the records office or an administrator, who makes the change against an audited account.",
-            "Yeh tafseelat yahan tabdeel nahi ho sakteen. Yeh medical record ki shanakht hain, aur system apne aap badalne ka koi rasta nahi deta — records office ya admin se kahein, jo audit hote account se tabdeeli karta hai.",
+            "Your name, email and phone cannot be edited here. They are identity fields on a medical record, and the system offers no endpoint for changing your own — ask the records office or an administrator, who makes the change against an audited account. Your picture is yours: change or remove it from the circle above.",
+            "Aap ka naam, email aur phone yahan tabdeel nahi ho saktay. Yeh medical record ki shanakht hain, aur system apne aap badalne ka koi rasta nahi deta — records office ya admin se kahein, jo audit hote account se tabdeeli karta hai. Tasveer aap ki apni hai: upar wale circle se badlein ya hata dein.",
           )}
         </p>
       </div>

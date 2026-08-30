@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import { AvailabilityNotice } from "@/components/availability/AvailabilityNotice";
 import {
   Avatar,
   Badge,
@@ -179,6 +180,9 @@ export default function DoctorDashboard() {
             </div>
           </section>
         )}
+
+        {/* Why nobody is booking, when that is the answer. Silent otherwise. */}
+        <AvailabilityNotice />
 
         <div className="stagger grid gap-3 sm:grid-cols-3">
           <QuickAction

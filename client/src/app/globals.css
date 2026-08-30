@@ -334,11 +334,15 @@ h3 {
     linear-gradient(var(--surface-card), var(--surface-card)) padding-box,
     var(--ms-gradient) border-box;
 }
-/* Same, but filled with the soft tint — for a selected card. */
+/* Same, but filled with the soft tint — for a selected card.
+   The card colour sits *under* the tint: without it the ramp painted for the
+   border box shows through an 8%-alpha fill, and a "soft tint" renders as a
+   saturated gradient tile with dark body text stranded on it. */
 .border-gradient-fill {
   border: 1.5px solid transparent;
   background:
     var(--ms-gradient-soft) padding-box,
+    linear-gradient(var(--surface-card), var(--surface-card)) padding-box,
     var(--ms-gradient) border-box;
 }
 
@@ -428,7 +432,10 @@ h3 {
   transform: none;
 }
 .field-shell:has(:focus) .field-label,
-.field-shell:has(:not(:placeholder-shown)) .field-label,
+/* Named explicitly: a bare `:not(:placeholder-shown)` also matches the label
+   and the reveal button, which is true for every field and would leave the
+   label permanently raised — floating that never floats. */
+.field-shell:has(:is(input, textarea):not(:placeholder-shown)) .field-label,
 .field-shell:has(select) .field-label,
 .field-shell:has(input[type="date"]) .field-label,
 .field-shell:has(input[type="time"]) .field-label,
@@ -444,7 +451,7 @@ h3 {
   color: var(--ms-blue-700);
 }
 .dark .field-shell:has(:focus) .field-label,
-.dark .field-shell:has(:not(:placeholder-shown)) .field-label,
+.dark .field-shell:has(:is(input, textarea):not(:placeholder-shown)) .field-label,
 .dark .field-shell:has(select) .field-label {
   color: var(--brand-primary);
 }

@@ -62,10 +62,10 @@ function DeviceChoice({
 
   return (
     <fieldset>
-      <legend className="mb-2 block text-sm font-semibold text-strong">
+      <legend className="mb-2.5 block text-[15px] font-semibold text-strong">
         {tr("Where are you signing in from?", "Aap kahan se login kar rahe hain?")}
       </legend>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2">
         {options.map((option) => {
           const active = option.value === value;
           return (
@@ -74,7 +74,7 @@ function DeviceChoice({
               className={cx(
                 "relative flex cursor-pointer items-start gap-3 rounded-xl p-3 transition-[border-color,background-color,box-shadow] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary",
                 active
-                  ? "border-gradient-fill shadow-sm"
+                  ? "border-[1.5px] border-primary bg-primary-soft shadow-sm"
                   : "border-[1.5px] border-line-strong bg-card hover:border-faint",
               )}
             >
@@ -97,7 +97,7 @@ function DeviceChoice({
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-strong">{option.title}</span>
-                <span className="block text-xs text-muted">{option.hint}</span>
+                <span className="block text-[12.5px] leading-snug text-muted">{option.hint}</span>
               </span>
               {active && (
                 <span
@@ -235,7 +235,7 @@ function LoginForm() {
           { value: "ADMIN", label: tr("Admin", "Admin"), icon: "admin_panel_settings" },
         ]}
       />
-      <p className="mb-5 min-h-5 px-1 text-xs text-muted">{copy[audience].hint}</p>
+      <p className="mb-5 min-h-[18px] px-1 text-[13px] leading-snug text-muted">{copy[audience].hint}</p>
 
       {reason && reasons[reason] && (
         <AuthNotice tone={reason === "reset" ? "success" : "warning"} live="status" icon="info">
@@ -371,7 +371,7 @@ function LoginForm() {
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-muted">
+      <p className="mt-7 border-t border-line pt-5 text-center text-sm text-muted">
         {tr("New patient?", "Naye mareez hain?")}{" "}
         <Link href="/register" className={AUTH_LINK}>
           {tr("Create an account", "Account banayein")}

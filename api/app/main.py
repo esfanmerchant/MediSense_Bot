@@ -42,8 +42,40 @@ from app.modules.records.router import router as records_router
 from app.modules.users.router import router as users_router
 from app.modules.vitals.alerts_router import router as alerts_router
 from app.modules.vitals.router import router as vitals_router
+from app.services import storage
+from app.services.files import ALLOWED_MIME_TYPES
 
 configure_logging()
+
+
+async def _ensure_storage_buckets() -> None:
+    """Make sure every bucket the application writes to exists, and is private.
+
+    Called at boot so a fresh deployment does not depend on somebody having
+    created them by hand — which is how `doctor-credentials` came to be
+    configured everywhere and to exist nowhere, and every registration document
+    upload failed with a message that could not say why.
+
+    Never fatal. Storage being unreachable is a reason to refuse an upload, not
+    a reason to refuse to start.
+    """
+    buckets = (
+        settings.SUPABASE_DOCUMENTS_BUCKET,
+        settings.SUPABASE_AVATARS_BUCKET,
+        settings.SUPABASE_CREDENTIALS_BUCKET,
+    )
+    for bucket in buckets:
+        try:
+            if await storage.ensure_bucket(
+                bucket,
+                allowed_mime_types=sorted(ALLOWED_MIME_TYPES),
+                file_size_limit=settings.MAX_UPLOAD_BYTES,
+            ):
+                logger.info("storage_bucket_created", bucket=bucket)
+        except Exception as exc:  # pragma: no cover — a boot-time network path
+            logger.warning(
+                "storage_bucket_unavailable", bucket=bucket, error=type(exc).__name__
+            )
 
 
 @asynccontextmanager
@@ -55,6 +87,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         )
     if not settings.storage_configured:
         logger.warning("storage_not_configured", detail="document upload disabled")
+    else:
+        await _ensure_storage_buckets()
     if not settings.ai_configured:
         logger.warning("ai_not_configured", detail="chatbot and symptom analysis disabled")
     if not settings.email_configured:

@@ -130,20 +130,28 @@ async def send_or_log_code(*, to: str, subject: str, text_body: str, code: str) 
     """Send a one-time code, or — off production, with no transport — log it.
 
     A verification code that cannot be delivered is an account that cannot be
-    finished, so a developer running without SMTP would be unable to sign up at
-    all. This makes the code reachable in exactly that case and no other:
-    delivery must be unconfigured, and ``NODE_ENV`` must not be production.
+    finished. The condition is *delivery failed*, not *delivery unconfigured* —
+    a relay that is configured and refusing (a Gmail account password where an
+    app password is required, say) strands a developer exactly as completely as
+    no relay at all, and is the harder of the two to diagnose from a form that
+    simply never proceeds.
+
+    Off production only. In production a failed send stays failed: an operator
+    whose relay is rejecting mail has a problem to fix, not a code to leak into
+    a log aggregator.
 
     The code is logged alone, without the message body: the body is branded
     prose that says nothing, while the pairing of a code with the address it
-    was minted for is the whole secret. Logging it is a development
-    convenience and is why the production guard is not optional.
+    was minted for is the whole secret.
     """
     delivery = await send(to=to, subject=subject, text_body=text_body)
     if not delivery.sent and not settings.is_production:
-        ready, _ = is_configured()
-        if not ready:
-            logger.warning("email_code_not_delivered_logged_instead", to=to, code=code)
+        logger.warning(
+            "email_code_not_delivered_logged_instead",
+            to=to,
+            code=code,
+            reason=delivery.detail,
+        )
     return delivery
 
 

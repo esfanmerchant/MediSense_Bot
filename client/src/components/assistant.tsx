@@ -421,6 +421,14 @@ export interface Turn {
   fresh: boolean;
 }
 
+/**
+ * What the patient said, before there is anything to say back.
+ *
+ * A `Turn` needs an answer; a question in flight does not have one yet, so the
+ * bubble takes only the parts it actually draws.
+ */
+export type Said = Pick<Turn, "question" | "imageUrl" | "imageName" | "fresh">;
+
 /** A history row, as the thread renders it. */
 export function turnFromHistory(row: AssistantTurn, disclaimer: string): Turn {
   const marker = row.input.match(ATTACHMENT_MARKER);
@@ -474,7 +482,7 @@ export function AssistantAvatar({
   );
 }
 
-function UserMessage({ turn }: { turn: Turn }) {
+function UserMessage({ turn }: { turn: Said }) {
   const tr = useTr();
   return (
     <div className={cx("flex justify-end", turn.fresh && "pop-in")}>
@@ -743,6 +751,14 @@ export function AssistantChat({
   const [attachment, setAttachment] = useState<{ file: File; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * The question that is on screen but not yet answered.
+   *
+   * Held apart from `turns` because a turn is a completed exchange: writing a
+   * half one into that list would mean every consumer — the history rail, the
+   * count beside a conversation — had to learn to ignore it.
+   */
+  const [inFlight, setInFlight] = useState<Said | null>(null);
 
   const textarea = useRef<HTMLTextAreaElement | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -823,6 +839,14 @@ export function AssistantChat({
 
     setBusy(true);
     setError(null);
+    // On screen before the request leaves, so the thread reads as a
+    // conversation rather than as a form that clears and waits.
+    setInFlight({
+      question: message,
+      imageUrl: sent?.url,
+      imageName: sent?.file.name,
+      fresh: true,
+    });
     try {
       const answer = sent
         ? await assistantApi.chatWithImage({ message, image: sent.file, sessionId, inputType })
@@ -838,6 +862,9 @@ export function AssistantChat({
       setSessionId(answer.sessionId);
       setTurns((current) => [...current, turn]);
       onTurn(answer.sessionId, turn);
+      // Cleared only now: the question moves from the pending bubble into the
+      // completed turn in one render, so it never blinks out and back.
+      setInFlight(null);
       return true;
     } catch (caught) {
       setError(
@@ -856,12 +883,13 @@ export function AssistantChat({
     const message = question.trim();
     if (!message || busy) return;
     const sent = attachment;
-    const ok = await ask(message, sent, dictated ? "VOICE" : "TEXT");
-    if (!ok) return;
+    // The composer empties as the bubble appears — the message is on screen,
+    // so leaving a copy in the box would read as "not sent yet".
     setQuestion("");
     setDictated(false);
     setAttachment(null);
     requestAnimationFrame(fit);
+    await ask(message, sent, dictated ? "VOICE" : "TEXT");
   };
 
   /** Asks the same question again, after the provider was unreachable. */
@@ -901,9 +929,33 @@ export function AssistantChat({
                 />
               </li>
             ))}
-            {busy && (
-              <li>
-                <Thinking withImage={attachment !== null} />
+            {inFlight && (
+              <li className="space-y-4">
+                <UserMessage turn={inFlight} />
+                {busy ? (
+                  <Thinking withImage={Boolean(inFlight.imageUrl)} />
+                ) : (
+                  error && (
+                    <div className="pop-in flex gap-3">
+                      <AssistantAvatar className="mt-1" pulse={false} />
+                      <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-warning/40 bg-warning-soft px-4 py-3.5">
+                        <p className="flex items-center gap-2 text-sm font-semibold text-warning">
+                          <Icon name="cloud_off" className="text-[20px]" />
+                          {tr("That did not reach the assistant", "Yeh assistant tak nahi pahuncha")}
+                        </p>
+                        <p className="mt-1 text-sm text-strong">{error}</p>
+                        <Button
+                          variant="secondary"
+                          className="mt-3"
+                          onClick={() => retry(inFlight.question)}
+                        >
+                          <Icon name="refresh" className="text-[18px]" />
+                          {tr("Try again", "Dobara koshish karein")}
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                )}
               </li>
             )}
           </ol>
@@ -914,7 +966,10 @@ export function AssistantChat({
       {/* The composer. */}
       <div className="border-t border-line bg-card/80 px-3 pb-3 pt-3 backdrop-blur sm:px-6">
         <div className="mx-auto max-w-3xl">
-          {error && (
+          {/* A send failure is shown against the message it belongs to, up in
+              the thread. This is for the rest — a file the composer itself
+              refused, which has no message to sit under. */}
+          {error && !inFlight && (
             <p role="alert" className="mb-2 rounded-lg bg-critical-soft px-3 py-2 text-sm font-medium text-critical">
               {error}
             </p>

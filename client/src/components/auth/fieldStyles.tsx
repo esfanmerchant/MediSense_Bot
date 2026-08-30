@@ -32,16 +32,26 @@
 const CSS = `
 .auth-shell .field-shell > :is(input, select, textarea),
 .auth-shell .field-shell > * > :is(input, select, textarea) {
-  padding-top: 1.7rem;
-  padding-bottom: 0.55rem;
-  min-height: 3.5rem;
+  padding-top: 1.6rem;
+  padding-bottom: 0.5rem;
+  min-height: 3.4rem;
+}
+/* While the label is resting in the middle it *is* the field's text line, so
+   the value has to sit there too — otherwise the first character typed
+   appears somewhere the eye was not looking. */
+.auth-shell .field-shell:not(:has(:is(input, textarea):not(:placeholder-shown))):not(:has(:focus))
+  > :is(input, textarea) {
+  padding-top: 0.5rem;
 }
 .auth-shell .field-label {
   color: var(--text-muted);
   font-weight: 500;
 }
 .auth-shell .field-shell:has(:focus) .field-label,
-.auth-shell .field-shell:has(:not(:placeholder-shown)) .field-label,
+/* Named explicitly. A bare \`:not(:placeholder-shown)\` also matches the label
+   and the reveal button — neither of which ever shows a placeholder — so it is
+   true for every field and the label is pinned up permanently. */
+.auth-shell .field-shell:has(:is(input, textarea):not(:placeholder-shown)) .field-label,
 .auth-shell .field-shell:has(select) .field-label,
 .auth-shell .field-shell:has(input[type="date"]) .field-label,
 .auth-shell .field-shell:has(input[type="time"]) .field-label,

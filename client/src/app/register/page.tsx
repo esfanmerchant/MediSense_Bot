@@ -100,10 +100,7 @@ export default function RegisterPage() {
           title={tr("Create your account", "Apna account banayein")}
           subtitle={
             role === "PATIENT"
-              ? tr(
-                  "A few details, then we verify your email.",
-                  "Chand tafseelat, phir hum aap ki email tasdeeq karte hain.",
-                )
+              ? tr("Then we verify your email.", "Phir email tasdeeq karte hain.")
               : tr(
                   "Name, email, a password — nothing else.",
                   "Naam, email aur ek password — bas itna hi.",
@@ -133,8 +130,8 @@ export default function RegisterPage() {
             title={tr("An administrator approves doctor accounts", "Doctor ke account ko intezamia manzoor karti hai")}
           >
             {tr(
-              "Sign up with just a name, email and password. Your registration number, documents and availability come afterwards, on the application page.",
-              "Sirf naam, email aur password se account banayein. Registration number, dastavezaat aur availability baad mein darkhwast ke safhe par.",
+              "Registration number, documents and availability come afterwards.",
+              "Registration number, dastavezaat aur availability baad mein.",
             )}
           </AuthNotice>
         )}
@@ -177,10 +174,7 @@ export default function RegisterPage() {
             <PhoneField
               id="phone"
               label={tr("Phone (optional)", "Phone (ikhtiyari)")}
-              hint={tr(
-                "Mobile number, without the leading zero.",
-                "Mobile number, shuru ke sifar ke baghair.",
-              )}
+              hint={tr("Without the leading zero.", "Shuru ke sifar ke baghair.")}
               value={phone}
               onChange={setPhone}
               error={error?.fieldError("phone")}
@@ -195,18 +189,21 @@ export default function RegisterPage() {
               value={password}
               onChange={setPassword}
               error={error?.fieldError("password")}
-              // Kept visible while typing, not swapped out for the meter: the
-              // rule is what tells someone *how* to get off "Weak".
+              // The server's own rule, word for word. It said eight and the
+              // server refused fewer than ten, so anyone who did exactly as
+              // they were told was rejected for it.
               hint={tr(
-                "At least 8 characters, with letters and a number.",
-                "Kam az kam 8 huroof — letters aur ek number ke saath.",
+                "10+ characters, with a capital, a small letter and a number.",
+                "10+ huroof, ek bara, ek chhota aur ek number.",
               )}
             />
             {password && (
               <PasswordStrength
                 value={password}
                 labels={[
-                  tr("Weak", "Kamzor"),
+                  // Zero now means the server would refuse it, so the word
+                  // says that rather than grading it.
+                  tr("Not enough", "Kaafi nahi"),
                   tr("Fair", "Theek-thaak"),
                   tr("Good", "Achha"),
                   tr("Strong", "Mazboot"),
@@ -235,8 +232,8 @@ export default function RegisterPage() {
               if (event.target.checked) setBlocked(null);
             }}
             label={tr(
-              "I agree that MediSense may store my health information to provide and record my care.",
-              "Main ittefaq karta hoon ke MediSense meri sehat ki maloomat ilaj aur record ke liye mehfooz rakhe.",
+              "MediSense may store my health information to provide my care.",
+              "MediSense meri sehat ki maloomat ilaj ke liye mehfooz rakh sakta hai.",
             )}
           />
 
@@ -271,8 +268,8 @@ export default function RegisterPage() {
           <Icon name="shield_person" className="mt-px shrink-0 text-[16px]" />
           {role === "PATIENT"
             ? tr(
-                "Only you and the clinicians treating you can read your record. Every access is logged.",
-                "Aap ka record sirf aap aur aap ka ilaj karne wale hi parh sakte hain. Har rasai darj hoti hai.",
+                "Only your clinicians can read your record. Every access is logged.",
+                "Record sirf aap ke doctor parh sakte hain. Har rasai darj hoti hai.",
               )
             : tr(
                 "Administrator accounts are created by the hospital, never here.",

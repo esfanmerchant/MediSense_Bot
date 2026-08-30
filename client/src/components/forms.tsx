@@ -432,16 +432,22 @@ export function PasswordStrength({
 
 export function strengthOf(password: string): 0 | 1 | 2 | 3 {
   if (!password) return 0;
-  let score = 0;
-  if (password.length >= 8) score += 1;
-  if (password.length >= 12) score += 1;
+  // The server's floor is ten characters with an upper, a lower and a digit.
+  // Anything short of that cannot be accepted, so it cannot be "Fair" — a
+  // meter that reads Fair on a password the next screen rejects is worse than
+  // no meter, because it was consulted and it lied.
   const variety =
     Number(/[a-z]/.test(password)) +
     Number(/[A-Z]/.test(password)) +
     Number(/\d/.test(password)) +
     Number(/[^\w\s]/.test(password));
-  if (variety >= 3) score += 1;
-  if (variety === 4 && password.length >= 10) score += 1;
+  const accepted =
+    password.length >= 10 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password);
+  if (!accepted) return 0;
+
+  let score = 1;
+  if (password.length >= 14) score += 1;
+  if (variety === 4 && password.length >= 12) score += 1;
   return Math.min(3, score) as 0 | 1 | 2 | 3;
 }
 

@@ -1030,7 +1030,10 @@ export function StepReview({
         </SummarySection>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-line bg-card p-5">
+      {/* A column, because both the checkbox's label and the button are
+          inline-level: left to flow, they share a line and the button's top
+          margin does nothing. */}
+      <div className="mt-6 flex flex-col items-start gap-4 rounded-2xl border border-line bg-card p-5">
         <Checkbox
           checked={consent}
           onChange={(event) => onConsentChange(event.target.checked)}
@@ -1043,10 +1046,12 @@ export function StepReview({
             </span>
           }
         />
-        {submitError}
+        {/* Full width: a server error naming three missing fields must not be
+            squeezed into a column beside the button. */}
+        {submitError && <div className="w-full">{submitError}</div>}
         <Button
           size="lg"
-          className="mt-5 w-full sm:w-auto"
+          className="w-full sm:w-auto"
           disabled={!consent || submitting}
           loading={submitting}
           onClick={onSubmit}
@@ -1055,7 +1060,7 @@ export function StepReview({
           {tr("Send my application", "Meri darkhwast bhejein")}
         </Button>
         {!consent && (
-          <p className="mt-2 text-xs text-muted">
+          <p className="text-xs text-muted">
             {tr(
               "Tick the box above to send it.",
               "Bhejne ke liye upar wala box tick karein.",

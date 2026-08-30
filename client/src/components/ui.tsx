@@ -452,9 +452,18 @@ export function Button({
       {...props}
     >
       {loading ? (
+        // The label stays in the layout, just invisible, so the button keeps
+        // exactly the width it had when it was pressed; the bars sit over it.
+        // Hiding the label instead would collapse a full-size action into a
+        // small square at the moment it is doing something, which reads as
+        // breaking rather than working.
         <>
-          <EkgBars />
-          {/* The label stays for assistive technology; the bars are for eyes. */}
+          <span className="invisible flex items-center gap-2" aria-hidden>
+            {children}
+          </span>
+          <span className="absolute inset-0 grid place-items-center">
+            <EkgBars />
+          </span>
           <span className="sr-only">{children}</span>
         </>
       ) : (

@@ -167,6 +167,8 @@ const LANDING_CSS = `
   .ms-pop,
   .ms-settle,
   .ms-rule,
+  .ms-ocr-fill,
+  .ms-bill-row,
   .pop-in,
   .stagger > * { animation-delay: 0ms !important; transition-delay: 0ms !important; }
 }
@@ -316,7 +318,27 @@ const LANDING_CSS = `
 
 /* ==================================================================
    Tile demos
-   ================================================================== */
+   ==================================================================
+   A demo runs on hover, and once — unprompted — as its tile arrives.
+
+   The one-shot exists because hover-only had a resting state of nothing:
+   six grey wells on a desktop nobody hovered, and on a phone, where
+   there is no hover at all, six grey wells permanently. That is the
+   wrong resting state for the one section whose whole job is to show
+   what the product does.
+
+   Three phases, and the third is the one that matters:
+   - untouched: paused at frame zero, exactly as before;
+   - .ms-playing: the same animations, running, for one pass;
+   - .ms-rested: paused again, with every demo pinned to its *finished*
+     frame — the reply still on screen, the trace still drawn. A demo
+     that plays and then erases itself is worse than one that never
+     played.
+
+   Every rest rule steps aside for :hover and :focus-within, so the
+   replay still works — and steps back the instant the cursor leaves,
+   which is also how an interrupted replay lands on something sensible
+   instead of freezing mid-frame. */
 
 /* The quiet CTA: a plain hairline that becomes the brand ramp under the
    cursor, rather than wearing the gradient before it has been earned. */
@@ -350,8 +372,35 @@ const LANDING_CSS = `
   white-space: nowrap;
 }
 .group:hover .ms-type,
-.group:focus-within .ms-type {
-  animation: ms-type 1.6s steps(34) 0.1s forwards;
+.group:focus-within .ms-type,
+.ms-playing .ms-type {
+  animation: ms-type 1.6s steps(34) 0.15s forwards;
+}
+/* At rest the reply stops being a typewriter and becomes a message: the
+   nowrap that makes the typing legible would otherwise leave a phone with a
+   sentence cut off mid-word, which is a worse resting state than none. */
+.ms-rested:not(:hover):not(:focus-within) .ms-type {
+  width: 100%;
+  white-space: normal;
+}
+
+/* The citation under the reply, arriving once the sentence has finished
+   typing. Hidden by default rather than faded, so it cannot be read before
+   the answer it belongs to exists. */
+@keyframes ms-cite-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.ms-cite {
+  opacity: 0;
+}
+.group:hover .ms-cite,
+.group:focus-within .ms-cite,
+.ms-playing .ms-cite {
+  animation: ms-cite-in 0.5s var(--ease-out-soft) 1.75s forwards;
+}
+.ms-rested:not(:hover):not(:focus-within) .ms-cite {
+  opacity: 1;
 }
 
 /* A demo only runs while its tile is under the cursor: six looping animations
@@ -362,7 +411,62 @@ const LANDING_CSS = `
 .group:hover .ms-demo,
 .group:hover .ms-demo *,
 .group:focus-within .ms-demo,
-.group:focus-within .ms-demo * { animation-play-state: running; }
+.group:focus-within .ms-demo *,
+.ms-playing .ms-demo,
+.ms-playing .ms-demo * { animation-play-state: running; }
+
+/* ---- the finished frames ---------------------------------------------- */
+
+/* Voice: the bars stop where a recorded waveform would, not all at one
+   height. The per-bar value is set inline so the shape is deterministic. */
+.ms-rested:not(:hover):not(:focus-within) .voice-bars > span {
+  animation: none;
+  transform: scaleY(var(--ms-rest, 0.5));
+}
+
+/* Document reading: the fields fill in behind the scan line, and the scan
+   line leaves once it has crossed. A reader arriving late sees a read
+   document, which is the claim the tile is making. */
+.ms-ocr-fill {
+  background-image: var(--ms-gradient);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.5s var(--ease-out-soft);
+}
+.ms-playing .ms-ocr-fill,
+.ms-rested .ms-ocr-fill,
+.group:hover .ms-ocr-fill,
+.group:focus-within .ms-ocr-fill { transform: scaleX(1); }
+.ms-rested:not(:hover):not(:focus-within) .scan-line {
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+/* Vitals: the trace rests drawn. Dropping the animation entirely is what
+   lets the element own its own dash offset again — a paused loop holds
+   whatever frame it stopped on, which here is a blank line. */
+.ms-rested:not(:hover):not(:focus-within) .ecg-draw-loop {
+  animation: none;
+  stroke-dashoffset: 0;
+}
+
+/* Billing: the lines arrive and stay arrived. The dimmed, offset state is
+   declared here rather than in utilities so one rule can release it for
+   the one-shot and for hover alike. */
+.ms-bill-row {
+  opacity: 0.45;
+  transform: translateX(-0.5rem);
+  transition:
+    opacity 0.5s var(--ease-out-soft),
+    transform 0.5s var(--ease-out-soft);
+}
+.ms-playing .ms-bill-row,
+.ms-rested .ms-bill-row,
+.group:hover .ms-bill-row,
+.group:focus-within .ms-bill-row {
+  opacity: 1;
+  transform: none;
+}
 
 /* A row of ledger lines sliding by, for the admin preview. */
 @keyframes ms-slide-rows {
@@ -492,6 +596,104 @@ export function useStagger<T extends HTMLElement = HTMLDivElement>(
     className: cx(armed && "ms-armed", armed && seen && "ms-in"),
     seen,
     armed,
+  } as const;
+}
+
+/**
+ * Play once on arrival, then rest finished.
+ *
+ * The tile it is put on gets `ms-playing` for one pass and `ms-rested`
+ * forever after; the stylesheet decides what each demo's finished frame
+ * looks like. Four properties this has to hold, all of them things the
+ * hover-only version got wrong or never had to answer:
+ *
+ * - **Once per element per visit.** The observer disconnects on its first
+ *   intersection, so scrolling the section past twice does not restart six
+ *   loops behind the reader.
+ * - **One at a time.** `delay` is the tile's place in the row, so the eye is
+ *   led across the grid instead of ambushed by six demos at once.
+ * - **Nothing runs behind a hidden tab.** If the tile is intersecting while
+ *   the tab is in the background, the whole schedule waits for the tab to
+ *   come back rather than burning its one pass where nobody is.
+ * - **Reduced motion schedules nothing at all** — no observer, no timers, the
+ *   finished frame immediately. Which is also, deliberately, the state anyone
+ *   without JavaScript gets: the rest rules only *add* a finished frame, they
+ *   never hide what was already readable.
+ *
+ * The observer is per tile rather than one for the grid on purpose. A single
+ * section-level observer fires all six from one viewport's worth of the top
+ * of the grid — which on a phone, where the grid is one column and four
+ * screens tall, would play five of the six demos to an empty room. That is
+ * the exact failure this is here to fix.
+ */
+export function useOneShot<T extends HTMLElement = HTMLDivElement>({
+  delay = 0,
+  duration = 1900,
+}: { delay?: number; duration?: number } = {}) {
+  const ref = useRef<T | null>(null);
+  const reduced = useReducedMotion();
+  const [phase, setPhase] = useState<"idle" | "playing" | "rested">("idle");
+
+  useEffect(() => {
+    if (reduced === null) return; // Not resolved yet; this effect re-runs.
+    const element = ref.current;
+    if (!element) return;
+
+    // Nothing to wait for. Show the finished frame and schedule nothing.
+    if (reduced || !("IntersectionObserver" in window)) {
+      const frame = requestAnimationFrame(() => setPhase("rested"));
+      return () => cancelAnimationFrame(frame);
+    }
+
+    let startTimer: ReturnType<typeof setTimeout> | undefined;
+    let endTimer: ReturnType<typeof setTimeout> | undefined;
+    let stopWaiting: (() => void) | undefined;
+
+    const play = () => {
+      startTimer = setTimeout(() => {
+        setPhase("playing");
+        endTimer = setTimeout(() => setPhase("rested"), duration);
+      }, delay);
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          observer.disconnect();
+          if (!document.hidden) {
+            play();
+            return;
+          }
+          const onVisible = () => {
+            if (document.hidden) return;
+            stopWaiting?.();
+            play();
+          };
+          stopWaiting = () => {
+            document.removeEventListener("visibilitychange", onVisible);
+            stopWaiting = undefined;
+          };
+          document.addEventListener("visibilitychange", onVisible);
+          return;
+        }
+      },
+      { threshold: 0.3, rootMargin: "0px 0px -8% 0px" },
+    );
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(startTimer);
+      clearTimeout(endTimer);
+      stopWaiting?.();
+    };
+  }, [reduced, delay, duration]);
+
+  return {
+    ref,
+    /** Put on the tile that owns the `.ms-demo` — it is also the `.group`. */
+    className: cx(phase === "playing" && "ms-playing", phase === "rested" && "ms-rested"),
   } as const;
 }
 

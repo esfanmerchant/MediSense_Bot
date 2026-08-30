@@ -15,12 +15,14 @@
  * cost paid by people who never hover at all.
  */
 
+import type { CSSProperties } from "react";
+
 import { Icon } from "@/components/Icon";
 import { EcgLine } from "@/components/brand/EcgLine";
 import { cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 
-import { Grain, Parallax, Rise, SectionHead, Shell } from "./parts";
+import { Grain, Parallax, Rise, SectionHead, Shell, useOneShot } from "./parts";
 
 /* ------------------------------------------------------------------ */
 /* Tile shell                                                          */
@@ -33,6 +35,8 @@ function Tile({
   demo,
   className,
   demoClassName,
+  shotDelay = 0,
+  shotDuration,
 }: {
   icon: string;
   title: string;
@@ -41,11 +45,25 @@ function Tile({
   className?: string;
   /** Height of the demo well, which differs between the wide tile and the rest. */
   demoClassName?: string;
+  /** This tile's place in its row, so the row plays left to right. */
+  shotDelay?: number;
+  /** How long this demo needs for one complete pass. */
+  shotDuration?: number;
 }) {
+  // The demo plays itself once as the tile arrives and then stays finished.
+  // Hover still replays it; what changed is that not hovering is no longer
+  // the same as never having seen it.
+  const { ref: shotRef, className: shotPhase } = useOneShot<HTMLElement>({
+    delay: shotDelay,
+    duration: shotDuration,
+  });
+
   return (
     <article
+      ref={shotRef}
       className={cx(
         "hover-lift-sm ms-edge group flex flex-col overflow-hidden rounded-2xl border border-line bg-card p-6 shadow-card",
+        shotPhase,
         className,
       )}
     >
@@ -74,14 +92,37 @@ function Tile({
 /* Demos                                                               */
 /* ------------------------------------------------------------------ */
 
-function AssistantDemo({ ask, reply }: { ask: string; reply: string }) {
+/** Where the sixteen voice bars settle once the pass is over. */
+const VOICE_REST = [
+  0.35, 0.62, 0.88, 0.5, 1, 0.72, 0.42, 0.8, 0.58, 0.95, 0.46, 0.76, 0.34, 0.66, 0.9, 0.52,
+];
+
+function AssistantDemo({
+  ask,
+  reply,
+  source,
+}: {
+  ask: string;
+  reply: string;
+  /** Where the answer came from — the tile's whole claim, made visible. */
+  source: string;
+}) {
   return (
-    <div className="ms-demo flex h-full flex-col justify-end gap-2.5 p-4">
+    // `min-w-0` on the column and on the reply, because a `white-space: nowrap`
+    // span is a flex item whose automatic minimum size is the whole sentence —
+    // which on a phone pushes the tile wider than the screen.
+    <div className="ms-demo flex h-full min-w-0 flex-col justify-center gap-2.5 p-4">
       <p className="bg-gradient-brand ml-auto max-w-[70%] rounded-2xl rounded-br-md px-3.5 py-2 text-[13px] leading-snug text-white shadow-sm">
         {ask}
       </p>
-      <div className="max-w-[85%] rounded-2xl rounded-bl-md border border-line bg-card px-3.5 py-2 shadow-sm">
+      <div className="min-w-0 max-w-[85%] rounded-2xl rounded-bl-md border border-line bg-card px-3.5 py-2 shadow-sm">
         <span className="ms-type stream-cursor text-[13px] leading-snug text-strong">{reply}</span>
+        {/* Arrives with the reply, on the same one-shot: the tile claims the
+            answer is grounded, so the ground is named. */}
+        <span className="ms-cite mt-2 flex items-center gap-1.5 border-t border-line pt-2 text-[11px] text-muted">
+          <Icon name="prescriptions" className="shrink-0 text-[14px] text-accent" />
+          {source}
+        </span>
       </div>
     </div>
   );
@@ -97,13 +138,19 @@ function VoiceDemo({ caption }: { caption: string }) {
         <Icon name="mic" filled className="text-[20px]" />
       </span>
       <span className="voice-bars h-8">
-        {Array.from({ length: 16 }, (_, index) => (
+        {VOICE_REST.map((rest, index) => (
           <span
             key={index}
-            style={{
-              animationDelay: `${(index % 5) * 0.11}s`,
-              animationDuration: `${0.8 + (index % 4) * 0.12}s`,
-            }}
+            style={
+              {
+                animationDelay: `${(index % 5) * 0.11}s`,
+                animationDuration: `${0.8 + (index % 4) * 0.12}s`,
+                // Where this bar stops once the pass is over. Fixed rather
+                // than random so the settled waveform is the same shape on
+                // every visit, and so the server and the client agree.
+                "--ms-rest": rest,
+              } as CSSProperties
+            }
           />
         ))}
       </span>
@@ -112,15 +159,35 @@ function VoiceDemo({ caption }: { caption: string }) {
   );
 }
 
+/** A line of the document, and the value read out of it behind the scan. */
+function OcrLine({ width, delay, first }: { width: string; delay: number; first?: boolean }) {
+  return (
+    <span
+      className={cx(
+        "relative block h-1 overflow-hidden rounded-full bg-line-strong",
+        first ? "mt-2" : "mt-1.5",
+        width,
+      )}
+    >
+      <span
+        className="ms-ocr-fill absolute inset-0 rounded-full"
+        style={{ transitionDelay: `${delay}ms` }}
+      />
+    </span>
+  );
+}
+
 function OcrDemo({ caption }: { caption: string }) {
   return (
     <div className="ms-demo relative h-full overflow-hidden p-4">
       <div className="relative mx-auto h-full max-w-[150px] rounded-md border border-line bg-card p-2.5 shadow-sm">
         <span className="mono-caps block text-[0.45rem] text-faint">{caption}</span>
-        <span className="mt-2 block h-1 w-full rounded-full bg-line-strong" />
-        <span className="mt-1.5 block h-1 w-4/5 rounded-full bg-line-strong" />
-        <span className="mt-1.5 block h-1 w-2/3 rounded-full bg-line-strong" />
-        <span className="mt-1.5 block h-1 w-3/4 rounded-full bg-line-strong" />
+        {/* The delays track the scan line down the page, so each field is
+            read as the light passes over it rather than all at once. */}
+        <OcrLine width="w-full" delay={300} first />
+        <OcrLine width="w-4/5" delay={700} />
+        <OcrLine width="w-2/3" delay={1100} />
+        <OcrLine width="w-3/4" delay={1500} />
       </div>
       <span className="scan-line" />
     </div>
@@ -152,7 +219,7 @@ function BillingDemo({ rows, total }: { rows: [string, string][]; total: string 
       {rows.map(([label, amount], index) => (
         <span
           key={label}
-          className="flex items-center gap-2 rounded-md border border-line bg-card px-2 py-1 opacity-45 transition-all duration-500 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:opacity-100 -translate-x-2"
+          className="ms-bill-row flex items-center gap-2 rounded-md border border-line bg-card px-2 py-1"
           style={{ transitionDelay: `${index * 110}ms` }}
         >
           <span className="mono-caps text-[0.5rem] text-faint">{label}</span>
@@ -226,6 +293,8 @@ export function Bento() {
           <Rise className="md:col-span-2 md:row-span-2" y={34}>
             <Tile
               className="h-full"
+              shotDelay={0}
+              shotDuration={2100}
               demoClassName="min-h-[200px]"
               icon="smart_toy"
               title={tr("AI health assistant", "AI health assistant")}
@@ -240,6 +309,10 @@ export function Bento() {
                     "Your prescription lists Metformin 500mg after dinner.",
                     "Aap ke nuskhe mein raat khane ke baad Metformin 500mg likha hai.",
                   )}
+                  source={tr(
+                    "From your prescription · Dr Iyer, 12 Aug",
+                    "Aap ke nuskhe se · Dr Iyer, 12 Aug",
+                  )}
                 />
               }
             />
@@ -248,6 +321,8 @@ export function Bento() {
           <Rise delay={70} y={34}>
             <Tile
               className="h-full"
+              shotDelay={320}
+              shotDuration={1900}
               icon="mic"
               title={tr("Speak your symptoms", "Apni takleef bol kar batayein")}
               body={tr(
@@ -263,6 +338,8 @@ export function Bento() {
           <Rise delay={140} y={34}>
             <Tile
               className="h-full"
+              shotDelay={640}
+              shotDuration={2400}
               icon="document_scanner"
               title={tr("Reads your documents", "Aap ke documents parh leta hai")}
               body={tr(
@@ -278,6 +355,8 @@ export function Bento() {
           <Rise delay={210} y={34}>
             <Tile
               className="h-full"
+              shotDelay={0}
+              shotDuration={2600}
               icon="monitor_heart"
               title={tr("Live vital monitoring", "Vitals par live nazar")}
               body={tr(
@@ -293,6 +372,8 @@ export function Bento() {
           <Rise delay={280} y={34}>
             <Tile
               className="h-full"
+              shotDelay={320}
+              shotDuration={1200}
               icon="receipt_long"
               title={tr("Billing that just happens", "Billing jo khud ho jaati hai")}
               body={tr(
@@ -315,6 +396,8 @@ export function Bento() {
           <Rise delay={350} y={34}>
             <Tile
               className="h-full"
+              shotDelay={640}
+              shotDuration={2000}
               icon="policy"
               title={tr("Emergency access, on the record", "Emergency access, poore record ke saath")}
               body={tr(

@@ -23,6 +23,7 @@ import {
 
 import {
   ApiError,
+  DOCTOR_GATED_EVENT,
   SESSION_ENDED_EVENT,
   auth,
   type AuthUser,
@@ -184,6 +185,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     window.addEventListener(SESSION_ENDED_EVENT, handler);
     return () => window.removeEventListener(SESSION_ENDED_EVENT, handler);
   }, [signOut, user]);
+
+  /**
+   * A doctor whose registration is not finished belongs on the form, not on a
+   * dashboard that will refuse every request it makes.
+   *
+   * `replace`, not `push`: the page they could not use should not be somewhere
+   * the back button returns them to. The guard against redirecting to the page
+   * we are already on is what keeps a refused request on the onboarding form
+   * from becoming a loop.
+   */
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const code = (event as CustomEvent<{ code: string }>).detail?.code;
+      const destination =
+        code === "PROFILE_INCOMPLETE" ? "/doctor/onboarding" : "/doctor/pending";
+      if (window.location.pathname !== destination) router.replace(destination);
+    };
+    window.addEventListener(DOCTOR_GATED_EVENT, handler);
+    return () => window.removeEventListener(DOCTOR_GATED_EVENT, handler);
+  }, [router]);
 
   const stayAlive = useCallback(() => {
     lastActivity.current = Date.now();

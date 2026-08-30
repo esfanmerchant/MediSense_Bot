@@ -197,3 +197,67 @@ describe("the inactivity warning", () => {
     expect(within(dialog).getByRole("button", { name: /stay signed in/i })).toBeInTheDocument();
   });
 });
+
+describe("a doctor whose registration is not approved", () => {
+  /**
+   * Approval is the only thing that creates the `Doctor` row, so a doctor with
+   * no `doctorId` has not been approved — and the session already carries
+   * that. The shell can therefore refuse before it renders anything and
+   * without asking the server, which is the difference between "sent to the
+   * form" and "shown a dashboard that then says something went wrong".
+   */
+  function signedInAsUnapprovedDoctor() {
+    vi.spyOn(session, "useSession").mockReturnValue({
+      user: { ...user("DOCTOR"), doctorId: null },
+      loading: false,
+      signOut: vi.fn(),
+      showWarning: false,
+      secondsRemaining: null,
+      stayAlive: vi.fn(),
+    } as unknown as ReturnType<typeof session.useSession>);
+  }
+
+  it("is sent to the registration form", () => {
+    replace.mockClear();
+    signedInAsUnapprovedDoctor();
+
+    render(
+      <AppShell role="DOCTOR">
+        <p>caseload</p>
+      </AppShell>,
+    );
+
+    expect(replace).toHaveBeenCalledWith("/doctor/onboarding");
+  });
+
+  it("is shown no part of the portal on the way there", () => {
+    // Not even for a frame: every request this page makes is about to be
+    // refused, and an error panel about a state that is not an error is how
+    // someone concludes the product is broken.
+    replace.mockClear();
+    signedInAsUnapprovedDoctor();
+
+    render(
+      <AppShell role="DOCTOR">
+        <p>caseload</p>
+      </AppShell>,
+    );
+
+    expect(screen.queryByText("caseload")).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
+  });
+
+  it("still shows the portal to an approved doctor", () => {
+    replace.mockClear();
+    signedInAs("DOCTOR");
+
+    render(
+      <AppShell role="DOCTOR">
+        <p>caseload</p>
+      </AppShell>,
+    );
+
+    expect(screen.getByText("caseload")).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalledWith("/doctor/onboarding");
+  });
+});

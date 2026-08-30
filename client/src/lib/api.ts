@@ -105,9 +105,31 @@ export interface Paginated<T, Extra = unknown> {
  */
 export const SESSION_ENDED_EVENT = "medisense:session-ended";
 
+/**
+ * A doctor reached something their registration does not entitle them to yet.
+ *
+ * Raised here rather than handled per screen for the same reason as the
+ * session event: it can arrive from any request on any page — a bookmark, a
+ * refresh, a tab left open while an administrator rejects the application —
+ * and every one of those should end up on the page that can actually do
+ * something about it.
+ */
+export const DOCTOR_GATED_EVENT = "medisense:doctor-gated";
+
+const DOCTOR_GATE_CODES: ReadonlySet<ErrorCode> = new Set([
+  "PROFILE_INCOMPLETE",
+  "PENDING_APPROVAL",
+  "APPLICATION_REJECTED",
+]);
+
 function announceSessionEnded(code: ErrorCode) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(SESSION_ENDED_EVENT, { detail: { code } }));
+}
+
+function announceIfGated(error: ApiError) {
+  if (typeof window === "undefined" || !DOCTOR_GATE_CODES.has(error.code)) return;
+  window.dispatchEvent(new CustomEvent(DOCTOR_GATED_EVENT, { detail: { code: error.code } }));
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -155,6 +177,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       error.details ?? [],
     );
     if (apiError.isAuthFailure) announceSessionEnded(apiError.code);
+    announceIfGated(apiError);
     throw apiError;
   }
 
@@ -188,6 +211,7 @@ export async function apiMultipart<T>(path: string, form: FormData): Promise<T> 
       error.details ?? [],
     );
     if (apiError.isAuthFailure) announceSessionEnded(apiError.code);
+    announceIfGated(apiError);
     throw apiError;
   }
   return payload.data as T;
@@ -258,7 +282,18 @@ export type DeviceClass = "SHARED_TERMINAL" | "PERSONAL" | "MONITOR";
 
 /** What a sign-in produced: a session, or a challenge standing in its way. */
 export type LoginResult =
-  | { requires2FA: false; user: AuthUser; session: SessionInfo }
+  | {
+      requires2FA: false;
+      user: AuthUser;
+      session: SessionInfo;
+      /**
+       * Where to go next, decided by the server because it depends on state
+       * the client cannot see — for a doctor, how far their registration has
+       * got. Navigation, not authorization: every destination guards itself,
+       * so ignoring this lands somewhere that refuses you.
+       */
+      redirectTo: string;
+    }
   | { requires2FA: true; challengeId: string; method: TwoFactorMethod; sentTo: string | null };
 
 export type TwoFactorMethod = "EMAIL" | "TOTP";

@@ -202,7 +202,9 @@ function LoginForm() {
         );
         return;
       }
-      router.replace(homePathFor(result.user.role));
+      // The server's answer, not the role's default: an unapproved doctor
+      // goes to their application, not to a dashboard that refuses them.
+      router.replace(result.redirectTo || homePathFor(result.user.role));
     } catch (caught) {
       setError(
         caught instanceof ApiError

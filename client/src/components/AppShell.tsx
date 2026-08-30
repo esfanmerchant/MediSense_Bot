@@ -820,6 +820,23 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
 
+  /**
+   * An unapproved doctor never sees a portal page, not even for a frame.
+   *
+   * `approve()` is the only thing that creates the `Doctor` row, so a doctor
+   * without a `doctorId` has not been approved — which the session already
+   * carries, so this costs no request and there is no flash of a dashboard
+   * whose every call is about to be refused.
+   *
+   * Onboarding is the safe destination for all three states: it sends a
+   * submitted application on to the pending page and an approved one back to
+   * the dashboard, so this does not have to know which it is.
+   */
+  const awaitingApproval = Boolean(user && user.role === "DOCTOR" && !user.doctorId);
+  useEffect(() => {
+    if (awaitingApproval) router.replace("/doctor/onboarding");
+  }, [awaitingApproval, router]);
+
   // The remembered rail width. Read after mount so the server and the first
   // client render agree; a one-frame expand is preferable to a mismatch.
   useEffect(() => {
@@ -884,6 +901,7 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
   }
 
   if (!user) return null; // redirecting
+  if (awaitingApproval) return null; // on the way to their registration
 
   if (user.role !== role) {
     return (

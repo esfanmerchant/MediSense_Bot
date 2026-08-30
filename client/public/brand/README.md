@@ -1,0 +1,17 @@
+# Brand assets
+
+Drop the logo artwork here:
+
+| File | What it is |
+|---|---|
+| `MediSense_logo.png` | The full lockup — cross, pulse, circuit nodes, and the wordmark — on a transparent or white background |
+
+**Nothing in the application depends on this file today.** The mark and the
+wordmark are drawn as vectors in `src/components/brand/Logo.tsx`, which is why
+they stay sharp on a 4K display, recolour for the dark theme, and cost no
+request. The PNG is here for the places a raster is the only option — an email
+header, a slide, a favicon export.
+
+If you add the PNG and want it used on screen, say so: it is a one-line change
+in `Logo.tsx`, and the trade is sharpness and theme-awareness for pixel-exact
+fidelity to the source file.

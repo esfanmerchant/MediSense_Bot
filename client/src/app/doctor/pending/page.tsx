@@ -35,10 +35,34 @@ import {
  * Who to write to when the wait needs a human.
  *
  * The application contract carries no contact address, so this is
- * configuration rather than data: set `NEXT_PUBLIC_SUPPORT_EMAIL` to the
+ * configuration rather than data: set `NEXT_PUBLIC_SUPPORT_EMAIL` in
+ * `client/.env.local` — Next reads that file, not the API's `.env` — to the
  * hospital's own inbox.
  */
-const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@medisense.local";
+const SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "medisensebot@gmail.com";
+
+/**
+ * A mail that already says who is writing and about which application.
+ *
+ * The page asks the applicant to quote their registration number, so the link
+ * quotes it for them — a person chasing a stalled application should not have
+ * to go and look it up, and an administrator should not have to ask.
+ */
+function contactHref(name: string, registrationNumber: string | null | undefined): string {
+  const subject = registrationNumber
+    ? `Doctor application — ${name} (${registrationNumber})`
+    : `Doctor application — ${name}`;
+  const body = [
+    `Name: ${name}`,
+    registrationNumber ? `Registration number: ${registrationNumber}` : null,
+    "",
+    "",
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 
 export default function DoctorPendingPage() {
   const tr = useTr();
@@ -164,9 +188,7 @@ function Status({ name }: { name: string }) {
               {tr("Apply again", "Dobara apply karein")}
             </Link>
             <a
-              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
-                `Doctor application — ${displayName}`,
-              )}`}
+              href={contactHref(displayName, data.registrationNumber)}
               className="btn-outline inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Icon name="mail" className="text-[20px]" />
@@ -284,9 +306,7 @@ function Status({ name }: { name: string }) {
               <p className="mt-3 font-mono text-sm text-strong">{data.registrationNumber}</p>
             )}
             <a
-              href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
-                `Doctor application — ${displayName}`,
-              )}`}
+              href={contactHref(displayName, data.registrationNumber)}
               className="btn-outline mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Icon name="mail" className="text-[20px]" />

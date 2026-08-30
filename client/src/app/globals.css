@@ -1034,6 +1034,20 @@ select:focus ~ .select-chevron {
   opacity: 0.5;
   border-radius: 2px;
 }
+/**
+ * An item is its own positioning context — it has to be, for a node to sit
+ * beside its own row rather than beside the list. But that moves the node's
+ * origin from the list's left edge to the item's, which is already the
+ * `padding-left` in: without stepping back out, every node lands on top of the
+ * first word of its heading.
+ */
+.timeline > li {
+  position: relative;
+}
+.timeline > li > .timeline-node {
+  left: -2rem;
+}
+
 .timeline-node {
   position: absolute;
   left: 0;

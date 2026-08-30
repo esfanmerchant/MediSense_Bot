@@ -260,7 +260,9 @@ function EntryNode({ entry }: { entry: AuditEntry }) {
     <li className="relative">
       {/* The node sits on the spine, outside the list's padding. Inline because
           the utility would lose to the unlayered `.timeline-node` rule. */}
-      <span aria-hidden className={cx("timeline-node", nodeTone)} style={{ left: "-2rem" }} />
+      {/* The offset back to the spine is in the stylesheet now, on
+          `.timeline > li > .timeline-node`. */}
+      <span aria-hidden className={cx("timeline-node", nodeTone)} />
 
       <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold tabular-nums text-faint">
         <Icon name="schedule" className="text-[14px]" />

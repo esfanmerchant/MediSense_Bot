@@ -101,11 +101,16 @@ function AssistantDemo({
   ask,
   reply,
   source,
+  checks,
+  checksLabel,
 }: {
   ask: string;
   reply: string;
   /** Where the answer came from — the tile's whole claim, made visible. */
   source: string;
+  /** What ran on the answer, in the order it ran. */
+  checks: { icon: string; label: string; value: string }[];
+  checksLabel: string;
 }) {
   return (
     // `min-w-0` on the column and on the reply, because a `white-space: nowrap`
@@ -123,6 +128,27 @@ function AssistantDemo({
           <Icon name="prescriptions" className="shrink-0 text-[14px] text-accent" />
           {source}
         </span>
+      </div>
+
+      {/* The receipt. Every row here is a field the API returns beside the
+          answer, so this is what the system did, not a claim about it. */}
+      <div className="ms-checks mt-1 rounded-xl border border-line bg-sunken/60 px-3 py-2.5">
+        <p className="mono-caps mb-1.5 text-[0.5rem] text-faint">{checksLabel}</p>
+        <ul className="space-y-1">
+          {checks.map((check, index) => (
+            <li
+              key={check.label}
+              className="ms-check flex items-center gap-2 text-[11px]"
+              style={{ animationDelay: `${2050 + index * 260}ms` }}
+            >
+              <Icon name={check.icon} className="shrink-0 text-[13px] text-stable" />
+              <span className="text-muted">{check.label}</span>
+              <span className="ml-auto font-mono text-[10.5px] font-semibold text-strong">
+                {check.value}
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
@@ -294,7 +320,7 @@ export function Bento() {
             <Tile
               className="h-full"
               shotDelay={0}
-              shotDuration={2100}
+              shotDuration={3200}
               demoClassName="min-h-[200px]"
               icon="smart_toy"
               title={tr("AI health assistant", "AI health assistant")}
@@ -313,6 +339,24 @@ export function Bento() {
                     "From your prescription · Dr Iyer, 12 Aug",
                     "Aap ke nuskhe se · Dr Iyer, 12 Aug",
                   )}
+                  checksLabel={tr("What ran on this answer", "Is jawab par kya chala")}
+                  checks={[
+                    {
+                      icon: "emergency_heat",
+                      label: tr("Red-flag check, before the model", "Khatre ki janch, model se pehle"),
+                      value: tr("routine", "mamool"),
+                    },
+                    {
+                      icon: "prescriptions",
+                      label: tr("Answered from your own record", "Aap ke apne record se jawab"),
+                      value: tr("1 medicine", "1 dawa"),
+                    },
+                    {
+                      icon: "shield_person",
+                      label: tr("Diagnosis blocked, disclaimer attached", "Tashkhees rok di, disclaimer sath"),
+                      value: tr("always", "hamesha"),
+                    },
+                  ]}
                 />
               }
             />

@@ -387,6 +387,27 @@ const LANDING_CSS = `
 /* The citation under the reply, arriving once the sentence has finished
    typing. Hidden by default rather than faded, so it cannot be read before
    the answer it belongs to exists. */
+/* The receipt rows, ticking in one after the other once the citation has
+   settled. Their delays are set inline per row, so the keyframe only needs to
+   describe the arrival. */
+@keyframes ms-check-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+.ms-check {
+  opacity: 0;
+}
+.group:hover .ms-check,
+.group:focus-within .ms-check,
+.ms-playing .ms-check {
+  animation: ms-check-in 0.4s var(--ease-out-soft) forwards;
+}
+.ms-rested:not(:hover):not(:focus-within) .ms-check {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+
 @keyframes ms-cite-in {
   from { opacity: 0; }
   to { opacity: 1; }

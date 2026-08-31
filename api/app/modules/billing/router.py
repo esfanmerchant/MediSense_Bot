@@ -18,14 +18,14 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
 from app.api.responses import Page, ok, pagination
 from app.core.config import settings
-from app.core.errors import bad_request, forbidden, not_found, service_unavailable
+from app.core.errors import bad_request, conflict, forbidden, not_found
 from app.db.base import new_id, utcnow
 from app.db.enums import (
     AuditAction,
@@ -39,13 +39,25 @@ from app.db.models import Invoice, Payment
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
 from app.modules.billing import service
-from app.services import jazzcash
+from app.services import storage
+from app.services.files import FileRejectedError, inspect_upload
 
 router = APIRouter(prefix="/invoices", tags=["billing"])
 
 RequireInvoiceManage = Annotated[
     object, Depends(require_permission(Permission.INVOICE_MANAGE))
 ]
+
+#: A screenshot of a banking app. Five megabytes is generous for one and small
+#: enough that a mistaken photo of something else is refused before it is
+#: stored — the same reasoning as avatars, and the same limit.
+MAX_PROOF_BYTES = 5 * 1024 * 1024
+
+#: What a reviewer can actually look at. A PDF would be a valid receipt and is
+#: absent for the same reason it is absent from avatars: this is displayed
+#: inline beside the invoice, and a format the page cannot render is a proof
+#: nobody can check without downloading it first.
+PROOF_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 
 
 class BillingSettingsUpdate(BaseModel):
@@ -73,6 +85,22 @@ class BillingSettingsUpdate(BaseModel):
         default=None, alias="lateFee"
     )
     late_fee_mode: FeeMode | None = Field(default=None, alias="lateFeeMode")
+
+    #: The account patients are told to transfer into. Empty string clears one,
+    #: which is why these are not merged with the `exclude_none` rates above —
+    #: an administrator removing a wallet is a real edit, not an omission.
+    payee_name: Annotated[str, Field(max_length=160)] | None = Field(
+        default=None, alias="payeeName"
+    )
+    nayapay_number: Annotated[str, Field(max_length=32)] | None = Field(
+        default=None, alias="nayapayNumber"
+    )
+    easypaisa_number: Annotated[str, Field(max_length=32)] | None = Field(
+        default=None, alias="easypaisaNumber"
+    )
+    payment_note: Annotated[str, Field(max_length=500)] | None = Field(
+        default=None, alias="paymentNote"
+    )
 
     @model_validator(mode="after")
     def _percentages_are_percentages(self) -> BillingSettingsUpdate:
@@ -330,6 +358,10 @@ def _settings_payload(row: Any) -> dict[str, Any]:
         "platformFeeMode": str(row.platform_fee_mode),
         "lateFee": str(row.late_fee),
         "lateFeeMode": str(row.late_fee_mode),
+        "payeeName": row.payee_name,
+        "nayapayNumber": row.nayapay_number,
+        "easypaisaNumber": row.easypaisa_number,
+        "paymentNote": row.payment_note,
         "paymentTermsDays": service.PAYMENT_TERMS_DAYS,
         "currency": settings.INVOICE_CURRENCY,
         "updatedAt": row.updated_at.isoformat() + "Z" if row.updated_at else None,
@@ -410,25 +442,67 @@ async def update_billing_settings(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/{invoice_id}/checkout")
-async def start_checkout(
-    invoice_id: str, request: Request, auth: CurrentAuth, db: DbSession
+# ---------------------------------------------------------------------------
+# Paying by transfer
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{invoice_id}/payment-instructions")
+async def payment_instructions(
+    invoice_id: str, auth: CurrentAuth, db: DbSession
 ) -> dict[str, Any]:
-    """Begin a JazzCash payment for an invoice the caller can see.
+    """Where to send the money, and how much.
 
-    Deliberately *not* behind ``INVOICE_MANAGE``: this is the endpoint a patient
-    uses to pay their own bill, and ``load_visible`` already restricts them to
-    their own invoices. The billing desk's ``/pay`` route stays where it is, for
-    money taken at the counter.
+    The amount is ``amountDue`` rather than the invoice total, so a bill past
+    its date is quoted with its late charge included and the patient transfers
+    one figure rather than settling the original and leaving a stub.
 
-    The amount charged is ``amountDue``, not ``totalAmount`` -- so a bill past
-    its date is paid together with its late fee in one transaction, rather than
-    settling the original and leaving a stub nobody chases.
+    Reachable by anyone who can already see the invoice — this is the patient's
+    own bill and the account is published information, not a secret.
+    """
+    invoice = await load_visible(db, auth, invoice_id)
+    rates = await service.load_settings(db)
 
-    A ``Payment`` row is written **before** the payer is sent away. A redirect
-    gateway means the next thing that happens is out of our sight; without the
-    row, somebody who pays and closes the tab is money with no record on our
-    side at all.
+    return ok(
+        {
+            "amountDue": str(service.amount_due(invoice)),
+            "currency": invoice.currency,
+            "invoiceNumber": invoice.invoice_number,
+            "payeeName": rates.payee_name,
+            "nayapayNumber": rates.nayapay_number,
+            "easypaisaNumber": rates.easypaisa_number,
+            "note": rates.payment_note,
+            # Nothing to pay into means nothing to instruct. The client says so
+            # rather than showing an empty account.
+            "configured": bool(rates.nayapay_number or rates.easypaisa_number),
+        }
+    )
+
+
+@router.post("/{invoice_id}/payment-proof", status_code=201)
+async def submit_payment_proof(
+    invoice_id: str,
+    request: Request,
+    auth: CurrentAuth,
+    db: DbSession,
+    method: Annotated[PaymentMethod, Form()],
+    reference: Annotated[str, Form(min_length=3, max_length=120)],
+    file: Annotated[UploadFile, File()],
+) -> dict[str, Any]:
+    """Tell the hospital a transfer has been made, and show it.
+
+    **This does not mark the invoice paid, and must not.** It records a claim
+    with evidence attached; an administrator who has looked at the receiving
+    account is what turns it into a payment. The distinction is the entire
+    security model of paying this way — without it a screenshot settles a bill.
+
+    The amount recorded is what is owed *now*, taken from the invoice rather
+    than from anything the caller sends, so a patient cannot declare their own
+    bill smaller by posting a different number.
+
+    One outstanding claim at a time. A second submission while one is already
+    waiting would leave a reviewer with two pictures and no way to know which
+    the patient means, so the earlier one has to be resolved first.
     """
     invoice = await load_visible(db, auth, invoice_id)
 
@@ -436,34 +510,61 @@ async def start_checkout(
         raise bad_request("This invoice has already been paid.")
     if invoice.status in (InvoiceStatus.VOID, InvoiceStatus.REFUNDED):
         raise bad_request("This invoice is not payable.")
-    if not settings.jazzcash_configured:
-        # Named plainly rather than dressed up: sending a patient to a checkout
-        # that will refuse them is worse than telling them it is unavailable.
-        raise service_unavailable(
-            "Online payment is not set up yet. You can pay at the hospital billing desk."
-        )
+    if method is PaymentMethod.COUNTER:
+        # Counter payments are recorded by staff who took the money; a patient
+        # claiming one has nothing to evidence.
+        raise bad_request("Choose the wallet you transferred from.")
 
-    due = service.amount_due(invoice)
-    reference = f"MS{utcnow().strftime('%y%m%d%H%M%S')}{new_id()[:6].upper()}"
+    waiting = (
+        await db.execute(
+            select(Payment).where(
+                Payment.invoice_id == invoice.id,
+                Payment.status == PaymentStatus.SUBMITTED,
+            )
+        )
+    ).scalar_one_or_none()
+    if waiting is not None:
+        raise conflict("A payment for this invoice is already awaiting confirmation.")
+
+    content = await file.read()
+    try:
+        inspected = inspect_upload(
+            content,
+            declared_mime=file.content_type,
+            original_name=file.filename,
+            max_bytes=MAX_PROOF_BYTES,
+        )
+    except FileRejectedError as exc:
+        raise bad_request(str(exc)) from exc
+
+    if inspected.detected_mime not in PROOF_MIME_TYPES:
+        raise bad_request("Upload a screenshot as a JPEG, PNG or WebP image.")
 
     payment = Payment(
         id=new_id(),
         invoice_id=invoice.id,
-        amount=due,
+        # From the invoice, never from the request: a caller cannot declare
+        # their own bill smaller.
+        amount=service.amount_due(invoice),
         currency=invoice.currency,
-        method=PaymentMethod.JAZZCASH,
-        status=PaymentStatus.INITIATED,
-        gateway_ref=reference,
+        method=method,
+        status=PaymentStatus.SUBMITTED,
+        reference=reference.strip(),
     )
-    db.add(payment)
-    await db.flush()
 
-    fields = jazzcash.build_request(
-        reference=reference,
-        amount=due,
-        description=f"Invoice {invoice.invoice_number}",
-        bill_reference=invoice.invoice_number,
-    )
+    bucket = settings.SUPABASE_PAYMENT_PROOFS_BUCKET
+    path = f"{invoice.patient_id}/{payment.id}{inspected.extension}"
+    await storage.upload(bucket, path, content, inspected.detected_mime)
+
+    try:
+        payment.proof_path = path
+        db.add(payment)
+        await db.flush()
+    except Exception:
+        # The documents module's ordering: an object with no row is litter
+        # nobody can account for.
+        await storage.remove(bucket, path)
+        raise
 
     await record_audit(
         db,
@@ -471,19 +572,42 @@ async def start_checkout(
             action=AuditAction.INVOICE_UPDATED,
             user_id=auth.user_id,
             actor_role=auth.role,
+            patient_id=invoice.patient_id,
             entity_type="Payment",
             entity_id=payment.id,
-            patient_id=invoice.patient_id,
             ip_address=client_ip(request),
             request_id=getattr(request.state, "request_id", None),
             metadata={
-                "operation": "checkout_started",
+                "operation": "payment_proof_submitted",
                 "invoiceId": invoice.id,
-                "amount": str(due),
-                "method": "JAZZCASH",
+                "amount": str(payment.amount),
+                "method": str(method),
             },
         ),
     )
 
-    # The signed form, and where to post it. The salt that signed it stays here.
-    return ok({"endpoint": settings.jazzcash_endpoint, "fields": fields, "reference": reference})
+    return ok(service.serialize_payment(payment))
+
+
+@router.get("/{invoice_id}/payments")
+async def invoice_payments(
+    invoice_id: str, auth: CurrentAuth, db: DbSession
+) -> dict[str, Any]:
+    """Every claim made against one invoice, newest first.
+
+    A patient sees their own: whether it is still waiting, and — if it was
+    refused — the reason, which is the only way they learn to try again.
+    """
+    invoice = await load_visible(db, auth, invoice_id)
+    rows = (
+        (
+            await db.execute(
+                select(Payment)
+                .where(Payment.invoice_id == invoice.id)
+                .order_by(Payment.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return ok([service.serialize_payment(row) for row in rows])

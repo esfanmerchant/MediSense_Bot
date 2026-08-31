@@ -1430,6 +1430,76 @@ export interface Invoice {
 /** Whether a figure is a flat amount or a share of the bill. */
 export type FeeMode = "FIXED" | "PERCENT";
 
+/** The wallets a patient can transfer from. */
+export type PaymentWallet = "NAYAPAY" | "EASYPAISA";
+
+export type PaymentClaimStatus = "SUBMITTED" | "SUCCEEDED" | "FAILED";
+
+export interface PaymentInstructions {
+  amountDue: string;
+  currency: string;
+  invoiceNumber: string;
+  payeeName: string | null;
+  nayapayNumber: string | null;
+  easypaisaNumber: string | null;
+  note: string | null;
+  /** False when no account has been set: the screen says so rather than
+      showing an empty one to transfer into. */
+  configured: boolean;
+}
+
+/**
+ * A claim that a bill has been paid — evidence, not settlement.
+ *
+ * `SUBMITTED` means the patient has transferred and shown a screenshot;
+ * `SUCCEEDED` means somebody at the hospital opened the receiving account and
+ * found it. Only the second pays the invoice.
+ */
+export interface PaymentClaim {
+  id: string;
+  invoiceId: string;
+  amount: string;
+  currency: string;
+  method: string;
+  status: PaymentClaimStatus;
+  reference: string | null;
+  hasProof: boolean;
+  /** Short-lived signed link, present only where the endpoint minted one. */
+  proofUrl: string | null;
+  /** Why it was refused. The patient reads this. */
+  rejectionReason: string | null;
+  createdAt: string | null;
+  reviewedAt: string | null;
+}
+
+/** A claim in the administrator's queue, with who and what it is against. */
+export interface PendingPayment extends PaymentClaim {
+  invoiceNumber: string;
+  patientName: string;
+  invoiceTotal: string;
+}
+
+export const paymentReview = {
+  /** Oldest first: this is a work queue, not a feed. */
+  pending: (query?: { limit?: number; offset?: number }) =>
+    apiList<PendingPayment>("/payments/pending", query),
+
+  /** Confirms the money arrived. This is what marks the invoice paid. */
+  confirm: (id: string) =>
+    apiRequest<PaymentClaim>(`/payments/${id}/confirm`, { method: "POST" }),
+
+  /** Refuses it, with a reason the patient will be shown. */
+  reject: (id: string, reason: string) =>
+    apiRequest<PaymentClaim>(`/payments/${id}/reject`, {
+      method: "POST",
+      body: { reason },
+    }),
+
+  /** A fresh link to one screenshot, for a tab left open past the last one. */
+  proof: (id: string) =>
+    apiRequest<{ url: string; expiresInSeconds: number }>(`/payments/${id}/proof`),
+};
+
 export interface BillingSettings {
   /**
    * Each value is read through the mode beside it: rupees under `FIXED`,
@@ -1447,6 +1517,11 @@ export interface BillingSettings {
   /** How many days a patient has before that happens. */
   paymentTermsDays: number;
   currency: string;
+  /** The account patients are told to transfer into. */
+  payeeName: string | null;
+  nayapayNumber: string | null;
+  easypaisaNumber: string | null;
+  paymentNote: string | null;
   updatedAt: string | null;
 }
 
@@ -1465,6 +1540,10 @@ export const billingSettings = {
     platformFeeMode?: FeeMode;
     lateFee?: string;
     lateFeeMode?: FeeMode;
+    payeeName?: string;
+    nayapayNumber?: string;
+    easypaisaNumber?: string;
+    paymentNote?: string;
   }) =>
     apiRequest<BillingSettings>("/invoices/settings/billing", {
       method: "PATCH",
@@ -1485,19 +1564,31 @@ export const invoices = {
   /** Records money taken at the billing desk. Administrators only. */
   pay: (id: string) => apiRequest<Invoice>(`/invoices/${id}/pay`, { method: "POST" }),
 
+  /** Where to send the money for this bill, and how much. */
+  paymentInstructions: (id: string) =>
+    apiRequest<PaymentInstructions>(`/invoices/${id}/payment-instructions`),
+
   /**
-   * Starts a JazzCash payment for one's own invoice.
+   * Tells the hospital a transfer was made, with a screenshot.
    *
-   * Returns the gateway's endpoint and a set of signed form fields to POST
-   * there from the browser. The signature was produced on the server; nothing
-   * secret is in what comes back, and nothing here can be edited without the
-   * gateway refusing it.
+   * **This does not pay the invoice.** It records a claim; an administrator who
+   * has checked the receiving account is what settles the bill. The amount is
+   * taken from the invoice server-side, so nothing here can declare a bill
+   * smaller than it is.
    */
-  checkout: (id: string) =>
-    apiRequest<{ endpoint: string; fields: Record<string, string>; reference: string }>(
-      `/invoices/${id}/checkout`,
-      { method: "POST" },
-    ),
+  submitPaymentProof: (
+    id: string,
+    input: { method: PaymentWallet; reference: string; file: File },
+  ) => {
+    const form = new FormData();
+    form.append("method", input.method);
+    form.append("reference", input.reference);
+    form.append("file", input.file);
+    return apiMultipart<PaymentClaim>(`/invoices/${id}/payment-proof`, form);
+  },
+
+  /** Every claim made against one invoice, newest first. */
+  payments: (id: string) => apiRequest<PaymentClaim[]>(`/invoices/${id}/payments`),
 
   void: (id: string, reason: string) =>
     apiRequest<Invoice>(`/invoices/${id}/void`, { method: "POST", body: { reason } }),

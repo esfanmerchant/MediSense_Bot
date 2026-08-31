@@ -36,6 +36,10 @@ function settings(overrides: Partial<api.BillingSettings> = {}): api.BillingSett
     lateFeeMode: "FIXED",
     paymentTermsDays: 3,
     currency: "PKR",
+    payeeName: null,
+    nayapayNumber: null,
+    easypaisaNumber: null,
+    paymentNote: null,
     updatedAt: null,
     ...overrides,
   };

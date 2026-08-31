@@ -12,6 +12,8 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { useTr } from "@/lib/lang";
 import { BillingRates } from "@/components/BillingRates";
+import { PaymentAccount } from "@/components/PaymentAccount";
+import { PaymentQueue } from "@/components/PaymentQueue";
 import { InvoicesPanel } from "@/components/billing";
 
 export default function AdminBilling() {
@@ -28,10 +30,19 @@ export default function AdminBilling() {
           )}
         />
 
-        {/* The rates first: they decide what every invoice below will look
-            like, so reading them before the ledger is the right order. */}
+        {/* Payments waiting on somebody come first: it is the only thing on
+            this page that is *work*, and the rest is reference. */}
+        <div className="mt-6">
+          <PaymentQueue />
+        </div>
+
+        {/* Then the settings that shape what the ledger below will look like. */}
         <div className="mt-6">
           <BillingRates />
+        </div>
+
+        <div className="mt-6">
+          <PaymentAccount />
         </div>
 
         <div className="mt-6">

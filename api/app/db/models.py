@@ -12,7 +12,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, ClassVar
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, Numeric, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import ENUM, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -609,16 +619,32 @@ class BillingSettings(Base):
         default=enums.FeeMode.FIXED,
         nullable=False,
     )
+    #: The account a patient is told to transfer into.
+    #:
+    #: Here rather than in configuration because it belongs to the administrator
+    #: — a clinic that changes wallet should not need a deployment — and because
+    #: it sits beside the rates they already edit. Nullable throughout: a
+    #: hospital that has not entered one is told plainly that online payment is
+    #: unavailable, rather than showing a patient an empty account to pay into.
+    payee_name: Mapped[str | None] = mapped_column("payeeName", String(160))
+    nayapay_number: Mapped[str | None] = mapped_column("nayapayNumber", String(32))
+    easypaisa_number: Mapped[str | None] = mapped_column("easypaisaNumber", String(32))
+    #: Anything else the payer needs to know — a branch, a reference format.
+    payment_note: Mapped[str | None] = mapped_column("paymentNote", Text)
+
     updated_at: Mapped[datetime] = mapped_column("updatedAt", DateTime, nullable=False)
     updated_by_id: Mapped[str | None] = mapped_column("updatedById", Text)
 
 
 class Payment(Base):
-    """One attempt to settle an invoice — not one success.
+    """A claim that an invoice has been paid, and what became of it.
 
-    A redirect gateway takes the payer out of this system entirely, so the row
-    is written *before* they leave. Somebody who pays and then closes the tab is
-    then a payment to reconcile, rather than money with no trace on our side.
+    Not a payment: a *claim*. The patient transfers the money in their own
+    banking app, then tells us the reference and shows a screenshot. That is
+    evidence, and evidence is not settlement — only an administrator who has
+    looked at the receiving account moves this to ``SUCCEEDED``, and only that
+    marks the invoice paid. Collapsing the two would let anybody clear a bill
+    with a picture of somebody else's transfer.
     """
 
     __tablename__ = "payments"
@@ -638,12 +664,32 @@ class Payment(Base):
     status: Mapped[enums.PaymentStatus] = mapped_column(
         pg_enum(enums.PaymentStatus, "PaymentStatus"), nullable=False
     )
-    #: Our reference, sent to the gateway and echoed back. Unique, because it is
-    #: the only thing standing between one payment and a callback delivered
-    #: twice.
-    gateway_ref: Mapped[str] = mapped_column("gatewayRef", Text, nullable=False, unique=True)
+    #: The transaction reference the payer read off their banking app.
+    #:
+    #: Deliberately not unique. Two people paying from the same wallet can show
+    #: the same visible reference, and banks reuse them across days — a unique
+    #: index would refuse a genuine payment at the moment somebody is trying to
+    #: settle a bill. A duplicate is something for the reviewer to notice, which
+    #: is what the reviewer is for.
+    reference: Mapped[str | None] = mapped_column(String(120))
+    #: The screenshot, as an object key in the private proofs bucket. A path and
+    #: never a URL, like avatars: the bucket has no public address and every
+    #: link is signed per response.
+    proof_path: Mapped[str | None] = mapped_column("proofPath", Text)
+
+    #: Who checked it, when, and — if they refused — why. The reason is shown to
+    #: the patient, so it has to be a sentence rather than a code.
+    reviewed_by_id: Mapped[str | None] = mapped_column("reviewedById", Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column("reviewedAt", DateTime)
+    rejection_reason: Mapped[str | None] = mapped_column("rejectionReason", Text)
+
+    #: Left from the gateway that preceded this. Unused and nullable; kept
+    #: rather than dropped because the column costs nothing and dropping one is
+    #: a migration that can go wrong for no gain.
+    gateway_ref: Mapped[str | None] = mapped_column("gatewayRef", Text)
     gateway_code: Mapped[str | None] = mapped_column("gatewayCode", Text)
     gateway_message: Mapped[str | None] = mapped_column("gatewayMessage", Text)
+
     created_at: Mapped[datetime] = _created()
     completed_at: Mapped[datetime | None] = mapped_column("completedAt", DateTime)
 

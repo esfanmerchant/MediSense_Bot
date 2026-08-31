@@ -119,15 +119,16 @@ class FeeMode(StrEnum):
 
 
 class PaymentMethod(StrEnum):
-    """How a payment was attempted.
+    """Where the money was sent.
 
-    ``COUNTER`` is the one that is not a gateway: money handed over at the
-    billing desk and recorded afterwards by staff. It is kept in the same enum
-    because the question a payment row answers is "how was this settled", and a
-    cash payment is an answer to it.
+    All three are transfers a person makes themselves, in their own banking app,
+    and then tells us about — there is no gateway in this system and none is
+    pretended. ``COUNTER`` is money handed over at the billing desk and recorded
+    by staff; the other two are wallet transfers the payer evidences with a
+    screenshot.
     """
 
-    JAZZCASH = "JAZZCASH"
+    NAYAPAY = "NAYAPAY"
     EASYPAISA = "EASYPAISA"
     COUNTER = "COUNTER"
 
@@ -135,13 +136,15 @@ class PaymentMethod(StrEnum):
 class PaymentStatus(StrEnum):
     """Where an attempt got to.
 
-    ``INITIATED`` exists because a redirect gateway takes the payer away from
-    this system: the row is written *before* they leave, so a person who pays
-    and then closes the tab is a payment we know to go and reconcile, rather
-    than money with no trace on our side at all.
+    ``SUBMITTED`` is the important one and the reason this is not a boolean. It
+    means *the payer says they have paid and has shown us something* — not that
+    money arrived. Only a person who has checked the receiving account moves it
+    to ``SUCCEEDED``, which is what keeps "a patient uploaded a picture" and "the
+    hospital has been paid" as two different facts. Treating them as one would
+    let anybody settle a bill with a screenshot of somebody else's transfer.
     """
 
-    INITIATED = "INITIATED"
+    SUBMITTED = "SUBMITTED"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
 

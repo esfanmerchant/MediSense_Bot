@@ -48,7 +48,15 @@ from app.core.errors import bad_request, conflict
 from app.core.logging import logger
 from app.db.base import new_id, utcnow
 from app.db.enums import FeeMode, InvoiceStatus, NotificationType, Role
-from app.db.models import Appointment, BillingSettings, Doctor, Invoice, Patient, User
+from app.db.models import (
+    Appointment,
+    BillingSettings,
+    Doctor,
+    Invoice,
+    Patient,
+    Payment,
+    User,
+)
 from app.modules.notifications.service import notify
 
 #: How long a patient has before an invoice is considered overdue.
@@ -436,6 +444,30 @@ def amount_due(invoice: Invoice) -> Decimal:
     if invoice.status in (InvoiceStatus.PAID, InvoiceStatus.VOID, InvoiceStatus.REFUNDED):
         return Decimal("0")
     return _money(invoice.total_amount + late_fee_applies(invoice))
+
+
+def serialize_payment(payment: Payment, *, proof_url: str | None = None) -> dict[str, Any]:
+    """One claim against an invoice.
+
+    ``proofUrl`` is signed by the caller and passed in rather than minted here,
+    because signing is a network round-trip and a list of twenty payments should
+    issue them together rather than one after another. Absent means "not asked
+    for", which is the normal case in a list.
+    """
+    return {
+        "id": payment.id,
+        "invoiceId": payment.invoice_id,
+        "amount": str(payment.amount),
+        "currency": payment.currency,
+        "method": str(payment.method),
+        "status": str(payment.status),
+        "reference": payment.reference,
+        "hasProof": payment.proof_path is not None,
+        "proofUrl": proof_url,
+        "rejectionReason": payment.rejection_reason,
+        "createdAt": payment.created_at.isoformat() + "Z" if payment.created_at else None,
+        "reviewedAt": payment.reviewed_at.isoformat() + "Z" if payment.reviewed_at else None,
+    }
 
 
 def serialize(invoice: Invoice) -> dict[str, Any]:

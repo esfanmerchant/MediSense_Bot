@@ -25,8 +25,8 @@ from app.modules.appointments.router import router as appointments_router
 from app.modules.assistant.router import router as assistant_router
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
-from app.modules.billing.payments import router as payments_router
 from app.modules.billing.router import router as billing_router
+from app.modules.billing.verification import router as payment_verification_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.departments.router import router as departments_router
 from app.modules.doctor_applications.admin_router import router as doctor_applications_admin_router
@@ -64,6 +64,7 @@ async def _ensure_storage_buckets() -> None:
         settings.SUPABASE_DOCUMENTS_BUCKET,
         settings.SUPABASE_AVATARS_BUCKET,
         settings.SUPABASE_CREDENTIALS_BUCKET,
+        settings.SUPABASE_PAYMENT_PROOFS_BUCKET,
     )
     for bucket in buckets:
         try:
@@ -175,7 +176,7 @@ def create_app() -> FastAPI:
         vitals_router,
         alerts_router,
         billing_router,
-        payments_router,
+        payment_verification_router,
         emergency_router,
         audit_router,
         notifications_router,

@@ -26,7 +26,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { Icon } from "@/components/Icon";
-import { useToast } from "@/components/overlays";
+import { PayInvoice } from "@/components/PayInvoice";
 import {
   Badge,
   Button,
@@ -44,6 +44,7 @@ import {
   invoices as invoicesApi,
   type Invoice,
   type InvoiceStatus,
+  type PaymentClaim,
 } from "@/lib/api";
 import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
@@ -483,66 +484,93 @@ function AdminActions({
 }
 
 /**
- * The button that sends a patient to JazzCash.
+ * Paying a bill, and what happens between transferring and being paid up.
  *
- * A redirect gateway is a *form post*, not a fetch: the payer's browser has to
- * end up on JazzCash's own page, on their domain, with their certificate in the
- * address bar. That is the whole security property of a hosted checkout, and it
- * is why this builds a real form and submits it rather than posting JSON and
- * following a link. Anything that put the payment form on our page would be
- * asking a person to type a wallet PIN into a screen we control.
- *
- * The fields are signed on the server and are opaque here. Nothing in them can
- * be edited into a smaller amount without the gateway refusing the signature.
+ * The two states here are deliberately different words. A claim that is
+ * `SUBMITTED` says *waiting on the hospital* — the patient has transferred and
+ * shown a screenshot, and nothing about the bill has changed yet. Only a
+ * confirmed one settles it. Saying "paid" for the first would have people
+ * arriving at appointments believing a debt was cleared that is still open.
  */
-function PayButton({ invoice }: { invoice: Invoice }) {
+function PaySection({ invoice }: { invoice: Invoice }) {
   const tr = useTr();
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [claims, setClaims] = useState<PaymentClaim[] | null>(null);
 
-  const owed = Number(invoice.amountDue);
-  if (invoice.status !== "ISSUED" && invoice.status !== "OVERDUE") return null;
-  if (!(owed > 0)) return null;
+  const payable = invoice.status === "ISSUED" || invoice.status === "OVERDUE";
 
-  async function pay() {
-    setBusy(true);
-    try {
-      const { endpoint, fields } = await invoicesApi.checkout(invoice.id);
-
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = endpoint;
-      for (const [name, value] of Object.entries<string>(fields)) {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = name;
-        input.value = value;
-        form.append(input);
-      }
-      // Appended before submitting because a form outside the document does not
-      // submit — a detail that fails silently and looks like a dead button.
-      document.body.append(form);
-      form.submit();
-    } catch (cause) {
-      setBusy(false);
-      toast.show({
-        tone: "critical",
-        title: tr("Payment could not start", "Adaigi shuru nahi ho saki"),
-        // The server's own words. When online payment is not configured it says
-        // so and names the alternative, which is more use than "try again".
-        body: cause instanceof ApiError ? cause.message : String(cause),
+  useEffect(() => {
+    if (!payable) return;
+    let cancelled = false;
+    void invoicesApi
+      .payments(invoice.id)
+      .then((rows) => {
+        if (!cancelled) setClaims(rows);
+      })
+      .catch(() => {
+        // A bill you cannot see the history of is still a bill you can pay.
+        if (!cancelled) setClaims([]);
       });
-    }
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [invoice.id, payable]);
+
+  if (!payable || !(Number(invoice.amountDue) > 0)) return null;
+
+  const waiting = claims?.find((claim) => claim.status === "SUBMITTED");
+  const refused = claims?.find((claim) => claim.status === "FAILED");
 
   return (
-    <Button onClick={pay} loading={busy}>
-      <Icon name="payments" className="text-[20px]" />
-      {tr(
-        `Pay ${money(invoice.amountDue, invoice.currency)}`,
-        `${money(invoice.amountDue, invoice.currency)} ada karein`,
+    <div className="mt-5 space-y-3">
+      {waiting ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-sunken p-4">
+          <Icon name="hourglass_top" className="shrink-0 text-[20px] text-warning" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-strong">
+              {tr("Waiting for the hospital to confirm", "Hospital ki tasdeeq ka intezar")}
+            </p>
+            <p className="text-xs text-muted">
+              {tr(
+                `Sent with transaction ID ${waiting.reference ?? ""}. The bill stays unpaid until it is checked.`,
+                `Transaction ID ${waiting.reference ?? ""} ke saath bheja gaya. Tasdeeq tak bill ada shuda nahi.`,
+              )}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* A refusal is shown *above* the button, because it is the reason
+              somebody is about to press it again. */}
+          {refused?.rejectionReason && (
+            <div className="flex items-start gap-2 rounded-xl border border-critical/40 bg-critical-soft p-4">
+              <Icon name="error" className="mt-0.5 shrink-0 text-[18px] text-critical" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-strong">
+                  {tr("Your last payment was not accepted", "Aap ki pichhli adaigi qubool nahi hui")}
+                </p>
+                <p className="text-sm text-muted">{refused.rejectionReason}</p>
+              </div>
+            </div>
+          )}
+
+          <Button onClick={() => setOpen(true)}>
+            <Icon name="payments" className="text-[20px]" />
+            {tr(
+              `Pay ${money(invoice.amountDue, invoice.currency)}`,
+              `${money(invoice.amountDue, invoice.currency)} ada karein`,
+            )}
+          </Button>
+        </>
       )}
-    </Button>
+
+      <PayInvoice
+        invoice={invoice}
+        open={open}
+        onClose={() => setOpen(false)}
+        onSubmitted={(claim) => setClaims((rows) => [claim, ...(rows ?? [])])}
+      />
+    </div>
   );
 }
 
@@ -647,9 +675,7 @@ function InvoiceRow({
                   {/* A patient's own action. Administrators keep the counter
                       controls below; both can appear, because an administrator
                       looking at their own bill is not a special case. */}
-                  <div className="mt-5 flex flex-wrap items-center gap-3">
-                    <PayButton invoice={invoice} />
-                  </div>
+                  <PaySection invoice={invoice} />
                   {canManage && <AdminActions invoice={invoice} onChanged={onChanged} />}
                 </div>
               </motion.div>

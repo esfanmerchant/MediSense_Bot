@@ -1,0 +1,57 @@
+# Repository-root build context.
+#
+# Neither image is built from here — api/Dockerfile and client/Dockerfile each
+# take their own directory as the context, and each has its own .dockerignore
+# beside it. This file is the safety net for anyone who runs a build from the
+# root anyway, and its first job is the same as theirs: keep the secrets out.
+#
+# A .env copied into a layer is readable by anyone who can pull the image, and
+# stays readable after a later layer deletes it.
+
+# --- Secrets -----------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.mcp.json
+
+# --- Installed dependencies --------------------------------------------------
+# Platform-specific and rebuilt inside the image. Copying the host's is how a
+# Windows binary ends up in a Linux image.
+node_modules/
+.pnpm-store/
+api/.venv/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+
+# --- Build output ------------------------------------------------------------
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# --- Caches and test artefacts -----------------------------------------------
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.vitest/
+coverage/
+.paddleocr/
+.paddlex/
+ocr/models/
+ocr/_smoke/
+
+# --- History and documents ---------------------------------------------------
+.git/
+.gitignore
+*.log
+logs/
+
+# --- Editor / OS -------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

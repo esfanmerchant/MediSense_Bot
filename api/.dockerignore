@@ -1,0 +1,45 @@
+# What must never reach the build context for the API image.
+#
+# In force when the image is built with this directory as the context, which is
+# how api/Dockerfile is meant to be built:  docker build -t medisense-api ./api
+
+# --- Secrets -----------------------------------------------------------------
+# A .env copied into a layer is readable by anyone who can pull the image, and
+# stays readable after a later layer deletes it.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- The developer's environment ---------------------------------------------
+# Platform-specific, several hundred megabytes, and rebuilt inside the image
+# anyway. Copying it in is also how a Windows binary ends up in a Linux image.
+.venv/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# --- OCR models --------------------------------------------------------------
+# Downloaded on first use, and large.
+.paddleocr/
+.paddlex/
+
+# --- Not part of a running API -----------------------------------------------
+# `alembic/` is deliberately absent from this list: migrations ship with the
+# image so `alembic upgrade head` can be run as a one-off against a deployment
+# without needing a checkout of the repository beside it.
+tests/
+scripts/
+Makefile.md
+Dockerfile
+.dockerignore
+
+# --- Editor / OS -------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

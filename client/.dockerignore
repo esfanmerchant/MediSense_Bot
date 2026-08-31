@@ -1,0 +1,52 @@
+# What must never reach the build context for the client image.
+#
+# In force when the image is built with this directory as the context, which is
+# how client/Dockerfile is meant to be built:
+#   docker build -t medisense-client ./client
+
+# --- Secrets -----------------------------------------------------------------
+# Nothing secret belongs in a browser bundle, and a .env in the context is a
+# secret in a layer. The two public values this build needs arrive as build
+# arguments instead, where they are visible on purpose.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Installed and built output ----------------------------------------------
+# node_modules is installed inside the image from the lockfile: copying the
+# host's would carry platform-specific binaries built for Windows into a Linux
+# image, and would defeat the layer caching the install stage exists for.
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+
+# --- Tests and tooling -------------------------------------------------------
+# None of this is part of a running server. The suite runs in CI, not in a
+# production build.
+**/*.test.ts
+**/*.test.tsx
+vitest.config.*
+vitest.setup.*
+coverage/
+.vitest/
+eslint.config.*
+
+# --- Repository furniture ----------------------------------------------------
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+AGENTS.md
+CLAUDE.md
+README.md
+
+# --- Editor / OS -------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

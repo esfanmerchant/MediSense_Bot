@@ -1,0 +1,68 @@
+# =============================================================================
+# MediSense — the two services, wired together.
+#
+#   cp .env.example .env      # then fill it in
+#   docker compose up --build
+#
+#   API     http://localhost:4000/api/health
+#   Client  http://localhost:3000
+#
+# There is no database service here, and that is not an oversight. This
+# deployment's Postgres and its private storage buckets are one hosted Supabase
+# project: the API's storage layer talks to Supabase's REST API, and medical
+# documents live in buckets a local Postgres would not have. A `postgres`
+# container beside these two would start, accept a connection, and then be
+# missing every file every record points at — a worse failure than not having
+# one, because it looks like it is working.
+# =============================================================================
+
+services:
+  api:
+    build:
+      context: ./api
+      args:
+        # Local OCR is a ~500 MB dependency and off by default. Set it to
+        # "true" for a deployment that cannot send documents to an external
+        # provider and therefore needs the in-process fallback.
+        INSTALL_OCR: "false"
+    image: medisense-api
+    # Every value is read and validated at boot by app/core/config.py, which
+    # refuses to start on a missing or malformed one. Nothing is baked into the
+    # image.
+    env_file: .env
+    environment:
+      # The client is reached on the host, not inside this network, so CORS and
+      # cookie scope have to name the address a browser will actually use.
+      CLIENT_ORIGIN: http://localhost:3000
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+      args:
+        # Build-time, not run-time. NEXT_PUBLIC_* values are substituted into
+        # the JavaScript during `next build`, so this URL is fixed in the image
+        # — changing it later means rebuilding, and staging and production need
+        # separate builds. It is the browser's route to the API, which is why it
+        # is localhost rather than the `api` service name: the fetch happens on
+        # the user's machine, where this compose network does not exist.
+        NEXT_PUBLIC_API_URL: http://localhost:4000/api
+        # Public by design, and expected to be restricted by HTTP referrer in
+        # the Google Cloud console. Read from the root .env, which is where
+        # .env.example documents it — local development reads it from
+        # client/.env.local instead, so the value has to be in both. Empty is
+        # not an error: the clinic map does not render, and the rest of the
+        # doctor's profile is unaffected.
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+    image: medisense-client
+    ports:
+      - "3000:3000"
+    # Ordering only, and only as far as compose can honestly promise it. The
+    # client is a server rendering pages; it does not need the API to have
+    # finished starting in order to start itself, and a page loaded a second
+    # early simply retries.
+    depends_on:
+      - api
+    restart: unless-stopped

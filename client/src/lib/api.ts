@@ -1427,12 +1427,23 @@ export interface Invoice {
   createdAt: string;
 }
 
+/** Whether a figure is a flat amount or a share of the bill. */
+export type FeeMode = "FIXED" | "PERCENT";
+
 export interface BillingSettings {
-  /** A percentage. Applied to the consultation fee and the platform fee. */
+  /**
+   * Each value is read through the mode beside it: rupees under `FIXED`,
+   * percent under `PERCENT`. One mechanism for all three rather than assuming
+   * tax is always a percentage and a fee always flat — clinics exist that do it
+   * the other way round.
+   */
   taxPercent: string;
+  taxMode: FeeMode;
   platformFee: string;
+  platformFeeMode: FeeMode;
   /** Charged once when a bill passes its due date, never per day. */
   lateFee: string;
+  lateFeeMode: FeeMode;
   /** How many days a patient has before that happens. */
   paymentTermsDays: number;
   currency: string;
@@ -1447,7 +1458,14 @@ export const billingSettings = {
    * stores what it charged, so a bill already sent to a patient never changes
    * because somebody corrected a percentage this morning.
    */
-  update: (input: { taxPercent?: string; platformFee?: string; lateFee?: string }) =>
+  update: (input: {
+    taxPercent?: string;
+    taxMode?: FeeMode;
+    platformFee?: string;
+    platformFeeMode?: FeeMode;
+    lateFee?: string;
+    lateFeeMode?: FeeMode;
+  }) =>
     apiRequest<BillingSettings>("/invoices/settings/billing", {
       method: "PATCH",
       body: input,

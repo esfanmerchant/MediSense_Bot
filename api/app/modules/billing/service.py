@@ -47,7 +47,7 @@ from app.core.config import settings
 from app.core.errors import bad_request, conflict
 from app.core.logging import logger
 from app.db.base import new_id, utcnow
-from app.db.enums import InvoiceStatus, NotificationType, Role
+from app.db.enums import FeeMode, InvoiceStatus, NotificationType, Role
 from app.db.models import Appointment, BillingSettings, Doctor, Invoice, Patient, User
 from app.modules.notifications.service import notify
 
@@ -138,26 +138,62 @@ class Charges:
     platform_fee: Decimal
     tax: Decimal
     total: Decimal
+    #: The rate that produced ``tax``, as a percentage, whatever mode was used.
+    #: Stored on the invoice so an old bill can explain its own tax without
+    #: anybody looking up what the settings said that month. A flat tax records
+    #: zero here, because there was no rate — the amount *was* the charge.
+    tax_percent: Decimal
 
 
-def totals(subtotal: Decimal, *, platform_fee: Decimal, tax_percent: Decimal) -> Charges:
+def apply_fee(base: Decimal, *, value: Decimal, mode: FeeMode) -> Decimal:
+    """A fee against a base, whichever way it was configured.
+
+    ``FIXED`` ignores the base entirely; ``PERCENT`` takes a share of it. The
+    base differs by fee and is the caller's business — a platform fee is a share
+    of the consultation, a late charge a share of the whole bill — which is why
+    it is a parameter rather than something decided here.
+    """
+    if mode is FeeMode.PERCENT:
+        return _money(_money(base) * Decimal(value) / Decimal("100"))
+    return _money(value)
+
+
+def totals(
+    subtotal: Decimal,
+    *,
+    platform_fee: Decimal,
+    platform_fee_mode: FeeMode = FeeMode.FIXED,
+    tax_percent: Decimal,
+    tax_mode: FeeMode = FeeMode.PERCENT,
+) -> Charges:
     """The consultation fee, the platform fee, the tax on both, and the sum.
 
     Tax is charged on the fee **and** the platform fee rather than the fee
     alone: the platform fee is part of what is being sold, and taxing only half
     of a bill is the kind of quiet arithmetic error nobody notices until an
-    audit. The rates arrive as arguments rather than being read here, because
-    the caller has to store the ones it used on the invoice — see ``Invoice``.
+    audit. A percentage platform fee is a share of the consultation fee, not of
+    itself — the alternative is circular.
+
+    The rates arrive as arguments rather than being read here, because the
+    caller has to store the ones it used on the invoice — see ``Invoice``.
     """
     subtotal = _money(subtotal)
-    platform_fee = _money(platform_fee)
-    taxable = subtotal + platform_fee
-    tax = _money(taxable * tax_percent / Decimal("100"))
+    fee = apply_fee(subtotal, value=platform_fee, mode=platform_fee_mode)
+    taxable = subtotal + fee
+    tax = apply_fee(taxable, value=tax_percent, mode=tax_mode)
+
+    # What rate that tax actually worked out to, so the invoice can show one
+    # even when the charge was entered as a flat amount.
+    effective = (
+        _money(tax * Decimal("100") / taxable) if taxable > 0 else Decimal("0.00")
+    )
+
     return Charges(
         subtotal=subtotal,
-        platform_fee=platform_fee,
+        platform_fee=fee,
         tax=tax,
         total=_money(taxable + tax),
+        tax_percent=effective,
     )
 
 
@@ -199,7 +235,9 @@ async def generate_for_appointment(
     charges = totals(
         record.consultation_fee,
         platform_fee=rates.platform_fee,
+        platform_fee_mode=rates.platform_fee_mode,
         tax_percent=rates.tax_percent,
+        tax_mode=rates.tax_mode,
     )
 
     invoice = Invoice(
@@ -214,8 +252,13 @@ async def generate_for_appointment(
         # stood when it was issued, and reading current settings would restate
         # every unpaid bill in the hospital whenever a rate was corrected.
         platform_fee=charges.platform_fee,
-        tax_percent=rates.tax_percent,
-        late_fee=rates.late_fee,
+        tax_percent=charges.tax_percent,
+        # Resolved to rupees here and locked, so a percentage late charge is a
+        # share of *this* bill rather than of whatever the total happens to be
+        # when somebody finally looks at it.
+        late_fee=apply_fee(
+            charges.total, value=rates.late_fee, mode=rates.late_fee_mode
+        ),
         currency=settings.INVOICE_CURRENCY,
         # Issued, not draft: the patient is notified about it in the next step,
         # and notifying someone about a document they cannot see would be worse

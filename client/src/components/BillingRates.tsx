@@ -8,6 +8,12 @@
  * holds the server. It sits here now, beside two figures that did not exist at
  * all: a platform fee, and what a bill costs if it is paid late.
  *
+ * **Each figure can be a flat amount or a share of the bill.** Tax is normally
+ * a percentage and a platform fee normally a flat charge, but clinics exist
+ * that do the opposite, and a screen that hard-codes which is which forces them
+ * to misdescribe their own pricing. So all three carry the same switch, and the
+ * hint underneath changes to say what the number now means.
+ *
  * **The one thing this screen has to be honest about** is which invoices a
  * change reaches. Every invoice stores the rates it charged, so changing a
  * number here touches nothing already issued — a bill a patient has been sent
@@ -21,28 +27,155 @@ import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { useToast } from "@/components/overlays";
 import { Button, Card, Field, Input, cx } from "@/components/ui";
-import { ApiError, billingSettings, type BillingSettings } from "@/lib/api";
+import { ApiError, billingSettings, type BillingSettings, type FeeMode } from "@/lib/api";
 import { useTr } from "@/lib/lang";
 
+/** One editable figure: what was typed, and how to read it. */
+interface Entry {
+  value: string;
+  mode: FeeMode;
+}
+
 interface Draft {
-  taxPercent: string;
-  platformFee: string;
-  lateFee: string;
+  tax: Entry;
+  platform: Entry;
+  late: Entry;
 }
 
 function draftOf(settings: BillingSettings | null): Draft {
   return {
-    taxPercent: settings?.taxPercent ?? "",
-    platformFee: settings?.platformFee ?? "",
-    lateFee: settings?.lateFee ?? "",
+    tax: { value: settings?.taxPercent ?? "", mode: settings?.taxMode ?? "PERCENT" },
+    platform: {
+      value: settings?.platformFee ?? "",
+      mode: settings?.platformFeeMode ?? "FIXED",
+    },
+    late: { value: settings?.lateFee ?? "", mode: settings?.lateFeeMode ?? "FIXED" },
   };
 }
 
-/** A money or percentage value the API will take, or null if it will not. */
-function numeric(raw: string, max: number): number | null {
-  const value = Number(raw.trim());
-  if (raw.trim() === "" || !Number.isFinite(value) || value < 0 || value > max) return null;
-  return value;
+/**
+ * The number somebody meant, out of what they actually typed.
+ *
+ * People type `15%` into a box labelled "percent" and `PKR 500` or `1,500` into
+ * one labelled with a currency, because that is how those quantities are
+ * written down everywhere else. Refusing them — which this screen did — is a
+ * disabled Save button next to a field that looks perfectly filled in, with a
+ * message that does not say what is wrong. The symbols say the same thing the
+ * label already says, so they are simply removed.
+ *
+ * Returns null only when what is left is genuinely not a number.
+ */
+function parseAmount(raw: string): number | null {
+  const cleaned = raw
+    .replace(/%/g, "")
+    .replace(/,/g, "")
+    .replace(/[A-Za-z\s]/g, "")
+    .trim();
+  if (cleaned === "") return null;
+  const value = Number(cleaned);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function ModeSwitch({
+  value,
+  onChange,
+  currency,
+  label,
+}: {
+  value: FeeMode;
+  onChange: (mode: FeeMode) => void;
+  currency: string;
+  /**
+   * Names what this switches, for anyone not seeing the layout.
+   *
+   * Not simply the figure's name: that is already the label on the box beside
+   * it, and two controls answering to "Tax" is ambiguous to anybody navigating
+   * by label — and was, to the tests.
+   */
+  label: string;
+}) {
+  const options: Array<{ mode: FeeMode; text: string }> = [
+    { mode: "FIXED", text: currency },
+    { mode: "PERCENT", text: "%" },
+  ];
+
+  return (
+    <div role="group" aria-label={label} className="inline-flex rounded-lg border border-line p-0.5">
+      {options.map((option) => (
+        <button
+          key={option.mode}
+          type="button"
+          // `aria-pressed` rather than a radio: this toggles how the field
+          // beside it is read, it is not a value on the form.
+          aria-pressed={value === option.mode}
+          onClick={() => onChange(option.mode)}
+          className={cx(
+            "min-h-8 rounded-md px-3 text-xs font-bold transition-colors",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+            value === option.mode
+              ? "bg-primary text-primary-on"
+              : "text-muted hover:text-strong",
+          )}
+        >
+          {option.text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RateField({
+  id,
+  label,
+  entry,
+  onChange,
+  currency,
+  fixedHint,
+  percentHint,
+  error,
+  switchLabel,
+}: {
+  id: string;
+  label: string;
+  entry: Entry;
+  onChange: (entry: Entry) => void;
+  currency: string;
+  fixedHint: string;
+  percentHint: string;
+  error?: string;
+  /** How the mode switch names itself; see `ModeSwitch`. */
+  switchLabel: string;
+}) {
+  return (
+    <div>
+      {/* The switch sits above the box rather than beside a heading of its
+          own: `Field` is a floating-label shell, so the name of the figure is
+          already inside the input, and repeating it here would print it twice.
+          The switch names what it controls through `aria-label` instead. */}
+      <div className="mb-1.5 flex justify-end">
+        <ModeSwitch
+          label={switchLabel}
+          value={entry.mode}
+          currency={currency}
+          onChange={(mode) => onChange({ ...entry, mode })}
+        />
+      </div>
+      <Field
+        label={label}
+        htmlFor={id}
+        hint={entry.mode === "PERCENT" ? percentHint : fixedHint}
+        error={error}
+      >
+        <Input
+          id={id}
+          inputMode="decimal"
+          className="tabular-nums"
+          value={entry.value}
+          onChange={(event) => onChange({ ...entry, value: event.target.value })}
+        />
+      </Field>
+    </div>
+  );
 }
 
 export function BillingRates() {
@@ -71,12 +204,26 @@ export function BillingRates() {
     };
   }, []);
 
-  const patch = (change: Partial<Draft>) => setDraft((current) => ({ ...current, ...change }));
+  const currency = settings?.currency ?? "PKR";
 
-  const tax = numeric(draft.taxPercent, 100);
-  const platform = numeric(draft.platformFee, 1_000_000);
-  const late = numeric(draft.lateFee, 1_000_000);
-  const valid = tax !== null && platform !== null && late !== null;
+  /** The refusal for one figure, or undefined if it is fine. */
+  function problem(entry: Entry): string | undefined {
+    const value = parseAmount(entry.value);
+    if (value === null) return tr("Enter a number.", "Number likhein.");
+    if (entry.mode === "PERCENT" && value > 100) {
+      // A share of a bill cannot exceed the bill. Only checkable here, because
+      // the same box holds a flat 500 quite legitimately.
+      return tr("A percentage cannot be over 100.", "Feesad 100 se zyada nahi ho sakta.");
+    }
+    return undefined;
+  }
+
+  const problems = {
+    tax: problem(draft.tax),
+    platform: problem(draft.platform),
+    late: problem(draft.late),
+  };
+  const valid = !problems.tax && !problems.platform && !problems.late;
   const dirty = JSON.stringify(draft) !== JSON.stringify(draftOf(settings));
 
   async function save() {
@@ -84,9 +231,14 @@ export function BillingRates() {
     setSaving(true);
     try {
       const saved = await billingSettings.update({
-        taxPercent: String(tax),
-        platformFee: String(platform),
-        lateFee: String(late),
+        // Sent as the parsed number, not as what was typed: `15%` reaches the
+        // API as `15`.
+        taxPercent: String(parseAmount(draft.tax.value)),
+        taxMode: draft.tax.mode,
+        platformFee: String(parseAmount(draft.platform.value)),
+        platformFeeMode: draft.platform.mode,
+        lateFee: String(parseAmount(draft.late.value)),
+        lateFeeMode: draft.late.mode,
       });
       setSettings(saved);
       setDraft(draftOf(saved));
@@ -109,69 +261,67 @@ export function BillingRates() {
     }
   }
 
-  const currency = settings?.currency ?? "PKR";
-
   return (
     <Card
       icon="percent"
       title={tr("Rates and fees", "Rates aur fees")}
       description={tr(
-        "What a new invoice charges on top of the consultation fee.",
-        "Naye invoice mein consultation fee ke ilawa kya lagta hai.",
+        "What a new invoice charges on top of the consultation fee. Each one can be an amount or a percentage.",
+        "Naye invoice mein consultation fee ke ilawa kya lagta hai. Har ek raqam ya feesad ho sakta hai.",
       )}
     >
       {loading ? (
         <p className="text-sm text-muted">{tr("Loading…", "Load ho raha hai…")}</p>
       ) : (
         <div className="space-y-5">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field
+          <div className="grid gap-5 sm:grid-cols-3">
+            <RateField
+              id="rate-tax"
               label={tr("Tax", "Tax")}
-              htmlFor="rate-tax"
-              hint={tr(
-                "Percent, on the fee and the platform fee.",
-                "Feesad — fee aur platform fee dono par.",
+              switchLabel={tr(
+                "Tax: amount or percentage",
+                "Tax: raqam ya feesad",
               )}
-            >
-              <Input
-                id="rate-tax"
-                inputMode="decimal"
-                className="tabular-nums"
-                value={draft.taxPercent}
-                onChange={(event) => patch({ taxPercent: event.target.value })}
-              />
-            </Field>
+              entry={draft.tax}
+              error={problems.tax}
+              currency={currency}
+              onChange={(tax) => setDraft((d) => ({ ...d, tax }))}
+              percentHint={tr(
+                "Of the fee and the platform fee.",
+                "Fee aur platform fee dono par.",
+              )}
+              fixedHint={tr(`Flat ${currency} on every invoice.`, `Har invoice par ${currency}.`)}
+            />
 
-            <Field
+            <RateField
+              id="rate-platform"
               label={tr("Platform fee", "Platform fee")}
-              htmlFor="rate-platform"
-              hint={tr(`${currency}, per invoice.`, `${currency}, har invoice par.`)}
-            >
-              <Input
-                id="rate-platform"
-                inputMode="decimal"
-                className="tabular-nums"
-                value={draft.platformFee}
-                onChange={(event) => patch({ platformFee: event.target.value })}
-              />
-            </Field>
-
-            <Field
-              label={tr("Late payment charge", "Der ka charge")}
-              htmlFor="rate-late"
-              hint={tr(
-                `${currency}, added once after the due date.`,
-                `${currency}, aakhri tareekh ke baad ek baar.`,
+              switchLabel={tr(
+                "Platform fee: amount or percentage",
+                "Platform fee: raqam ya feesad",
               )}
-            >
-              <Input
-                id="rate-late"
-                inputMode="decimal"
-                className="tabular-nums"
-                value={draft.lateFee}
-                onChange={(event) => patch({ lateFee: event.target.value })}
-              />
-            </Field>
+              entry={draft.platform}
+              error={problems.platform}
+              currency={currency}
+              onChange={(platform) => setDraft((d) => ({ ...d, platform }))}
+              percentHint={tr("Of the consultation fee.", "Consultation fee ka feesad.")}
+              fixedHint={tr(`${currency}, per invoice.`, `${currency}, har invoice par.`)}
+            />
+
+            <RateField
+              id="rate-late"
+              label={tr("Late payment charge", "Der ka charge")}
+              switchLabel={tr(
+                "Late payment charge: amount or percentage",
+                "Der ka charge: raqam ya feesad",
+              )}
+              entry={draft.late}
+              error={problems.late}
+              currency={currency}
+              onChange={(late) => setDraft((d) => ({ ...d, late }))}
+              percentHint={tr("Of the invoice total.", "Invoice ke total ka feesad.")}
+              fixedHint={tr(`${currency}, added once.`, `${currency}, ek baar.`)}
+            />
           </div>
 
           {/* The two facts somebody would otherwise have to guess, and would
@@ -202,11 +352,9 @@ export function BillingRates() {
               {tr("Save rates", "Rates mehfooz karein")}
             </Button>
             <span className={cx("text-sm", dirty ? "text-strong" : "text-faint")}>
-              {!valid
-                ? tr("Enter a number in each box.", "Har khane mein number likhein.")
-                : dirty
-                  ? tr("Unsaved changes", "Tabdeeliyan mehfooz nahi hui")
-                  : tr("Saved", "Mehfooz hai")}
+              {dirty
+                ? tr("Unsaved changes", "Tabdeeliyan mehfooz nahi hui")
+                : tr("Saved", "Mehfooz hai")}
             </span>
           </div>
         </div>

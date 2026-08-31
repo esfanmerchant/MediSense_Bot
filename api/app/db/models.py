@@ -574,16 +574,40 @@ class BillingSettings(Base):
     SINGLETON: ClassVar[str] = "singleton"
 
     id: Mapped[str] = mapped_column(Text, primary_key=True, default=SINGLETON)
+    #: Each figure is read through the mode beside it: rupees under FIXED,
+    #: percent under PERCENT. One mechanism for all three rather than a special
+    #: case per fee — tax is normally a percentage and a platform fee normally
+    #: flat, but a system that hard-codes which is which forces a clinic that
+    #: does the opposite to lie about its own pricing.
+    #:
+    #: `tax_percent` keeps its column name. Renaming one that every invoice row
+    #: refers to, purely to gain the word "value", is tidiness paid for in a
+    #: migration that can go wrong.
     tax_percent: Mapped[Decimal] = mapped_column(
-        "taxPercent", Numeric(5, 2), default=Decimal("0"), nullable=False
+        "taxPercent", Numeric(10, 2), default=Decimal("0"), nullable=False
+    )
+    tax_mode: Mapped[enums.FeeMode] = mapped_column(
+        "taxMode", pg_enum(enums.FeeMode, "FeeMode"), default=enums.FeeMode.PERCENT, nullable=False
     )
     platform_fee: Mapped[Decimal] = mapped_column(
         "platformFee", Numeric(10, 2), default=Decimal("0"), nullable=False
+    )
+    platform_fee_mode: Mapped[enums.FeeMode] = mapped_column(
+        "platformFeeMode",
+        pg_enum(enums.FeeMode, "FeeMode"),
+        default=enums.FeeMode.FIXED,
+        nullable=False,
     )
     #: Added once, when a bill passes its due date — not per day. A daily charge
     #: on a hospital bill compounds while somebody is too ill to deal with it.
     late_fee: Mapped[Decimal] = mapped_column(
         "lateFee", Numeric(10, 2), default=Decimal("0"), nullable=False
+    )
+    late_fee_mode: Mapped[enums.FeeMode] = mapped_column(
+        "lateFeeMode",
+        pg_enum(enums.FeeMode, "FeeMode"),
+        default=enums.FeeMode.FIXED,
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column("updatedAt", DateTime, nullable=False)
     updated_by_id: Mapped[str | None] = mapped_column("updatedById", Text)

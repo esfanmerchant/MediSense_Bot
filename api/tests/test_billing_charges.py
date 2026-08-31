@@ -14,7 +14,7 @@ from decimal import Decimal
 import pytest
 
 from app.db.base import utcnow
-from app.db.enums import InvoiceStatus
+from app.db.enums import FeeMode, InvoiceStatus
 from app.db.models import Invoice
 from app.modules.billing import service
 
@@ -123,3 +123,116 @@ class TestLateFee:
         bill = invoice(late_fee="200", due_in_days=None)
         assert not service.is_overdue(bill)
         assert service.amount_due(bill) == Decimal("1000.00")
+
+
+class TestFeeModes:
+    """A fee is either a flat amount or a share, and the same field holds both."""
+
+    def test_a_flat_platform_fee_ignores_the_consultation_price(self) -> None:
+        cheap = service.totals(
+            Decimal("500"),
+            platform_fee=Decimal("200"),
+            platform_fee_mode=FeeMode.FIXED,
+            tax_percent=Decimal("0"),
+        )
+        dear = service.totals(
+            Decimal("50000"),
+            platform_fee=Decimal("200"),
+            platform_fee_mode=FeeMode.FIXED,
+            tax_percent=Decimal("0"),
+        )
+        assert cheap.platform_fee == dear.platform_fee == Decimal("200.00")
+
+    def test_a_percentage_platform_fee_scales_with_it(self) -> None:
+        charges = service.totals(
+            Decimal("2000"),
+            platform_fee=Decimal("2"),
+            platform_fee_mode=FeeMode.PERCENT,
+            tax_percent=Decimal("0"),
+        )
+        assert charges.platform_fee == Decimal("40.00")
+        assert charges.total == Decimal("2040.00")
+
+    def test_a_percentage_platform_fee_is_a_share_of_the_consultation_not_itself(
+        self,
+    ) -> None:
+        # The alternative is circular: a fee that is a percentage of a total
+        # that includes the fee.
+        charges = service.totals(
+            Decimal("1000"),
+            platform_fee=Decimal("10"),
+            platform_fee_mode=FeeMode.PERCENT,
+            tax_percent=Decimal("0"),
+        )
+        assert charges.platform_fee == Decimal("100.00")  # not 111.11
+
+    def test_a_flat_tax_is_added_whole(self) -> None:
+        charges = service.totals(
+            Decimal("1000"),
+            platform_fee=Decimal("0"),
+            tax_percent=Decimal("50"),
+            tax_mode=FeeMode.FIXED,
+        )
+        assert charges.tax == Decimal("50.00")
+        assert charges.total == Decimal("1050.00")
+
+    def test_a_flat_tax_still_reports_the_rate_it_worked_out_to(self) -> None:
+        # An invoice shows a percentage beside its tax. A flat charge has to
+        # report the rate it amounted to, or an old bill cannot explain itself.
+        charges = service.totals(
+            Decimal("1000"),
+            platform_fee=Decimal("0"),
+            tax_percent=Decimal("150"),
+            tax_mode=FeeMode.FIXED,
+        )
+        assert charges.tax_percent == Decimal("15.00")
+
+    def test_a_percentage_tax_reports_the_rate_it_was_given(self) -> None:
+        charges = service.totals(
+            Decimal("2000"),
+            platform_fee=Decimal("500"),
+            tax_percent=Decimal("15"),
+            tax_mode=FeeMode.PERCENT,
+        )
+        assert charges.tax == Decimal("375.00")
+        assert charges.tax_percent == Decimal("15.00")
+
+    def test_a_free_consultation_reports_no_rate_rather_than_dividing_by_zero(
+        self,
+    ) -> None:
+        charges = service.totals(
+            Decimal("0"), platform_fee=Decimal("0"), tax_percent=Decimal("15")
+        )
+        assert charges.total == Decimal("0.00")
+        assert charges.tax_percent == Decimal("0.00")
+
+    def test_both_modes_together(self) -> None:
+        # 2% of 2000 = 40; 15% of 2040 = 306.
+        charges = service.totals(
+            Decimal("2000"),
+            platform_fee=Decimal("2"),
+            platform_fee_mode=FeeMode.PERCENT,
+            tax_percent=Decimal("15"),
+            tax_mode=FeeMode.PERCENT,
+        )
+        assert charges.platform_fee == Decimal("40.00")
+        assert charges.tax == Decimal("306.00")
+        assert charges.total == Decimal("2346.00")
+
+
+class TestApplyFee:
+    def test_percent_of_a_base(self) -> None:
+        assert service.apply_fee(
+            Decimal("1200"), value=Decimal("15"), mode=FeeMode.PERCENT
+        ) == Decimal("180.00")
+
+    def test_fixed_ignores_the_base_entirely(self) -> None:
+        assert service.apply_fee(
+            Decimal("1200"), value=Decimal("15"), mode=FeeMode.FIXED
+        ) == Decimal("15.00")
+
+    def test_a_percentage_late_charge_is_a_share_of_the_whole_bill(self) -> None:
+        # What "10% late fee" means to somebody who owes 2346.
+        assert service.apply_fee(
+            Decimal("2346.00"), value=Decimal("10"), mode=FeeMode.PERCENT
+        ) == Decimal("234.60")

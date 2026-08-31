@@ -105,6 +105,19 @@ class InvoiceStatus(StrEnum):
     OVERDUE = "OVERDUE"
 
 
+class FeeMode(StrEnum):
+    """Whether a fee is a flat amount or a share of the bill.
+
+    One mechanism for all three figures rather than a special case per fee: tax
+    is normally a percentage and a platform fee normally a flat charge, but
+    clinics exist that do the opposite, and a system that hard-codes which is
+    which forces them to lie about their own pricing.
+    """
+
+    FIXED = "FIXED"
+    PERCENT = "PERCENT"
+
+
 class PaymentMethod(StrEnum):
     """How a payment was attempted.
 

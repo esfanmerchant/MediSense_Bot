@@ -19,7 +19,7 @@ from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
@@ -27,7 +27,14 @@ from app.api.responses import Page, ok, pagination
 from app.core.config import settings
 from app.core.errors import bad_request, forbidden, not_found, service_unavailable
 from app.db.base import new_id, utcnow
-from app.db.enums import AuditAction, InvoiceStatus, PaymentMethod, PaymentStatus, Role
+from app.db.enums import (
+    AuditAction,
+    FeeMode,
+    InvoiceStatus,
+    PaymentMethod,
+    PaymentStatus,
+    Role,
+)
 from app.db.models import Invoice, Payment
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
@@ -46,19 +53,42 @@ class BillingSettingsUpdate(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    #: A percentage, not a multiplier. Bounded here as well as by a database
-    #: constraint, so the refusal names the field instead of surfacing as a
-    #: constraint violation.
-    tax_percent: Annotated[Decimal, Field(ge=0, le=100)] | None = Field(
+    #: Each value is read through the mode beside it: rupees under FIXED,
+    #: percent under PERCENT.
+    #:
+    #: The ceiling is the flat one in both cases rather than 100 for percentages.
+    #: A percentage over 100 is refused by :meth:`_percentages_are_percentages`,
+    #: which can see the mode; a `le=100` here could not, and would reject a
+    #: perfectly ordinary flat fee of 500.
+    tax_percent: Annotated[Decimal, Field(ge=0, le=1_000_000)] | None = Field(
         default=None, alias="taxPercent"
     )
+    tax_mode: FeeMode | None = Field(default=None, alias="taxMode")
     platform_fee: Annotated[Decimal, Field(ge=0, le=1_000_000)] | None = Field(
         default=None, alias="platformFee"
     )
+    platform_fee_mode: FeeMode | None = Field(default=None, alias="platformFeeMode")
     #: Charged once when a bill passes its due date, never per day.
     late_fee: Annotated[Decimal, Field(ge=0, le=1_000_000)] | None = Field(
         default=None, alias="lateFee"
     )
+    late_fee_mode: FeeMode | None = Field(default=None, alias="lateFeeMode")
+
+    @model_validator(mode="after")
+    def _percentages_are_percentages(self) -> BillingSettingsUpdate:
+        """A share of a bill cannot exceed the bill.
+
+        Checked here rather than by a column constraint because the limit
+        depends on the mode, and the database column holds both kinds of number.
+        """
+        for value, mode, name in (
+            (self.tax_percent, self.tax_mode, "taxPercent"),
+            (self.platform_fee, self.platform_fee_mode, "platformFee"),
+            (self.late_fee, self.late_fee_mode, "lateFee"),
+        ):
+            if mode is FeeMode.PERCENT and value is not None and value > 100:
+                raise ValueError(f"{name} cannot be more than 100 percent")
+        return self
 
 
 class VoidRequest(BaseModel):
@@ -295,8 +325,11 @@ async def issue_credit_note(
 def _settings_payload(row: Any) -> dict[str, Any]:
     return {
         "taxPercent": str(row.tax_percent),
+        "taxMode": str(row.tax_mode),
         "platformFee": str(row.platform_fee),
+        "platformFeeMode": str(row.platform_fee_mode),
         "lateFee": str(row.late_fee),
+        "lateFeeMode": str(row.late_fee_mode),
         "paymentTermsDays": service.PAYMENT_TERMS_DAYS,
         "currency": settings.INVOICE_CURRENCY,
         "updatedAt": row.updated_at.isoformat() + "Z" if row.updated_at else None,
@@ -335,11 +368,19 @@ async def update_billing_settings(
     if not changes:
         return ok(_settings_payload(row))
 
-    before = {
-        "taxPercent": str(row.tax_percent),
-        "platformFee": str(row.platform_fee),
-        "lateFee": str(row.late_fee),
-    }
+    # The mode belongs in the trail beside the number: "the platform fee went
+    # from 2 to 5" means two entirely different things depending on it.
+    def snapshot() -> dict[str, str]:
+        return {
+            "taxPercent": str(row.tax_percent),
+            "taxMode": str(row.tax_mode),
+            "platformFee": str(row.platform_fee),
+            "platformFeeMode": str(row.platform_fee_mode),
+            "lateFee": str(row.late_fee),
+            "lateFeeMode": str(row.late_fee_mode),
+        }
+
+    before = snapshot()
 
     for field, value in changes.items():
         setattr(row, field, value)
@@ -357,14 +398,7 @@ async def update_billing_settings(
             entity_id=row.id,
             ip_address=client_ip(request),
             request_id=getattr(request.state, "request_id", None),
-            metadata={
-                "before": before,
-                "after": {
-                    "taxPercent": str(row.tax_percent),
-                    "platformFee": str(row.platform_fee),
-                    "lateFee": str(row.late_fee),
-                },
-            },
+            metadata={"before": before, "after": snapshot()},
         ),
     )
 

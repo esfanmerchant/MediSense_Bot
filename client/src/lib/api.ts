@@ -412,6 +412,12 @@ export const auth = {
     dateOfBirth?: string;
     /** Patients by default. A doctor's account is gated until an admin approves it. */
     role?: "PATIENT" | "DOCTOR";
+    /**
+     * Must be true. The server refuses otherwise and stamps the account with
+     * the version of the terms that was agreed to, so a later change asks
+     * again rather than assuming.
+     */
+    acceptedTerms: boolean;
   }) => apiRequest<VerificationPending>("/auth/register", { method: "POST", body: input }),
 
   /** Exchanges the emailed code for a session. */

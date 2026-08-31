@@ -73,6 +73,10 @@ PUBLIC_PATHS = {
     # session can still clear its cookies. Requiring a valid token would leave
     # a signed-out-but-not-really state that nobody can escape.
     "/api/auth/logout",
+    # Published text, shown on the registration form before anybody has an
+    # account. A terms page you must sign in to read is not terms anybody can
+    # consent to, and there is nothing here to protect.
+    "/api/auth/terms",
 }
 
 #: Routes that authenticate but deliberately have no permission requirement:

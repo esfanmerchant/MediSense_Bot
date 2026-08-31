@@ -78,7 +78,7 @@ from app.modules.auth import twofactor
 from app.modules.auth.rbac import permissions_for
 from app.modules.auth.schemas import LoginRequest, RegisterRequest
 from app.services import email as email_service
-from app.services import email_templates
+from app.services import email_templates, terms
 
 MAX_FAILED_LOGINS = 5
 LOCKOUT_MINUTES = 15
@@ -248,6 +248,17 @@ async def register(
     not a usable account. A DOCTOR gets an empty DRAFT application instead —
     never a ``Doctor`` row, which is a credential an administrator grants.
     """
+    if not payload.accepted_terms:
+        # Checked before the password, because it is the cheapest refusal and
+        # because an account must never exist without a recorded agreement —
+        # there is no later point at which one could honestly be added.
+        raise AppError(
+            422,
+            ErrorCode.VALIDATION_ERROR,
+            "You need to accept the terms to create an account.",
+            [{"field": "acceptedTerms", "message": "Please read and accept the terms."}],
+        )
+
     policy = check_password_policy(payload.password, str(payload.email))
     if not policy.valid:
         raise AppError(
@@ -272,6 +283,11 @@ async def register(
         phone=payload.phone,
         status=UserStatus.PENDING_VERIFICATION,
     )
+    # Stamped with the version, so a later change to the wording asks again
+    # rather than assuming the agreement of everybody who signed up before.
+    user.terms_accepted_at = utcnow()
+    user.terms_version = terms.TERMS_VERSION
+
     db.add(user)
     await db.flush()
 

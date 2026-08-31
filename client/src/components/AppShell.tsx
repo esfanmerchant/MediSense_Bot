@@ -113,6 +113,7 @@ const NAV: Record<Role, NavGroup[]> = {
       label: ["Operations", "Intezam"],
       items: [
         { href: "/admin/appointments", label: ["Appointments", "Appointments"], icon: "calendar_today" },
+        { href: "/admin/users", label: ["People", "Log"], icon: "group" },
         { href: "/admin/departments", label: ["Departments", "Departments"], icon: "domain" },
         { href: "/admin/revenue", label: ["Revenue", "Aamdani"], icon: "monitoring" },
         { href: "/admin/billing", label: ["Billing", "Billing"], icon: "payments" },
@@ -567,6 +568,15 @@ function AccountMenu({
               </span>
               <ThemeToggle />
             </div>
+
+            <div aria-hidden className="my-1 h-px bg-line/70" />
+
+            {/* Findable after the fact. Somebody who agreed to these months ago
+                needs a way back to them that is not the registration form. */}
+            <Link href="/terms" onClick={close} className={itemClass}>
+              <Icon name="gavel" className="text-[20px]" />
+              {tr("Terms and guidelines", "Shara-it aur guidelines")}
+            </Link>
 
             <div aria-hidden className="my-1 h-px bg-line/70" />
 

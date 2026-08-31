@@ -32,6 +32,7 @@ import {
 import { PasswordStrength, Segmented, strengthOf } from "@/components/forms";
 import { Button, Checkbox, Field, Input } from "@/components/ui";
 import { ApiError, auth } from "@/lib/api";
+import { TermsDialog } from "@/components/Terms";
 import { useTr } from "@/lib/lang";
 
 type Role = "PATIENT" | "DOCTOR";
@@ -47,6 +48,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -76,6 +78,10 @@ export default function RegisterPage() {
         email: email.trim(),
         password,
         role,
+        // The server refuses without this and records the version agreed to,
+        // so the tick on this form is the thing that makes the account legal
+        // rather than only the thing that unlocks the button.
+        acceptedTerms: true,
         // Only patients are asked for a number, and a blank one is left out
         // entirely rather than sent as an empty string.
         ...(role === "PATIENT" && digits ? { phone: `+92${digits}` } : {}),
@@ -225,17 +231,31 @@ export default function RegisterPage() {
             }
           />
 
-          <Checkbox
-            checked={accepted}
-            onChange={(event) => {
-              setAccepted(event.target.checked);
-              if (event.target.checked) setBlocked(null);
-            }}
-            label={tr(
-              "MediSense may store my health information to provide my care.",
-              "MediSense meri sehat ki maloomat ilaj ke liye mehfooz rakh sakta hai.",
-            )}
-          />
+          <div className="space-y-2">
+            <Checkbox
+              checked={accepted}
+              onChange={(event) => {
+                setAccepted(event.target.checked);
+                if (event.target.checked) setBlocked(null);
+              }}
+              label={tr(
+                "I have read and accept the terms, and agree that MediSense may store my health information to provide my care.",
+                "Main ne shara-it parh li hain aur qubool karta hoon, aur ittefaq karta hoon ke MediSense meri sehat ki maloomat ilaj ke liye mehfooz rakh sakta hai.",
+              )}
+            />
+            {/* Opens over the form rather than navigating away: making somebody
+                abandon a half-filled form to read what they are agreeing to is
+                how a consent screen becomes something people click through. */}
+            <button
+              type="button"
+              onClick={() => setShowTerms(true)}
+              className="ml-8 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              {tr("Read the terms and guidelines", "Shara-it aur guidelines parhein")}
+            </button>
+          </div>
+
+          <TermsDialog open={showTerms} onClose={() => setShowTerms(false)} />
 
           {blocked && (
             <p role="alert" className="pop-in px-1 text-sm font-medium text-critical">

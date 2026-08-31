@@ -35,6 +35,10 @@ class RegisterRequest(_Base):
     #: approve — but NURSE and ADMIN remain accounts only an administrator
     #: creates, so no one can grant themselves either by editing a request body.
     role: Literal[Role.PATIENT, Role.DOCTOR] = Role.PATIENT
+    #: Must be true. A default of False rather than a required field so an
+    #: older client gets a clear refusal naming the box it did not tick,
+    #: rather than a schema error about a missing key.
+    accepted_terms: bool = Field(default=False, alias="acceptedTerms")
     phone: str | None = None
     date_of_birth: datetime | None = Field(default=None, alias="dateOfBirth")
     gender: Gender = Gender.UNDISCLOSED

@@ -31,7 +31,7 @@ from app.modules.auth.schemas import (
     TwoFactorVerifyRequest,
     VerifyEmailRequest,
 )
-from app.services import avatars
+from app.services import avatars, terms
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -165,6 +165,17 @@ async def _signed_in_payload(response: Response, result: service.SignedIn) -> di
         "session": _session_payload(result.tokens),
         "redirectTo": result.redirect_to,
     }
+
+
+@router.get("/terms")
+async def read_terms() -> dict[str, Any]:
+    """The document people agree to, and its version.
+
+    Unauthenticated: it is shown on the registration form, before anybody has an
+    account. Published text, not a secret — and a terms page you have to sign in
+    to read is not terms anybody can consent to.
+    """
+    return {"success": True, "data": terms.as_dict()}
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)

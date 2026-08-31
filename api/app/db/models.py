@@ -69,6 +69,14 @@ class User(Base):
     #: worth storing is the key a signed link is minted from per response.
     avatar_path: Mapped[str | None] = mapped_column("avatarPath", Text)
 
+    #: Which version of the terms this person agreed to, and when.
+    #:
+    #: The version is the point. Recording only that somebody agreed would
+    #: mean the system can say they consented but not to what — and the
+    #: moment the wording changes, every past acceptance silently becomes a
+    #: claim about a document they never saw.
+    terms_accepted_at: Mapped[datetime | None] = mapped_column("termsAcceptedAt", DateTime)
+    terms_version: Mapped[str | None] = mapped_column("termsVersion", String(32))
     email_verified_at: Mapped[datetime | None] = mapped_column("emailVerifiedAt", DateTime)
     last_login_at: Mapped[datetime | None] = mapped_column("lastLoginAt", DateTime)
     failed_login_count: Mapped[int] = mapped_column("failedLoginCount", Integer, default=0, nullable=False)

@@ -34,6 +34,7 @@ function invoice(overrides: Partial<Invoice> = {}): Invoice {
     lateFee: "0.00",
     lateFeeCharged: "0.00",
     amountDue: "500.30",
+    awaitingReview: false,
     currency: "PKR",
     status: "ISSUED",
     lineItems: [

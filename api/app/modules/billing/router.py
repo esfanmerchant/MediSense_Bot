@@ -144,6 +144,28 @@ def scope_for(auth: CurrentAuth) -> Any:
     raise forbidden("You do not have access to invoices.")
 
 
+async def under_review(db: DbSession, invoice_ids: list[str]) -> set[str]:
+    """Which of these invoices have a payment waiting on an administrator.
+
+    One query for the whole page. Asked per row it would be thirty round trips
+    to render a list.
+    """
+    if not invoice_ids:
+        return set()
+    return set(
+        (
+            await db.execute(
+                select(Payment.invoice_id).where(
+                    Payment.invoice_id.in_(invoice_ids),
+                    Payment.status == PaymentStatus.SUBMITTED,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
 async def load_visible(db: DbSession, auth: CurrentAuth, invoice_id: str) -> Invoice:
     invoice = (
         await db.execute(select(Invoice).where(Invoice.id == invoice_id, scope_for(auth)))
@@ -204,8 +226,9 @@ async def list_invoices(
         )
     ).scalar_one()
 
+    waiting = await under_review(db, [row.id for row in rows])
     return ok(
-        [service.serialize(row) for row in rows],
+        [service.serialize(row, awaiting_review=row.id in waiting) for row in rows],
         {**page.meta(total), "outstanding": str(outstanding)},
     )
 
@@ -216,7 +239,8 @@ async def get_invoice(
 ) -> dict[str, Any]:
     """One invoice in full — everything a printable view needs."""
     invoice = await load_visible(db, auth, invoice_id)
-    return ok(service.serialize(invoice))
+    waiting = await under_review(db, [invoice.id])
+    return ok(service.serialize(invoice, awaiting_review=invoice.id in waiting))
 
 
 @router.post("/{invoice_id}/pay")

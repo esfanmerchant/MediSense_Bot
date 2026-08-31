@@ -57,6 +57,7 @@ const STATUS_TONE: Record<InvoiceStatus, "good" | "warning" | "critical" | "neut
   PAID: "good",
   ISSUED: "info",
   OVERDUE: "critical",
+  AWAITING_APPROVAL: "warning",
   VOID: "neutral",
   REFUNDED: "warning",
   DRAFT: "neutral",
@@ -66,6 +67,7 @@ const STATUS_LABEL: Record<InvoiceStatus, [string, string]> = {
   PAID: ["Paid", "Ada shuda"],
   ISSUED: ["Due", "Wajib-ul-ada"],
   OVERDUE: ["Overdue", "Muddat guzar gayi"],
+  AWAITING_APPROVAL: ["Waiting for approval", "Tasdeeq ka intezar"],
   VOID: ["Cancelled", "Mansookh"],
   REFUNDED: ["Credited", "Wapas kiya gaya"],
   DRAFT: ["Draft", "Musawwada"],
@@ -75,6 +77,7 @@ const STATUS_ICON: Record<InvoiceStatus, string> = {
   PAID: "check_circle",
   ISSUED: "schedule",
   OVERDUE: "error",
+  AWAITING_APPROVAL: "hourglass_top",
   VOID: "block",
   REFUNDED: "undo",
   DRAFT: "edit_note",
@@ -518,7 +521,11 @@ function PaySection({ invoice }: { invoice: Invoice }) {
 
   if (!payable || !(Number(invoice.amountDue) > 0)) return null;
 
-  const waiting = claims?.find((claim) => claim.status === "SUBMITTED");
+  // The invoice already knows, and knows it on the first render. Waiting for
+  // the claims fetch would flash a Pay button onto a bill that is under review.
+  const waiting =
+    claims?.find((claim) => claim.status === "SUBMITTED") ??
+    (invoice.awaitingReview ? ({ reference: null } as Partial<PaymentClaim>) : undefined);
   const refused = claims?.find((claim) => claim.status === "FAILED");
 
   return (

@@ -36,15 +36,26 @@ from app.core.logging import logger
 from app.db.base import utcnow
 from app.db.enums import (
     AppointmentStatus,
+    InvoiceStatus,
     NotificationChannel,
     NotificationStatus,
     NotificationType,
+    PaymentStatus,
 )
-from app.db.models import Appointment, Doctor, Notification, Patient, User
+from app.db.models import (
+    Appointment,
+    Doctor,
+    Invoice,
+    Notification,
+    Patient,
+    Payment,
+    User,
+)
 from app.db.session import SessionFactory
 from app.modules.appointments.schedule import to_clinic
 from app.modules.notifications import templates
 from app.services import email as email_service
+from app.services import email_templates
 
 #: How often the loop wakes. Email is not interactive; a message that goes out
 #: within a minute is on time, and a tighter interval would spend connections
@@ -230,11 +241,154 @@ async def schedule_reminders() -> int:
     return created
 
 
+#: The two moments an unpaid invoice is worth mentioning, and the metadata key
+#: that records having mentioned it. Both are held in one place because the
+#: idempotence check and the sending loop have to agree on the spelling.
+DUE_SOON = "due_soon"
+OVERDUE = "overdue"
+
+
+async def _already_reminded(db: AsyncSession, invoice_ids: list[str], kind: str) -> set[str]:
+    """Which of these have had this particular reminder already.
+
+    The notification row *is* the record. There is no "reminded" column to keep
+    in step, and a pass that runs every minute must be able to ask "did I
+    already say this" cheaply — asking the thing it wrote is the cheapest
+    truthful answer available.
+
+    Keyed on the pair, not on the invoice: an invoice that got the day-before
+    nudge must still be able to get the overdue notice.
+    """
+    if not invoice_ids:
+        return set()
+    return set(
+        (
+            await db.execute(
+                select(Notification.notification_metadata["invoiceId"].astext).where(
+                    Notification.type == NotificationType.INVOICE_ISSUED,
+                    Notification.notification_metadata["reminder"].astext == kind,
+                    Notification.notification_metadata["invoiceId"].astext.in_(invoice_ids),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def schedule_invoice_reminders() -> int:
+    """Nudge before the due date, and report the charge once it has passed.
+
+    Two passes over the same set. An invoice is eligible for the first while its
+    due date is within the next day, and for the second once that date is behind
+    it — so a bill created with less than a day to run can legitimately get both,
+    in order, which is better than silently skipping the warning.
+
+    Only ISSUED invoices, and only ones with nothing awaiting review: chasing
+    somebody who has already transferred and is waiting on the hospital's own
+    queue is the system blaming them for its own backlog.
+    """
+    from app.modules.billing import service as billing
+    from app.modules.notifications.service import notify
+
+    created = 0
+    now = utcnow()
+
+    async with SessionFactory() as db:
+        rows = (
+            await db.execute(
+                select(Invoice, Patient.user_id, User.name, User.email)
+                .join(Patient, Patient.id == Invoice.patient_id)
+                .join(User, User.id == Patient.user_id)
+                .where(
+                    Invoice.status == InvoiceStatus.ISSUED,
+                    Invoice.due_at.is_not(None),
+                    # Nothing older than a week: an invoice nobody has paid in a
+                    # month is a debt for a person to chase, not a mail loop.
+                    Invoice.due_at > now - timedelta(days=7),
+                    Invoice.due_at < now + timedelta(days=1),
+                    ~select(Payment.id)
+                    .where(
+                        Payment.invoice_id == Invoice.id,
+                        Payment.status == PaymentStatus.SUBMITTED,
+                    )
+                    .exists(),
+                )
+                .limit(BATCH_SIZE)
+            )
+        ).all()
+        if not rows:
+            return 0
+
+        ids = [row[0].id for row in rows]
+        sent_soon = await _already_reminded(db, ids, DUE_SOON)
+        sent_late = await _already_reminded(db, ids, OVERDUE)
+
+        for invoice, user_id, name, address in rows:
+            overdue = billing.is_overdue(invoice)
+            kind = OVERDUE if overdue else DUE_SOON
+            if invoice.id in (sent_late if overdue else sent_soon):
+                continue
+
+            if overdue:
+                message = email_templates.invoice_overdue(
+                    name=name,
+                    invoice_number=invoice.invoice_number,
+                    currency=invoice.currency,
+                    late_fee=str(billing.late_fee_applies(invoice)),
+                    amount_due=str(billing.amount_due(invoice)),
+                )
+                body = (
+                    f"Invoice {invoice.invoice_number} is overdue. "
+                    f"{invoice.currency} {billing.amount_due(invoice)} is now due."
+                )
+            else:
+                message = email_templates.invoice_due_tomorrow(
+                    name=name,
+                    invoice_number=invoice.invoice_number,
+                    currency=invoice.currency,
+                    amount=str(invoice.total_amount),
+                    late_fee=str(invoice.late_fee),
+                )
+                body = (
+                    f"Invoice {invoice.invoice_number} for {invoice.currency} "
+                    f"{invoice.total_amount} is due tomorrow."
+                )
+
+            await notify(
+                db,
+                user_id=user_id,
+                notification_type=NotificationType.INVOICE_ISSUED,
+                title="Invoice overdue" if overdue else "Invoice due tomorrow",
+                body=body,
+                link="/patient/billing",
+                # The metadata is the idempotence record. Written before the
+                # mail goes out, so a crash between the two costs a reminder
+                # rather than sending one every minute forever.
+                metadata={"invoiceId": invoice.id, "reminder": kind},
+                email=False,
+            )
+            await email_service.send(
+                to=address,
+                subject=message.subject,
+                text_body=message.text,
+                html_body=message.html,
+            )
+            created += 1
+
+        await db.commit()
+
+    if created:
+        logger.info("invoice_reminders_sent", count=created)
+    return created
+
+
 async def run_once() -> dict[str, int]:
     """One full pass. Separate from the loop so a test can drive it directly."""
     reminders = await schedule_reminders()
+    invoices = await schedule_invoice_reminders()
     sent = await send_pending()
-    return {"reminders": reminders, "sent": sent}
+    return {"reminders": reminders, "invoices": invoices, "sent": sent}
 
 
 async def loop() -> None:

@@ -1421,7 +1421,21 @@ export const alerts = {
 // Billing
 // ---------------------------------------------------------------------------
 
-export type InvoiceStatus = "DRAFT" | "ISSUED" | "PAID" | "VOID" | "REFUNDED" | "OVERDUE";
+/**
+ * `AWAITING_APPROVAL` is not a stored status — the invoice is still ISSUED.
+ * It is what the server reports when a payment against this bill is waiting on
+ * an administrator, because a patient who has transferred and is waiting on a
+ * person has not failed to pay, and showing them "Due" while the money sits in
+ * the hospital's account blames them for its queue.
+ */
+export type InvoiceStatus =
+  | "DRAFT"
+  | "ISSUED"
+  | "PAID"
+  | "VOID"
+  | "REFUNDED"
+  | "OVERDUE"
+  | "AWAITING_APPROVAL";
 
 export interface InvoiceLine {
   description: string;
@@ -1458,6 +1472,8 @@ export interface Invoice {
   lateFeeCharged: string;
   /** Total plus any late fee — the figure a payment is taken for. */
   amountDue: string;
+  /** A payment against this bill is waiting on an administrator. */
+  awaitingReview: boolean;
   currency: string;
   status: InvoiceStatus;
   lineItems: InvoiceLine[];

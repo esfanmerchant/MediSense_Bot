@@ -498,7 +498,13 @@ def serialize_payment(payment: Payment, *, proof_url: str | None = None) -> dict
     }
 
 
-def serialize(invoice: Invoice) -> dict[str, Any]:
+def serialize(invoice: Invoice, *, awaiting_review: bool = False) -> dict[str, Any]:
+    """One invoice, as the portal shows it.
+
+    ``awaiting_review`` is passed in rather than looked up, because a list of
+    thirty invoices should ask "which of these have a payment under review" once
+    rather than thirty times.
+    """
     return {
         "id": invoice.id,
         "patientId": invoice.patient_id,
@@ -519,7 +525,18 @@ def serialize(invoice: Invoice) -> dict[str, Any]:
         "lateFeeCharged": str(late_fee_applies(invoice)),
         "amountDue": str(amount_due(invoice)),
         "currency": invoice.currency,
-        "status": "OVERDUE" if is_overdue(invoice) else str(invoice.status),
+        # A patient who has transferred and is waiting on a person has not
+        # failed to pay, and telling them their bill is "Due" — or worse,
+        # "Overdue" — while the money sits in the hospital's account is the
+        # system blaming them for its own queue.
+        "status": (
+            "AWAITING_APPROVAL"
+            if awaiting_review and invoice.status == InvoiceStatus.ISSUED
+            else "OVERDUE"
+            if is_overdue(invoice)
+            else str(invoice.status)
+        ),
+        "awaitingReview": awaiting_review,
         "lineItems": invoice.line_items,
         "notes": invoice.notes,
         "issuedAt": invoice.issued_at.isoformat() + "Z" if invoice.issued_at else None,

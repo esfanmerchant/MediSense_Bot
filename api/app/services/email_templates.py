@@ -488,3 +488,59 @@ def payment_rejected(
             + _button("Try again", url),
         ),
     )
+
+
+def invoice_due_tomorrow(
+    *, name: str, invoice_number: str, currency: str, amount: str, late_fee: str
+) -> Email:
+    """The day before. A nudge, not a warning."""
+    greeting = f"Hello {name.split()[0]}," if name.strip() else "Hello,"
+    lead = f"Invoice {invoice_number} for {currency} {amount} is due tomorrow."
+    detail = (
+        f"After that a late charge of {currency} {late_fee} is added, once."
+        if late_fee and float(late_fee) > 0
+        else "You can pay from your billing page."
+    )
+    url = portal_url("/patient/billing")
+
+    return Email(
+        subject=f"Invoice {invoice_number} is due tomorrow",
+        text="\n\n".join([greeting, lead, detail, f"Pay now: {url}", _SIGNOFF]),
+        html=_shell(
+            "Your invoice is due tomorrow",
+            _paragraph(greeting) + _paragraph(lead) + _note(detail) + _button("Pay now", url),
+        ),
+    )
+
+
+def invoice_overdue(
+    *, name: str, invoice_number: str, currency: str, late_fee: str, amount_due: str
+) -> Email:
+    """The day after, when the charge has actually been added.
+
+    Sent once, and says the amount now owed rather than only that something went
+    wrong — the useful fact is the new figure, not the scolding.
+    """
+    greeting = f"Hello {name.split()[0]}," if name.strip() else "Hello,"
+    lead = f"Invoice {invoice_number} has passed its due date."
+    detail = (
+        f"A late charge of {currency} {late_fee} has been added. The amount now "
+        f"due is {currency} {amount_due}."
+    )
+    closing = "It is added once, not per day, so it will not grow further."
+    url = portal_url("/patient/billing")
+
+    return Email(
+        subject=f"Invoice {invoice_number} is overdue — {currency} {amount_due} due",
+        text="\n\n".join([greeting, lead, detail, closing, f"Pay now: {url}", _SIGNOFF]),
+        html=_shell(
+            "Your invoice is overdue",
+            _paragraph(greeting)
+            + _paragraph(lead)
+            + _paragraph(detail)
+            # Said plainly, because "a late charge has been added" invites the
+            # fear that it keeps being added.
+            + _note(closing)
+            + _button("Pay now", url),
+        ),
+    )

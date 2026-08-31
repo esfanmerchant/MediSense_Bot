@@ -634,10 +634,11 @@ async def submit_payment_proof(
     # *read* and *differs*; an unreadable receipt goes through and is flagged,
     # because "I could not tell" must never become "no".
     if receipt_ocr.reference_conflict(reference, receipt.reference):
-        raise bad_request(
-            f"The screenshot shows transaction ID {receipt.reference}, but you entered "
-            f"{reference.strip()}. Check the number on your receipt and enter it exactly."
-        )
+        # Neither number is quoted back, and that is not only tidiness. Printing
+        # what was read off the image hands anybody probing this the exact value
+        # that gets past the check — the refusal would be telling them what to
+        # type. The receipt is in front of the patient; they can read it there.
+        raise bad_request("Transaction ID does not match the screenshot.")
 
     if not receipt.is_empty:
         payment.receipt_text = receipt.text

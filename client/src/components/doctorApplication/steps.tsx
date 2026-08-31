@@ -92,6 +92,9 @@ export interface FormState {
   departmentId: string;
   yearsExperience: string;
   previousHospital: string;
+  clinicName: string;
+  city: string;
+  addressLine: string;
   consultationFee: string;
   qualifications: Qualification[];
   /**
@@ -112,6 +115,9 @@ export function emptyForm(): FormState {
     departmentId: "",
     yearsExperience: "",
     previousHospital: "",
+    clinicName: "",
+    city: "",
+    addressLine: "",
     consultationFee: "",
     qualifications: [],
     availability: undefined,
@@ -132,6 +138,9 @@ export function formFrom(draft: StoredApplicationDraft): FormState {
         ? ""
         : String(draft.yearsExperience),
     previousHospital: draft.previousHospital ?? "",
+    clinicName: draft.clinicName ?? "",
+    city: draft.city ?? "",
+    addressLine: draft.addressLine ?? "",
     consultationFee:
       draft.consultationFee === null || draft.consultationFee === undefined
         ? ""
@@ -237,6 +246,9 @@ export function toDraft(form: FormState, now: Date = new Date()): DoctorApplicat
       .map((row) => qualificationEntry(row, now)),
     yearsExperience: numberOrNull(form.yearsExperience),
     previousHospital: textOrNull(form.previousHospital),
+    clinicName: textOrNull(form.clinicName),
+    city: textOrNull(form.city),
+    addressLine: textOrNull(form.addressLine),
     consultationFee: numberOrNull(form.consultationFee),
     availability: form.availability,
   };
@@ -363,6 +375,20 @@ const REQUIRED_FIELDS: Array<{
     step: 1,
     label: ["Consultation fee", "Consultation fee"],
     filled: (f) => Boolean(f.consultationFee.trim()),
+  },
+  // Where they practise. Required for the same reason the server requires it:
+  // patients choose a doctor on whether they can reach them as much as on
+  // qualification, and a doctor with no city cannot be filtered to or found.
+  {
+    step: 1,
+    label: ["Clinic or hospital", "Clinic ya hospital"],
+    filled: (f) => Boolean(f.clinicName.trim()),
+  },
+  { step: 1, label: ["City", "Shehar"], filled: (f) => Boolean(f.city.trim()) },
+  {
+    step: 1,
+    label: ["Clinic address", "Clinic ka pata"],
+    filled: (f) => Boolean(f.addressLine.trim()),
   },
 ];
 
@@ -590,6 +616,58 @@ export function StepProfessional({
             onChange={(event) => patch({ previousHospital: event.target.value })}
           />
         </Field>
+
+        {/* Where patients will actually come. Kept together and labelled as one
+            thing, because "clinic", "city" and "address" scattered among fee and
+            experience read as three unrelated questions. */}
+        <div className="sm:col-span-2">
+          <p className="mono-caps mb-1 text-[0.6rem] text-faint">
+            {tr("Where you see patients", "Aap mareez kahan dekhte hain")}
+          </p>
+          <p className="mb-3 text-sm text-muted">
+            {tr(
+              "This is what a patient reads when choosing between doctors.",
+              "Doctor chunte waqt mareez yahi parhta hai.",
+            )}
+          </p>
+        </div>
+
+        <Field
+          label={tr("Clinic or hospital", "Clinic ya hospital")}
+          htmlFor="application-clinic"
+          hint={tr("For example, Aga Khan Hospital.", "Maslan, Aga Khan Hospital.")}
+        >
+          <Input
+            id="application-clinic"
+            maxLength={160}
+            value={form.clinicName}
+            onChange={(event) => patch({ clinicName: event.target.value })}
+          />
+        </Field>
+
+        <Field label={tr("City", "Shehar")} htmlFor="application-city">
+          <Input
+            id="application-city"
+            maxLength={80}
+            autoComplete="address-level2"
+            value={form.city}
+            onChange={(event) => patch({ city: event.target.value })}
+          />
+        </Field>
+
+        {/* Field owns no layout props, so the column span goes on a wrapper
+            rather than being smuggled into the component. */}
+        <div className="sm:col-span-2">
+          <Field label={tr("Clinic address", "Clinic ka pata")} htmlFor="application-clinic-address">
+            <Input
+              id="application-clinic-address"
+              maxLength={300}
+              autoComplete="off"
+              value={form.addressLine}
+              onChange={(event) => patch({ addressLine: event.target.value })}
+            />
+          </Field>
+        </div>
 
         <Field
           label={tr("Consultation fee", "Consultation fee")}

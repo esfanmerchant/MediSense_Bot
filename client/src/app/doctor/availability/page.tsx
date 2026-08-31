@@ -20,6 +20,7 @@ import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { TimeOffCard } from "@/components/TimeOffCard";
 import { WeeklySchedule } from "@/components/availability/WeeklySchedule";
+import { PracticeLocationCard } from "@/components/doctors/PracticeLocationCard";
 import { useTr } from "@/lib/lang";
 
 export default function DoctorAvailabilityPage() {
@@ -38,6 +39,9 @@ export default function DoctorAvailabilityPage() {
         />
 
         <WeeklySchedule />
+        {/* Hours decide whether slots exist; a city decides whether anybody
+            browsing the directory ever sees them. Both belong here. */}
+        <PracticeLocationCard />
         <TimeOffCard />
       </div>
     </AppShell>

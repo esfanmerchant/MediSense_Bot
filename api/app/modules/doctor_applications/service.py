@@ -65,6 +65,14 @@ REQUIRED_FIELDS: tuple[tuple[str, str], ...] = (
     ("specialization", "specialization"),
     ("years_experience", "yearsExperience"),
     ("consultation_fee", "consultationFee"),
+    # Where they practise. Required because the directory is a list a patient
+    # chooses from on reachability as much as on qualification, and a doctor
+    # with no city cannot be filtered to, found, or travelled to. The pin is not
+    # here: a coordinate is a convenience on top of an address, and refusing a
+    # complete application because a map would not load would be absurd.
+    ("clinic_name", "clinicName"),
+    ("city", "city"),
+    ("address_line", "addressLine"),
 )
 
 #: The files an administrator needs in hand, all four of them.
@@ -506,6 +514,13 @@ async def approve(
     doctor.years_experience = application.years_experience
     doctor.consultation_fee = application.consultation_fee or Decimal("0")
     doctor.availability = application.availability or []
+    # The practice location travels with everything else, so what a patient sees
+    # in the directory is exactly what an administrator approved.
+    doctor.clinic_name = application.clinic_name
+    doctor.city = application.city
+    doctor.address_line = application.address_line
+    doctor.latitude = application.latitude
+    doctor.longitude = application.longitude
 
     application.status = DoctorApplicationStatus.APPROVED
     application.reviewed_at = utcnow()
@@ -676,6 +691,11 @@ def serialize(
         "qualifications": list(application.qualifications or []),
         "yearsExperience": application.years_experience,
         "previousHospital": application.previous_hospital,
+        "clinicName": application.clinic_name,
+        "city": application.city,
+        "addressLine": application.address_line,
+        "latitude": float(application.latitude) if application.latitude is not None else None,
+        "longitude": float(application.longitude) if application.longitude is not None else None,
         "consultationFee": float(application.consultation_fee)
         if application.consultation_fee is not None
         else None,

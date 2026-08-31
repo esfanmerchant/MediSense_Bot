@@ -75,6 +75,27 @@ class ApplicationUpdate(_Base):
     previous_hospital: Annotated[str, Field(max_length=200)] | None = Field(
         default=None, alias="previousHospital"
     )
+
+    #: Where this doctor will actually see patients — the half of the choice a
+    #: patient makes that a qualification cannot answer.
+    #:
+    #: No minimum length on any of them, and that is deliberate: this is the
+    #: *draft* schema, saved on every keystroke, and a `min_length` here is how
+    #: the qualification years bug happened — a field refused mid-word, so the
+    #: autosave 422s on the way to a value that would have been fine. The
+    #: completeness check lives at submit, where the field is finished.
+    clinic_name: Annotated[str, Field(max_length=160)] | None = Field(
+        default=None, alias="clinicName"
+    )
+    city: Annotated[str, Field(max_length=80)] | None = None
+    address_line: Annotated[str, Field(max_length=300)] | None = Field(
+        default=None, alias="addressLine"
+    )
+    #: Bounded to what a coordinate can legally be, so a transposed pair is
+    #: refused rather than dropping a pin in the sea. Optional even at submit:
+    #: the address is what a patient reads, the pin is a convenience on top.
+    latitude: Annotated[float, Field(ge=-90, le=90)] | None = None
+    longitude: Annotated[float, Field(ge=-180, le=180)] | None = None
     consultation_fee: Annotated[float, Field(ge=0, le=1_000_000)] | None = Field(
         default=None, alias="consultationFee"
     )

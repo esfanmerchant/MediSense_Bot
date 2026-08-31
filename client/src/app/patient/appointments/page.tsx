@@ -13,6 +13,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { ClinicMap } from "@/components/doctors/ClinicMap";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -338,6 +339,42 @@ function todayIso(): string {
 }
 
 /** Doctor -> day -> time, then confirm. Also used to move an existing booking. */
+/**
+ * One city in the filter row.
+ *
+ * A row of chips rather than a `<select>`: there are a handful of cities, the
+ * count beside each one is part of the choice ("three doctors in Lahore"), and
+ * a dropdown hides both facts behind a tap.
+ */
+function CityChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      // `aria-pressed` rather than a radio role: this is a filter being toggled
+      // on a list, not a value being chosen on a form.
+      aria-pressed={active}
+      onClick={onClick}
+      className={cx(
+        "inline-flex min-h-9 items-center rounded-full px-3.5 text-[13px] font-semibold transition-colors",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+        active
+          ? "bg-primary text-primary-on"
+          : "border border-line bg-card text-muted hover:border-primary hover:text-strong",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Booking({
   moving,
   onDone,
@@ -358,7 +395,16 @@ function Booking({
   // needs, so the step actually rendered is clamped to what has been chosen.
   const [visited, setVisited] = useState<StepKey>(moving ? "date" : "doctor");
 
-  const directory = useAsync(() => doctors.directory({ limit: 50 }), []);
+  // The city a patient has narrowed to, or every city. Held here rather than
+  // filtered client-side because the directory is paged: filtering the fifty
+  // rows that happened to arrive would silently hide doctors on page two.
+  const [city, setCity] = useState<string>("");
+  const directory = useAsync(
+    () => doctors.directory({ limit: 50, city: city || undefined }),
+    [city],
+  );
+  // Built from the data, so a city with nobody in it is never offered.
+  const cities = useAsync(() => doctors.cities(), []);
   const slots = useAsync(
     () => (doctorId ? appointments.availability(doctorId) : Promise.resolve(null)),
     [doctorId],
@@ -465,6 +511,29 @@ function Booking({
                 title={tr("Who would you like to see?", "Aap kis se milna chahte hain?")}
                 hint={tr("Choose a doctor to see their free times.", "Doctor chunein, un ke khali auqaat dekhein.")}
               >
+                {/* Where, before who. A patient with six general physicians in
+                    front of them narrows by what they can reach first. */}
+                {(cities.data?.length ?? 0) > 0 && (
+                  <div className="mb-5 flex flex-wrap items-center gap-2">
+                    <span className="mono-caps mr-1 text-[0.6rem] text-faint">
+                      {tr("City", "Shehar")}
+                    </span>
+                    <CityChip active={city === ""} onClick={() => setCity("")}>
+                      {tr("All", "Sab")}
+                    </CityChip>
+                    {(cities.data ?? []).map((entry) => (
+                      <CityChip
+                        key={entry.city}
+                        active={city === entry.city}
+                        onClick={() => setCity(entry.city)}
+                      >
+                        {entry.city}
+                        <span className="ml-1.5 tabular-nums opacity-70">{entry.doctors}</span>
+                      </CityChip>
+                    ))}
+                  </div>
+                )}
+
                 {directory.loading ? (
                   <div className="grid gap-3 sm:grid-cols-2" aria-hidden>
                     {Array.from({ length: 4 }, (_, index) => (
@@ -512,6 +581,32 @@ function Booking({
                               {doctor.name}
                             </span>
                             <span className="block text-sm text-muted">{doctor.specialization}</span>
+
+                            {/* The three things a patient actually weighs, after
+                                the name: where, how long, and what they hold. */}
+                            {(doctor.clinicName || doctor.city) && (
+                              <span className="mt-1 flex items-center gap-1 text-xs font-medium text-strong">
+                                <Icon name="location_on" className="shrink-0 text-[14px] text-primary" />
+                                <span className="truncate">
+                                  {[doctor.clinicName, doctor.city].filter(Boolean).join(" · ")}
+                                </span>
+                              </span>
+                            )}
+                            {(doctor.yearsExperience !== null || doctor.qualifications) && (
+                              <span className="mt-0.5 block truncate text-xs text-muted">
+                                {[
+                                  doctor.qualifications,
+                                  doctor.yearsExperience !== null
+                                    ? tr(
+                                        `${doctor.yearsExperience} yrs experience`,
+                                        `${doctor.yearsExperience} saal tajurba`,
+                                      )
+                                    : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </span>
+                            )}
                             {doctor.department && (
                               <span className="mt-1 inline-flex items-center gap-1 text-xs text-faint">
                                 <Icon name="domain" className="text-[14px]" />
@@ -627,6 +722,35 @@ function Booking({
                           )}
                         </div>
                       </div>
+
+                      {/* Where to go, on the screen somebody reads just before
+                          they commit — and again on the day, when they come
+                          back to this appointment to check. */}
+                      {chosenDoctor?.clinicName && (
+                        <div className="sm:col-span-3">
+                          <dt className="text-[11px] font-bold uppercase tracking-wider text-faint">
+                            {tr("Where", "Kahan")}
+                          </dt>
+                          <dd className="mt-1 flex items-start gap-2 text-sm text-strong">
+                            <Icon name="location_on" className="mt-0.5 shrink-0 text-[18px] text-primary" />
+                            <span>
+                              <span className="block font-semibold">{chosenDoctor.clinicName}</span>
+                              {chosenDoctor.addressLine && (
+                                <span className="block text-muted">{chosenDoctor.addressLine}</span>
+                              )}
+                              {chosenDoctor.city && (
+                                <span className="block text-muted">{chosenDoctor.city}</span>
+                              )}
+                            </span>
+                          </dd>
+                          <ClinicMap
+                            className="mt-3"
+                            latitude={chosenDoctor.latitude}
+                            longitude={chosenDoctor.longitude}
+                            label={chosenDoctor.clinicName}
+                          />
+                        </div>
+                      )}
                       <SummaryItem icon="calendar_month" label={tr("Date", "Tareekh")}>
                         {formatDay(chosenDay.date)}
                       </SummaryItem>

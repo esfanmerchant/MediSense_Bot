@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -51,6 +52,24 @@ class DoctorProfileUpdate(BaseModel):
         default=None, alias="yearsExperience"
     )
     accepting_patients: bool | None = Field(default=None, alias="acceptingPatients")
+
+    #: Where they sit. Self-service, unlike the licence number and department:
+    #: a doctor moving to a different clinic is an ordinary Tuesday, not a
+    #: credentialing event, and making them wait on an administrator to correct
+    #: their own address is how a directory ends up full of stale ones.
+    clinic_name: Annotated[str, Field(max_length=160)] | None = Field(
+        default=None, alias="clinicName"
+    )
+    city: Annotated[str, Field(max_length=80)] | None = None
+    address_line: Annotated[str, Field(max_length=300)] | None = Field(
+        default=None, alias="addressLine"
+    )
+    #: Bounded to the only values a coordinate can legally take, so a
+    #: transposed pair or a stray digit is refused here rather than dropping a
+    #: pin in the sea.
+    latitude: Annotated[Decimal, Field(ge=-90, le=90)] | None = None
+    longitude: Annotated[Decimal, Field(ge=-180, le=180)] | None = None
+
     #: Validated rather than stored as free-form JSON: these windows generate
     #: the slot grid patients book against, so a malformed entry here is a
     #: calendar that silently produces no appointments.
@@ -120,6 +139,13 @@ def _serialize(
         "consultationFee": float(doctor.consultation_fee),
         "acceptingPatients": doctor.accepting_patients,
         "availability": doctor.availability,
+        # Null throughout when a doctor has never been asked — the directory
+        # renders that as "not stated" rather than as an empty address.
+        "clinicName": doctor.clinic_name,
+        "city": doctor.city,
+        "addressLine": doctor.address_line,
+        "latitude": float(doctor.latitude) if doctor.latitude is not None else None,
+        "longitude": float(doctor.longitude) if doctor.longitude is not None else None,
         "department": (
             {"id": department.id, "name": department.name, "code": department.code}
             if department
@@ -135,6 +161,7 @@ async def list_doctors(
     page: Annotated[Page, Depends(pagination)],
     department_id: str | None = Query(default=None, alias="departmentId"),
     specialization: str | None = None,
+    city: str | None = Query(default=None, max_length=80),
     search: str | None = Query(default=None, max_length=100),
     accepting_only: bool = Query(default=False, alias="acceptingOnly"),
 ) -> dict[str, Any]:
@@ -144,11 +171,21 @@ async def list_doctors(
         filters.append(Doctor.department_id == department_id)
     if specialization:
         filters.append(Doctor.specialization.ilike(f"%{specialization}%"))
+    if city:
+        # Exact on the lowered column rather than a substring: "Lahore" must not
+        # also return doctors in "Lahore Cantt"'s neighbouring entries by
+        # accident, and this is the expression `ix_doctors_city_lower` indexes.
+        filters.append(func.lower(Doctor.city) == city.strip().lower())
     if accepting_only:
         filters.append(Doctor.accepting_patients.is_(True))
     if search:
         filters.append(
-            or_(User.name.ilike(f"%{search}%"), Doctor.specialization.ilike(f"%{search}%"))
+            or_(
+                User.name.ilike(f"%{search}%"),
+                Doctor.specialization.ilike(f"%{search}%"),
+                Doctor.clinic_name.ilike(f"%{search}%"),
+                Doctor.city.ilike(f"%{search}%"),
+            )
         )
     # A deactivated account must not appear as bookable.
     filters.append(User.status == UserStatus.ACTIVE)
@@ -178,6 +215,32 @@ async def list_doctors(
         ],
         page.meta(total),
     )
+
+
+@router.get("/cities")
+async def list_cities(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
+    """The cities that actually have a bookable doctor in them.
+
+    Built from the data rather than from a list of Pakistani cities, for two
+    reasons that point the same way: a filter offering "Quetta" when no doctor
+    practises there is a dead end a patient has to discover by trying it, and a
+    hard-coded list is a thing somebody must remember to edit the first time a
+    doctor registers somewhere new.
+
+    Deactivated accounts are excluded on the same principle as the directory
+    itself — if you cannot book them, their city is not a choice.
+    """
+    rows = (
+        await db.execute(
+            select(Doctor.city, func.count(Doctor.id))
+            .join(User, User.id == Doctor.user_id)
+            .where(Doctor.city.is_not(None), Doctor.city != "", User.status == UserStatus.ACTIVE)
+            .group_by(Doctor.city)
+            .order_by(func.count(Doctor.id).desc(), Doctor.city)
+        )
+    ).all()
+
+    return ok([{"city": city, "doctors": count} for city, count in rows])
 
 
 @router.get("/me")

@@ -581,11 +581,37 @@ export interface DoctorProfile {
    */
   availability: AvailabilityWindow[];
   department: { id: string; name: string; code: string } | null;
+  /** Where they practise. See {@link PracticeLocation}. */
+  clinicName: string | null;
+  city: string | null;
+  addressLine: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+/** Where a doctor sits. Every field is null until they have been asked. */
+export interface PracticeLocation {
+  /** The hospital or practice by name — how people say where a doctor sits. */
+  clinicName: string | null;
+  city: string | null;
+  addressLine: string | null;
+  /** The pin. Null when nobody placed one; the address still stands alone. */
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export const doctors = {
   /** The signed-in doctor's own professional record. */
   me: () => apiRequest<DoctorProfile>("/doctors/me"),
+
+  /**
+   * The cities that actually have a bookable doctor, commonest first.
+   *
+   * Built from the data rather than from a list of Pakistani cities: a filter
+   * offering a city with nobody in it is a dead end a patient discovers by
+   * trying it.
+   */
+  cities: () => apiRequest<Array<{ city: string; doctors: number }>>("/doctors/cities"),
 
   /**
    * Edits that record. Every field is optional; an omitted one is left alone.
@@ -600,6 +626,13 @@ export const doctors = {
     yearsExperience?: number;
     acceptingPatients?: boolean;
     availability?: AvailabilityWindow[];
+    // Self-service: moving clinic is an ordinary Tuesday, not a credentialing
+    // event, so it does not wait on an administrator.
+    clinicName?: string;
+    city?: string;
+    addressLine?: string;
+    latitude?: number;
+    longitude?: number;
   }) => apiRequest<DoctorProfile>("/doctors/me", { method: "PATCH", body: input }),
 
   myPatients: (query?: { limit?: number; offset?: number }) =>
@@ -618,7 +651,13 @@ export const doctors = {
       method: "DELETE",
     }),
 
-  directory: (query?: { search?: string; departmentId?: string; limit?: number }) =>
+  directory: (query?: {
+    search?: string;
+    departmentId?: string;
+    /** Exact city match — the value comes from `doctors.cities()`. */
+    city?: string;
+    limit?: number;
+  }) =>
     apiList<{
       id: string;
       name: string;
@@ -633,6 +672,11 @@ export const doctors = {
       consultationFee: number;
       acceptingPatients: boolean;
       department: { id: string; name: string; code: string } | null;
+      clinicName: string | null;
+      city: string | null;
+      addressLine: string | null;
+      latitude: number | null;
+      longitude: number | null;
     }>("/doctors", query),
 };
 
@@ -689,15 +733,32 @@ export const users = {
     apiRequest(`/users/${userId}/status`, { method: "PATCH", body: { status, reason } }),
 };
 
+export interface Department {
+  id: string;
+  name: string;
+  /** Short uppercase key, fixed once created — it identifies the department. */
+  code: string;
+  description: string | null;
+  location: string | null;
+  active: boolean;
+  doctorCount: number;
+}
+
 export const departments = {
-  list: () =>
-    apiList<{
-      id: string;
-      name: string;
-      code: string;
-      location: string | null;
-      doctorCount: number;
-    }>("/departments"),
+  list: () => apiList<Department>("/departments"),
+
+  create: (input: { name: string; code: string; description?: string; location?: string }) =>
+    apiRequest<Department>("/departments", { method: "POST", body: input }),
+
+  /**
+   * Edits a department. `code` is deliberately absent: it is the department's
+   * identity, doctors are filed under it, and renaming it would silently move
+   * everyone. A department that should no longer be chosen is deactivated.
+   */
+  update: (
+    id: string,
+    input: { name?: string; description?: string; location?: string; active?: boolean },
+  ) => apiRequest<Department>(`/departments/${id}`, { method: "PATCH", body: input }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1638,6 +1699,16 @@ export interface DoctorApplicationDraft {
   qualifications?: QualificationEntry[];
   yearsExperience?: number | null;
   previousHospital?: string | null;
+  /**
+   * Where they will see patients — distinct from `address`, which is the
+   * applicant's own contact address. Copied onto the doctor at approval, so an
+   * administrator reviews the address that will actually be published.
+   */
+  clinicName?: string | null;
+  city?: string | null;
+  addressLine?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   consultationFee?: number | null;
   availability?: Array<{
     dayOfWeek: number;

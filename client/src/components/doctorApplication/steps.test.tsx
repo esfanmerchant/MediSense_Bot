@@ -36,10 +36,13 @@ function form(overrides: Partial<FormState> = {}): FormState {
     qualifications: [],
     yearsExperience: "",
     previousHospital: "",
+    clinicName: "",
+    city: "",
+    addressLine: "",
     consultationFee: "",
     availability: [],
     ...overrides,
-  } as FormState;
+  };
 }
 
 describe("the draft a half-filled form sends", () => {
@@ -318,6 +321,12 @@ describe("what the review step says is still outstanding", () => {
     ["specialization", "Specialization"],
     ["yearsExperience", "Years of experience"],
     ["consultationFee", "Consultation fee"],
+    // Where they practise. The directory is a list a patient chooses from on
+    // reachability as much as on qualification, so the server insists on these
+    // three and this screen has to name them before submit does.
+    ["clinicName", "Clinic or hospital"],
+    ["city", "City"],
+    ["addressLine", "Clinic address"],
   ];
 
   it("names every field the server requires when the form is empty", () => {
@@ -330,7 +339,7 @@ describe("what the review step says is still outstanding", () => {
     expect(missingFields(filled).map((item) => item.label[0])).not.toContain("Address");
   });
 
-  it("says nothing is outstanding once all eight are filled", () => {
+  it("says nothing is outstanding once every required field is filled", () => {
     const complete = form(
       Object.fromEntries(serverRequires.map(([key]) => [key, "x"])) as Partial<FormState>,
     );

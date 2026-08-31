@@ -112,6 +112,7 @@ const NAV: Record<Role, NavGroup[]> = {
       label: ["Operations", "Intezam"],
       items: [
         { href: "/admin/appointments", label: ["Appointments", "Appointments"], icon: "calendar_today" },
+        { href: "/admin/departments", label: ["Departments", "Departments"], icon: "domain" },
         { href: "/admin/billing", label: ["Billing", "Billing"], icon: "payments" },
       ],
     },

@@ -269,6 +269,18 @@ class Doctor(Base):
     consultation_fee: Mapped[Decimal] = mapped_column(
         "consultationFee", Numeric(10, 2), default=Decimal("0"), nullable=False
     )
+
+    #: Where this doctor actually sits — the half of the choice a patient makes
+    #: that qualifications cannot answer. All nullable: a doctor approved before
+    #: these existed has no location, and the directory says "not stated" rather
+    #: than inventing one.
+    clinic_name: Mapped[str | None] = mapped_column("clinicName", Text)
+    city: Mapped[str | None] = mapped_column(Text)
+    address_line: Mapped[str | None] = mapped_column("addressLine", Text)
+    #: Numeric, not float: a pin that drifts in the last decimal because of
+    #: binary rounding is a bug nobody can see and nobody can explain.
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     #: [{ dayOfWeek, startTime, endTime, slotMinutes }]
     availability: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     accepting_patients: Mapped[bool] = mapped_column(
@@ -339,6 +351,16 @@ class DoctorApplication(Base):
     )
     years_experience: Mapped[int | None] = mapped_column("yearsExperience", Integer)
     previous_hospital: Mapped[str | None] = mapped_column("previousHospital", Text)
+
+    #: The practice location, collected here and copied onto the doctor at
+    #: approval like every other professional fact — so an administrator reviews
+    #: the address that will actually be published. Distinct from `address`
+    #: above, which is the applicant's own contact address.
+    clinic_name: Mapped[str | None] = mapped_column("clinicName", Text)
+    city: Mapped[str | None] = mapped_column(Text)
+    address_line: Mapped[str | None] = mapped_column("addressLine", Text)
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     consultation_fee: Mapped[Decimal | None] = mapped_column("consultationFee", Numeric(10, 2))
     #: Same shape as ``Doctor.availability`` — validated on the way in, so an
     #: approval copies it across without having to re-check it.

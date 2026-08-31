@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
@@ -48,6 +49,7 @@ from app.db.enums import (
     DataSource,
     InputType,
     Role,
+    UserStatus,
 )
 from app.db.models import (
     AIInteraction,
@@ -59,6 +61,7 @@ from app.db.models import (
     ReportedSymptom,
     User,
 )
+from app.modules.appointments import service as appointments_service
 from app.modules.appointments.schedule import to_clinic
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
@@ -199,10 +202,78 @@ async def _gather_context(db: DbSession, patient_id: str) -> tuple[str, list[str
         .all()
     )
 
+    # Who it is talking to. Name, age and the two clinical facts that change
+    # what advice is safe — an allergy the assistant does not know about is the
+    # one it will cheerfully talk around.
+    patient = (
+        await db.execute(
+            select(
+                User.name,
+                Patient.date_of_birth,
+                Patient.blood_group,
+                Patient.allergies,
+                Patient.chronic_conditions,
+            )
+            .join(User, User.id == Patient.user_id)
+            .where(Patient.id == patient_id)
+        )
+    ).first()
+
+    patient_name: str | None = None
+    facts: list[str] = []
+    if patient is not None:
+        patient_name = patient.name
+        if patient.date_of_birth:
+            years = int((utcnow() - patient.date_of_birth).days / 365.25)
+            facts.append(f"Patient's age: {years}")
+        if patient.blood_group:
+            facts.append(f"Patient's blood group: {patient.blood_group}")
+        # Stated as "none recorded" rather than omitted: silence about an
+        # allergy reads to a model as "no allergies", and it is not the same
+        # thing as nobody having asked.
+        facts.append(
+            f"Patient's allergies: {patient.allergies or 'none recorded'}"
+        )
+        facts.append(
+            f"Patient's ongoing conditions: {patient.chronic_conditions or 'none recorded'}"
+        )
+
+    # The real directory, so "who can I see for my knee in Karachi" is answered
+    # with a name that exists rather than a plausible invention. Only doctors a
+    # patient could actually book: active, and taking patients.
+    doctor_rows = (
+        await db.execute(
+            select(
+                User.name,
+                Doctor.specialization,
+                Doctor.clinic_name,
+                Doctor.city,
+                Doctor.consultation_fee,
+            )
+            .join(User, User.id == Doctor.user_id)
+            .where(
+                User.status == UserStatus.ACTIVE,
+                Doctor.accepting_patients.is_(True),
+            )
+            .order_by(User.name)
+            .limit(60)
+        )
+    ).all()
+    doctor_lines = [
+        f"{row.name} — {row.specialization}"
+        f" — {row.clinic_name or 'clinic not stated'}"
+        f"{f', {row.city}' if row.city else ''}"
+        f" — {settings.INVOICE_CURRENCY} {row.consultation_fee:.0f}"
+        for row in doctor_rows
+    ]
+
     context = assistant.build_context(
+        patient_name=patient_name,
+        patient_facts=facts,
         active_medications=medication_lines,
         upcoming_appointments=appointment_lines,
         departments=list(departments),
+        doctors=doctor_lines,
     )
     return context, medication_names
 
@@ -230,6 +301,84 @@ async def _recent_turns(
         .all()
     )
     return [(row.input, row.response) for row in reversed(rows)]
+
+
+async def _resolve_booking(
+    db: DbSession, doctor_name: str, on: str
+) -> dict[str, Any] | None:
+    """Turn "Dr Rajesh Iyer on 2026-09-04" into an offer of a real free slot.
+
+    Returns ``None`` rather than raising for every way this can fail — an
+    unknown name, a bad date, a day the doctor does not work, a day already
+    full. A proposal that cannot be honoured is simply not made, and the
+    assistant's own sentence still stands: it said it would look, not that it
+    had booked.
+
+    **This books nothing.** It offers the first free slot, and a person taps to
+    confirm. The model can misread a name or a weekday, and a wrong appointment
+    costs a clinic slot and somebody's day — so the model proposes and the
+    patient decides, which is the same shape the symptom flow already uses.
+    """
+    try:
+        wanted = date.fromisoformat(on)
+    except ValueError:
+        return None
+
+    # Matched case-insensitively and loosely, because a model writes "Dr Rajesh
+    # Iyer" for a row that reads "Rajesh Iyer". Exact-only would fail on the
+    # commonest correct answer.
+    cleaned = doctor_name.strip().removeprefix("Dr ").removeprefix("Dr. ").strip()
+    row = (
+        await db.execute(
+            select(Doctor.id, User.name, Doctor.specialization, Doctor.consultation_fee)
+            .join(User, User.id == Doctor.user_id)
+            .where(
+                User.status == UserStatus.ACTIVE,
+                Doctor.accepting_patients.is_(True),
+                User.name.ilike(f"%{cleaned}%"),
+            )
+            .limit(2)
+        )
+    ).all()
+    # Two matches means the name was ambiguous, and guessing between two doctors
+    # is exactly the mistake this whole path is arranged to avoid.
+    if len(row) != 1:
+        return None
+
+    doctor_id, name, speciality, fee = row[0]
+
+    try:
+        days = await appointments_service.availability(db, doctor_id, wanted, wanted)
+    except AppError:
+        return None
+
+    free = [
+        slot
+        for day in days
+        for slot in day.get("slots", [])
+        if slot.get("available")
+    ]
+    if not free:
+        return None
+
+    first = free[0]
+    return {
+        "doctorId": doctor_id,
+        "doctorName": name,
+        "specialization": speciality,
+        "fee": str(fee),
+        "currency": settings.INVOICE_CURRENCY,
+        "date": wanted.isoformat(),
+        "startTime": first["startTime"],
+        "endTime": first["endTime"],
+        # Every other free time that day, so somebody who wants 4pm rather than
+        # the first one does not have to abandon the conversation for the
+        # booking screen.
+        "alternatives": [
+            {"startTime": slot["startTime"], "endTime": slot["endTime"]}
+            for slot in free[1:6]
+        ],
+    }
 
 
 async def _answer(
@@ -271,6 +420,13 @@ async def _answer(
         answer = assistant.fallback_answer(assessment)
     latency_ms = int((time.perf_counter() - started) * 1000)
 
+    # The model may have appended a booking line. It is stripped from the reply
+    # whether or not it resolves — a patient must never be shown the machine
+    # syntax — and only becomes an offer if a real doctor and a real free slot
+    # are behind it.
+    answer.answer, intent = assistant.extract_booking(answer.answer)
+    proposal = await _resolve_booking(db, *intent) if intent else None
+
     # The record says an image was attached, and nothing of what it showed:
     # the bytes are gone once this request returns.
     recorded = message if image is None else f"{message}\n[Attached image: {attachment_name}]"
@@ -308,7 +464,10 @@ async def _answer(
         ),
     )
 
-    return ok(_serialize(answer, session_id))
+    payload = _serialize(answer, session_id)
+    if proposal is not None:
+        payload["booking"] = proposal
+    return ok(payload)
 
 
 async def _record_interaction(

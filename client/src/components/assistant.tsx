@@ -38,6 +38,7 @@ import {
 } from "react";
 
 import { Segmented } from "@/components/forms";
+import { BookingOffer } from "@/components/BookingOffer";
 import { Icon } from "@/components/Icon";
 import { LogoMark } from "@/components/Logo";
 import {
@@ -357,6 +358,11 @@ function AnswerBody({
       ) : (
         <StreamedText text={answer.answer} animate={animate} onTick={onTick} onDone={finish} />
       )}
+
+      {/* A time the assistant found, if the patient asked it to book. Above
+          the generic suggestion, because it is the specific answer to what
+          they actually asked — and nothing is booked until it is pressed. */}
+      {revealed && answer.booking && <BookingOffer proposal={answer.booking} />}
 
       {/* The suggestion, as its own card: what kind of care, and the way to
           it. Urgent answers wear the critical accent and a stronger call. */}

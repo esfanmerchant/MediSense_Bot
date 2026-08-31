@@ -126,6 +126,23 @@ Formatting: short paragraphs. When listing steps or items, use a bullet list —
 item per line starting with "- ". Use **bold** for at most one phrase per answer, \
 the single most important instruction. No headings, no tables, no other markup.
 
+About this platform:
+- You know MediSense itself. Answer questions about how booking, billing, \
+payment, records or emergencies work from the brief you are given, and never \
+invent a policy, a price or a guarantee that is not in it.
+- You know which doctors are available and where they practise. Recommend from \
+that list only. Never invent a doctor, a clinic, a fee or an availability.
+
+Booking an appointment:
+- If the patient asks you to book, and you can identify a doctor from the list \
+and a day from what they said, end your reply with a line of exactly this form:
+  BOOK: doctor=<exact doctor name from the list>; date=<YYYY-MM-DD>
+- Put nothing after that line. Say in your reply, in the patient's language, \
+that you have found a time and they need to confirm it — never that you have \
+booked it, because you have not: a person confirms it on the screen.
+- If you cannot tell which doctor or which day they mean, ask instead of \
+guessing. A wrong appointment wastes a clinic slot and the patient's day.
+
 If the patient attaches an image of a report, prescription or other document:
 - Say what kind of document it appears to be and explain its contents in plain \
 language: what each test or item measures and what the printed reference range \
@@ -153,20 +170,63 @@ class AssistantAnswer:
     model_name: str | None = None
 
 
+#: What MediSense is, in the assistant's own words.
+#:
+#: Held here rather than left to the model's guess. Asked "what is MediSense",
+#: a model with no brief will invent something plausible and wrong — a pricing
+#: model, a policy, a guarantee — and a patient has no way to tell that apart
+#: from the truth. Everything below is a fact the system actually implements,
+#: kept short enough to sit in every prompt.
+PLATFORM_BRIEF = """ABOUT MEDISENSE (answer questions about the platform from this, and nothing else):
+- MediSense connects patients with doctors: find a doctor, book an appointment, \
+keep records in one place, and pay for visits.
+- MediSense is not a medical provider. Doctors here are independent practitioners \
+responsible for their own clinical decisions.
+- Booking: the patient chooses a doctor, then a day, then a free time. Doctors \
+publish their own weekly hours, so a doctor with no hours set cannot be booked.
+- Bills: raised automatically when a consultation is completed. The consultation \
+fee is the doctor's; MediSense adds a platform fee and any tax, both shown on the \
+invoice.
+- Paying: bills are due in 3 days. After that a single late charge is added — \
+once, never per day. Payment is by transfer to the account shown on the bill; the \
+patient uploads the screenshot and a person at MediSense confirms it. Uploading a \
+screenshot is not payment — the bill is settled once the money is checked.
+- Records: visible to the patient and the clinicians treating them. Every access \
+is written to an audit trail that cannot be edited or deleted.
+- Emergencies: a clinician can open a record without prior consent in an \
+emergency; it is time-limited and reviewed afterwards.
+- In a real emergency the patient should go to the nearest emergency department, \
+not use this platform."""
+
+
 def build_context(
     *,
+    patient_name: str | None = None,
+    patient_facts: list[str] | None = None,
     active_medications: list[str],
     upcoming_appointments: list[str],
     departments: list[str],
+    doctors: list[str] | None = None,
 ) -> str:
-    """The patient's own data, given to the model as the only facts it may use.
+    """Everything the assistant is allowed to treat as true.
 
-    Passing this in is what lets the assistant answer "what is my blood pressure
-    tablet for" without the model guessing which tablet that is. It is also the
-    reference the medication check uses afterwards: anything named in the answer
-    that is not on this list was invented.
+    Four kinds of fact, and the separation matters. **The patient's own record**
+    is what lets it answer "what is my blood pressure tablet for" without
+    guessing which tablet that is. **The doctors** are what let it answer "who
+    can I see for my knee in Karachi" with real names instead of invented ones.
+    **The departments** are the specialities that exist here. **The platform
+    brief** is what stops it inventing a policy when asked how billing works.
+
+    Everything here is also the reference the safety checks use afterwards:
+    anything named in an answer that is not on these lists was made up.
     """
     parts = ["FACTS AVAILABLE TO YOU (do not invent anything beyond these):"]
+
+    if patient_name:
+        parts.append(f"You are talking to: {patient_name}")
+    for fact in patient_facts or []:
+        parts.append(fact)
+
     parts.append(
         "Patient's current prescriptions: "
         + (", ".join(active_medications) if active_medications else "none on record")
@@ -179,6 +239,18 @@ def build_context(
         "Departments at this hospital: "
         + (", ".join(departments) if departments else "not listed")
     )
+
+    if doctors:
+        # One per line: a comma-joined run of "name — speciality, city, fee"
+        # becomes unreadable at twenty doctors, and the model quotes fragments
+        # of the wrong one.
+        parts.append("Doctors available to book (name — speciality — where — fee):")
+        parts.extend(f"  - {line}" for line in doctors)
+    else:
+        parts.append("Doctors available to book: none listed")
+
+    parts.append("")
+    parts.append(PLATFORM_BRIEF)
     return "\n".join(parts)
 
 
@@ -364,6 +436,35 @@ async def ask(
     )
     answer.model_name = response.model
     return answer
+
+
+#: The line the model appends when it wants to propose a booking.
+#: Tolerant of spacing and case, because a model reproduces a format
+#: approximately and a brittle regex turns "it booked nothing" into a silent,
+#: unexplainable failure.
+BOOK_LINE = re.compile(
+    r"^\s*BOOK\s*:\s*doctor\s*=\s*(?P<doctor>[^;\n]+?)\s*;\s*date\s*=\s*(?P<date>\d{4}-\d{2}-\d{2})\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def extract_booking(answer: str) -> tuple[str, tuple[str, str] | None]:
+    """Split a booking request out of an answer.
+
+    Returns the answer with the machine line removed, and ``(doctor, date)`` if
+    one was found. The line is always stripped whether or not it resolves: a
+    patient should never be shown ``BOOK: doctor=...``, and a model that emits
+    it into a sentence has still written a sentence worth reading.
+
+    Only the *first* is honoured. A model that proposes two bookings has
+    misunderstood, and acting on both would put two appointments in front of
+    somebody who asked for one.
+    """
+    match = BOOK_LINE.search(answer)
+    cleaned = BOOK_LINE.sub("", answer).strip()
+    if match is None:
+        return cleaned, None
+    return cleaned, (match.group("doctor").strip(), match.group("date"))
 
 
 def fallback_answer(triage: TriageResult) -> AssistantAnswer:

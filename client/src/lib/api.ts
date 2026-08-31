@@ -1148,6 +1148,29 @@ export interface AssistantAnswer {
   disclaimer: string;
   /** What the safety layer had to correct in the model's reply. */
   safetyInterventions: string[];
+  /**
+   * A real free slot the assistant found, when the patient asked it to book.
+   *
+   * **Nothing is booked.** The model can misread a name or a weekday, and a
+   * wrong appointment costs a clinic slot and somebody's day — so it proposes
+   * and the patient confirms, which is the same shape the symptom flow uses.
+   * Absent whenever the request could not be resolved to one doctor and one
+   * free time, in which case the assistant's own sentence still stands.
+   */
+  booking?: BookingProposal;
+}
+
+export interface BookingProposal {
+  doctorId: string;
+  doctorName: string;
+  specialization: string;
+  fee: string;
+  currency: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  /** Other free times that day, so wanting 4pm does not mean leaving the chat. */
+  alternatives: Array<{ startTime: string; endTime: string }>;
 }
 
 /** A proposal for the patient to correct. Nothing has been stored yet. */

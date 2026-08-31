@@ -578,17 +578,22 @@ function Thinking({ withImage }: { withImage: boolean }) {
   );
 }
 
-function Welcome({ onSuggest }: { onSuggest: (text: string) => void }) {
+/**
+ * The blank state: the mark, one question, one line.
+ *
+ * It used to offer four example questions as pills. They were the wrong shape
+ * for the words in them — "Which department should I see for a persistent
+ * cough?" broke over four lines inside a rounded capsule — and four of those
+ * filled the panel with more text than the screen they were supposed to be
+ * inviting somebody into.
+ *
+ * Nothing is lost by removing them. The short openers above the composer appear
+ * as soon as a conversation exists, which is the moment somebody actually
+ * wonders what else to ask; before that, the sentence under the heading already
+ * says what this is for, and the cursor is in the box.
+ */
+function Welcome() {
   const tr = useTr();
-  const suggestions: [string, string][] = [
-    ["What is my blood pressure tablet for?", "Meri blood pressure ki goli kis liye hai?"],
-    [
-      "Which department should I see for a persistent cough?",
-      "Purani khansi ke liye kaunsa department dekhun?",
-    ],
-    ["When is my next appointment?", "Meri agli appointment kab hai?"],
-    ["Explain the report in this photo", "Is tasveer wali report samjhayein"],
-  ];
 
   return (
     <div className="flex h-full flex-col items-center justify-center px-4 py-10 text-center">
@@ -604,26 +609,12 @@ function Welcome({ onSuggest }: { onSuggest: (text: string) => void }) {
       <h2 className="mt-6 font-display text-2xl font-bold text-strong">
         {tr("How can I help today?", "Aaj main kaise madad karun?")}
       </h2>
-      <p className="mt-2 max-w-md text-[15px] text-muted">
+      <p className="mt-2 max-w-sm text-[15px] leading-relaxed text-muted">
         {tr(
-          "Ask about your prescriptions and appointments, or attach a photo of a report and ask what it means.",
-          "Apne nuskhon ya appointments ke baare mein poochein, ya report ki tasveer laga kar poochein ke iska matlab kya hai.",
+          "Ask about your prescriptions, appointments or a report.",
+          "Apne nuskhon, appointments ya kisi report ke baare mein poochein.",
         )}
       </p>
-      <ul className="mt-8 grid w-full max-w-xl gap-2 sm:grid-cols-2">
-        {suggestions.map(([en, ur]) => (
-          <li key={en}>
-            <button
-              type="button"
-              onClick={() => onSuggest(tr(en, ur))}
-              className="group flex min-h-12 w-full items-center gap-2.5 rounded-full border border-line-strong bg-card px-4 py-2.5 text-left text-sm text-strong transition-[background-color,transform,box-shadow,border-color] duration-200 hover:bg-sunken hover:border-primary/40 hover:scale-[1.02] hover:shadow-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            >
-              <Icon name="auto_awesome" className="icon-wiggle shrink-0 text-[18px] text-accent" />
-              {tr(en, ur)}
-            </button>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -746,7 +737,8 @@ export function AssistantChat({
   /** A question to start with — from the dashboard's "ask" box. */
   prefill?: string;
   /** Called after each answered turn, so a history list can update. */
-  onTurn?: (sessionId: string, turn: Turn) => void;
+  /** The finished exchange, without a key: each list assigns its own. */
+  onTurn?: (sessionId: string, turn: Omit<Turn, "id">) => void;
 } = {}) {
   const tr = useTr();
   const [question, setQuestion] = useState(prefill);
@@ -857,8 +849,7 @@ export function AssistantChat({
       const answer = sent
         ? await assistantApi.chatWithImage({ message, image: sent.file, sessionId, inputType })
         : await assistantApi.chat({ message, sessionId, inputType });
-      const turn: Turn = {
-        id: `${answer.sessionId}-${Date.now()}`,
+      const turn: Omit<Turn, "id"> = {
         question: message,
         answer,
         imageUrl: sent?.url,
@@ -866,7 +857,15 @@ export function AssistantChat({
         fresh: true,
       };
       setSessionId(answer.sessionId);
-      setTurns((current) => [...current, turn]);
+      // The id is built inside the updater from the list it is joining, rather
+      // than from a clock. Turns only ever append, so session plus position is
+      // unique — and a key needs to be stable and distinct, not to record when
+      // it was made. `Date.now()` here was also an impure call in a function the
+      // linter cannot prove is only ever an event handler.
+      setTurns((current) => [
+        ...current,
+        { ...turn, id: `${answer.sessionId}-${current.length}` },
+      ]);
       onTurn(answer.sessionId, turn);
       // Cleared only now: the question moves from the pending bubble into the
       // completed turn in one render, so it never blinks out and back.
@@ -922,7 +921,7 @@ export function AssistantChat({
           focus away from the box the patient is still using. */}
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6">
         {turns.length === 0 && !busy ? (
-          <Welcome onSuggest={suggest} />
+          <Welcome />
         ) : (
           <ol aria-live="polite" className="mx-auto max-w-3xl space-y-6">
             {turns.map((turn) => (
@@ -2030,15 +2029,21 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
     [grouped, hidden, renamed],
   );
 
-  const onTurn = useCallback((sessionId: string, turn: Turn) => {
+  const onTurn = useCallback((sessionId: string, turn: Omit<Turn, "id">) => {
     const stamp = new Date().toISOString();
-    setAdded((current) => ({
-      ...current,
-      [sessionId]: {
-        turns: [...(current[sessionId]?.turns ?? []), turn],
-        updatedAt: stamp,
-      },
-    }));
+    setAdded((current) => {
+      // Keyed by its position in *this* list. The same exchange carries a
+      // different key in the live thread, which is correct: a key identifies a
+      // row within one list, not the thing across all of them.
+      const existing = current[sessionId]?.turns ?? [];
+      return {
+        ...current,
+        [sessionId]: {
+          turns: [...existing, { ...turn, id: `${sessionId}-${existing.length}` }],
+          updatedAt: stamp,
+        },
+      };
+    });
     setMode((current) =>
       current.kind === "chat" && current.sessionId === null
         ? { kind: "chat", sessionId }

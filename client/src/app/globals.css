@@ -1086,3 +1086,67 @@ select:focus ~ .select-chevron {
   .ecg-draw-loop,
   .ecg-beat { stroke-dashoffset: 0 !important; }
 }
+
+/* ---------------------------------------------------------------------------
+   Printing an invoice
+
+   `window.print()` used to hand the printer the whole administrator's screen:
+   the shell, the navigation, every other invoice in the table and the shadow of
+   the panel around the one that was open. What came out was three pages of
+   application with a bill somewhere inside it — not something anyone could give
+   a patient.
+
+   The visibility trick rather than display:none on ancestors: the open invoice
+   lives inside a table cell, and hiding its ancestors would take the invoice
+   with it. Making everything invisible and then turning the invoice back on
+   leaves the layout intact and prints one thing.
+   --------------------------------------------------------------------------- */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .invoice-print,
+  .invoice-print * {
+    visibility: visible;
+  }
+
+  .invoice-print {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 0;
+    background: #fff;
+    color: #000;
+  }
+
+  /* The row expands under an animated height with overflow hidden, which on
+     paper means a long invoice is cut off at the fold instead of continuing. */
+  .invoice-print,
+  .invoice-print * {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Controls are not part of a bill. */
+  .no-print {
+    display: none !important;
+  }
+
+  /* A printed bill needs a letterhead the screen does not: on screen the row
+     above already says whose invoice this is, and on paper there is no row. */
+  .print-only {
+    display: block !important;
+  }
+
+  @page {
+    margin: 16mm;
+  }
+}
+
+/* Hidden on screen; the print block above turns it on. */
+.print-only {
+  display: none;
+}

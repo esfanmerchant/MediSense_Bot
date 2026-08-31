@@ -208,6 +208,38 @@ function DateTile({ label, value, icon }: { label: string; value: string; icon: 
   );
 }
 
+/**
+ * The letterhead, on paper only.
+ *
+ * On screen the table row above an open invoice already says whose it is and
+ * when it was issued, so the panel does not repeat it. On paper there is no row
+ * — printing gave you a table of line items and no indication of who owed what
+ * to whom.
+ */
+function PrintHeader({ invoice }: { invoice: Invoice }) {
+  const tr = useTr();
+  const issued = invoice.issuedAt ?? invoice.createdAt;
+  return (
+    <div className="print-only mb-5">
+      <p className="font-display text-xl font-bold text-strong">MediSense</p>
+      <p className="mt-3 text-lg font-bold text-strong">
+        {tr("Invoice", "Invoice")} {invoice.invoiceNumber}
+      </p>
+      <p className="mt-1 text-sm text-muted">
+        {tr("Issued", "Jari")} {new Date(issued).toLocaleDateString()}
+        {invoice.dueAt
+          ? ` · ${tr("Due", "Aakhri tareekh")} ${new Date(invoice.dueAt).toLocaleDateString()}`
+          : ""}
+      </p>
+      {invoice.paidAt && (
+        <p className="mt-1 text-sm font-semibold text-good">
+          {tr("Paid", "Ada shuda")} {new Date(invoice.paidAt).toLocaleDateString()}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function InvoiceDetail({ invoice }: { invoice: Invoice }) {
   const tr = useTr();
   return (
@@ -662,8 +694,11 @@ function InvoiceRow({
                 transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
                 className="overflow-hidden"
               >
-                <div className="border-b border-line bg-sunken/60 px-5 py-5">
-                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                {/* `invoice-print` is what the print stylesheet keeps; see
+                    globals.css. Printing used to hand the printer the entire
+                    administrator's screen with the bill buried inside it. */}
+                <div className="invoice-print border-b border-line bg-sunken/60 px-5 py-5">
+                  <div className="no-print mb-4 flex flex-wrap items-center gap-2">
                     <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-faint">
                       <Icon name="description" className="text-[16px]" />
                       {tr("Invoice detail", "Invoice ki tafseel")}
@@ -676,12 +711,15 @@ function InvoiceRow({
                       {tr("Print", "Print karein")}
                     </Button>
                   </div>
+                  <PrintHeader invoice={invoice} />
                   <InvoiceDetail invoice={invoice} />
                   {/* A patient's own action. Administrators keep the counter
                       controls below; both can appear, because an administrator
                       looking at their own bill is not a special case. */}
-                  <PaySection invoice={invoice} />
-                  {canManage && <AdminActions invoice={invoice} onChanged={onChanged} />}
+                  <div className="no-print">
+                    <PaySection invoice={invoice} />
+                    {canManage && <AdminActions invoice={invoice} onChanged={onChanged} />}
+                  </div>
                 </div>
               </motion.div>
             )}

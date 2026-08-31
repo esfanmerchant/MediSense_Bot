@@ -199,6 +199,36 @@ emergency; it is time-limited and reviewed afterwards.
 not use this platform."""
 
 
+#: Where the buttons are.
+#:
+#: The assistant knew what the platform does and could not tell anyone where
+#: to do it — asked "where do I pay my bill", it explained the payment policy
+#: and left the person exactly where they started. These are the sidebar
+#: entries of the patient's portal, named as they appear on screen, so
+#: directions can be given in the words the person is looking at rather than a
+#: route the model guessed. Keep this in step with the navigation in AppShell:
+#: a confident wrong direction is worse than "I am not sure".
+NAVIGATION_BRIEF = """WHERE THINGS ARE IN THE PATIENT'S PORTAL (use these names \
+when telling someone where to go; the menu is on the left, and on a phone it \
+opens from the menu button at the top):
+- Dashboard — the first page, with what is coming up and anything outstanding.
+- Appointments — book a visit with "Book an appointment", and see booked \
+ones. Requests the clinic has not accepted yet sit under "Awaiting \
+confirmation"; accepted ones under "Upcoming", where "Reschedule" and \
+"Cancel" are. Both disappear once the patient has checked in at the clinic.
+- Health assistant — this conversation.
+- Medical records — consultations, prescriptions, and what the patient has \
+told this assistant about their symptoms.
+- Documents — where to upload a lab report or a prescription photo.
+- Vitals — blood pressure, sugar, weight and the rest, entered by the patient.
+- Billing — every invoice. Opening one shows the breakdown, "Print", and "Pay \
+now", which shows the account to transfer to and where to enter the \
+transaction ID and upload the screenshot.
+- Settings — name, photo, contact details, password and two-factor.
+If asked for something that is not in this list, say it is not in the portal \
+rather than inventing a page."""
+
+
 def build_context(
     *,
     patient_name: str | None = None,
@@ -215,7 +245,9 @@ def build_context(
     guessing which tablet that is. **The doctors** are what let it answer "who
     can I see for my knee in Karachi" with real names instead of invented ones.
     **The departments** are the specialities that exist here. **The platform
-    brief** is what stops it inventing a policy when asked how billing works.
+    brief** is what stops it inventing a policy when asked how billing works, and
+    **the navigation brief** is what lets it answer "where do I pay this" with a
+    place rather than a second explanation of the policy.
 
     Everything here is also the reference the safety checks use afterwards:
     anything named in an answer that is not on these lists was made up.
@@ -251,6 +283,7 @@ def build_context(
 
     parts.append("")
     parts.append(PLATFORM_BRIEF)
+    parts.append(NAVIGATION_BRIEF)
     return "\n".join(parts)
 
 

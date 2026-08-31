@@ -225,8 +225,8 @@ export function Portals() {
             { text: tr("one record", "ek record"), gradient: true },
           ]}
           lede={tr(
-            "Everyone sees exactly what their job needs and nothing more. That is not a setting — it is how the system is built.",
-            "Har shakhs sirf wohi dekhta hai jo us ke kaam ke liye zaroori hai — is se zyada kuchh nahi. Yeh koi setting nahi, system isi tarah banaya gaya hai.",
+            "Everyone sees what their job needs. Nothing more.",
+            "Har shakhs sirf apne kaam ki cheez dekhta hai. Is se zyada kuchh nahi.",
           )}
         />
 

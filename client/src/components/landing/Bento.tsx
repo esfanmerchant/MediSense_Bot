@@ -18,6 +18,7 @@
 import type { CSSProperties } from "react";
 
 import { Icon } from "@/components/Icon";
+import { AssistantChatDemo } from "@/components/auth/ChatDemo";
 import { EcgLine } from "@/components/brand/EcgLine";
 import { cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
@@ -96,63 +97,6 @@ function Tile({
 const VOICE_REST = [
   0.35, 0.62, 0.88, 0.5, 1, 0.72, 0.42, 0.8, 0.58, 0.95, 0.46, 0.76, 0.34, 0.66, 0.9, 0.52,
 ];
-
-function AssistantDemo({
-  ask,
-  reply,
-  source,
-  checks,
-  checksLabel,
-}: {
-  ask: string;
-  reply: string;
-  /** Where the answer came from — the tile's whole claim, made visible. */
-  source: string;
-  /** What ran on the answer, in the order it ran. */
-  checks: { icon: string; label: string; value: string }[];
-  checksLabel: string;
-}) {
-  return (
-    // `min-w-0` on the column and on the reply, because a `white-space: nowrap`
-    // span is a flex item whose automatic minimum size is the whole sentence —
-    // which on a phone pushes the tile wider than the screen.
-    <div className="ms-demo flex h-full min-w-0 flex-col justify-center gap-2.5 p-4">
-      <p className="bg-gradient-brand ml-auto max-w-[70%] rounded-2xl rounded-br-md px-3.5 py-2 text-[13px] leading-snug text-white shadow-sm">
-        {ask}
-      </p>
-      <div className="min-w-0 max-w-[85%] rounded-2xl rounded-bl-md border border-line bg-card px-3.5 py-2 shadow-sm">
-        <span className="ms-type stream-cursor text-[13px] leading-snug text-strong">{reply}</span>
-        {/* Arrives with the reply, on the same one-shot: the tile claims the
-            answer is grounded, so the ground is named. */}
-        <span className="ms-cite mt-2 flex items-center gap-1.5 border-t border-line pt-2 text-[11px] text-muted">
-          <Icon name="prescriptions" className="shrink-0 text-[14px] text-accent" />
-          {source}
-        </span>
-      </div>
-
-      {/* The receipt. Every row here is a field the API returns beside the
-          answer, so this is what the system did, not a claim about it. */}
-      <div className="ms-checks mt-1 rounded-xl border border-line bg-sunken/60 px-3 py-2.5">
-        <p className="mono-caps mb-1.5 text-[0.5rem] text-faint">{checksLabel}</p>
-        <ul className="space-y-1">
-          {checks.map((check, index) => (
-            <li
-              key={check.label}
-              className="ms-check flex items-center gap-2 text-[11px]"
-              style={{ animationDelay: `${2050 + index * 260}ms` }}
-            >
-              <Icon name={check.icon} className="shrink-0 text-[13px] text-stable" />
-              <span className="text-muted">{check.label}</span>
-              <span className="ml-auto font-mono text-[10.5px] font-semibold text-strong">
-                {check.value}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
 
 function VoiceDemo({ caption }: { caption: string }) {
   return (
@@ -310,8 +254,8 @@ export function Bento() {
             { text: tr("touches", "ek jagah"), gradient: true },
           ]}
           lede={tr(
-            "Not a folder of features — one path a patient actually walks, from booking to paying, with the clinical safety built into each step rather than bolted on.",
-            "Yeh features ki fehrist nahi — woh rasta hai jo mareez sach mein tay karta hai, booking se bill tak. Aur hifazat har qadam ke andar bani hai, upar se lagai nahi gayi.",
+            "One path, from booking to paying.",
+            "Ek rasta — booking se bill tak.",
           )}
         />
 
@@ -321,43 +265,15 @@ export function Bento() {
               className="h-full"
               shotDelay={0}
               shotDuration={3200}
-              demoClassName="min-h-[200px]"
+              demoClassName="min-h-[330px] !border-0 !bg-transparent"
               icon="smart_toy"
               title={tr("AI health assistant", "AI health assistant")}
               body={tr(
-                "Grounded in your own prescriptions and appointments. It escalates rather than reassures when something sounds serious.",
-                "Aap ke apne nuskhon aur appointments par mabni. Baat sangeen lage to tasalli nahi deta — foran doctor ke paas bhejta hai.",
+                "Answers from your own records. Anything serious goes to a doctor.",
+                "Aap ke apne record se jawab. Sangeen baat doctor tak jaati hai.",
               )}
               demo={
-                <AssistantDemo
-                  ask={tr("Which pill do I take at night?", "Raat wali goli kaun si hai?")}
-                  reply={tr(
-                    "Your prescription lists Metformin 500mg after dinner.",
-                    "Aap ke nuskhe mein raat khane ke baad Metformin 500mg likha hai.",
-                  )}
-                  source={tr(
-                    "From your prescription · Dr Iyer, 12 Aug",
-                    "Aap ke nuskhe se · Dr Iyer, 12 Aug",
-                  )}
-                  checksLabel={tr("What ran on this answer", "Is jawab par kya chala")}
-                  checks={[
-                    {
-                      icon: "emergency_heat",
-                      label: tr("Red-flag check, before the model", "Khatre ki janch, model se pehle"),
-                      value: tr("routine", "mamool"),
-                    },
-                    {
-                      icon: "prescriptions",
-                      label: tr("Answered from your own record", "Aap ke apne record se jawab"),
-                      value: tr("1 medicine", "1 dawa"),
-                    },
-                    {
-                      icon: "shield_person",
-                      label: tr("Diagnosis blocked, disclaimer attached", "Tashkhees rok di, disclaimer sath"),
-                      value: tr("always", "hamesha"),
-                    },
-                  ]}
-                />
+                <AssistantChatDemo chrome="bare" className="p-0" />
               }
             />
           </Rise>
@@ -370,8 +286,8 @@ export function Bento() {
               icon="mic"
               title={tr("Speak your symptoms", "Apni takleef bol kar batayein")}
               body={tr(
-                "Speech becomes text on your device. You correct it before anything is stored.",
-                "Aap ki awaaz aap ke apne device par likhai mein badalti hai — save hone se pehle aap khud usay durust karte hain.",
+                "Your voice becomes text on your own device.",
+                "Aap ki awaaz aap ke apne device par likhai banti hai.",
               )}
               demo={
                 <VoiceDemo caption={tr("Listening", "Sun raha hai")} />
@@ -387,8 +303,8 @@ export function Bento() {
               icon="document_scanner"
               title={tr("Reads your documents", "Aap ke documents parh leta hai")}
               body={tr(
-                "Prescriptions and reports are read automatically — and a doctor confirms every value before it counts.",
-                "Nuskhe aur reports khud-ba-khud parhi jaati hain — magar har qeemat doctor ki tasdeeq ke baad hi record banti hai.",
+                "Reports read themselves. A doctor confirms every value.",
+                "Reports khud parhi jaati hain. Har qeemat doctor tasdeeq karta hai.",
               )}
               demo={
                 <OcrDemo caption={tr("Report", "Report")} />
@@ -404,8 +320,8 @@ export function Bento() {
               icon="monitor_heart"
               title={tr("Live vital monitoring", "Vitals par live nazar")}
               body={tr(
-                "Readings are checked against configurable thresholds the moment they arrive, and the responsible doctor is told.",
-                "Har reading usi lamhe muqarrar hadon se jaanchi jaati hai — had paar hui to zimmedar doctor ko foran khabar milti hai.",
+                "A reading past its limit reaches a doctor at once.",
+                "Had se bahar reading foran doctor tak pahunchti hai.",
               )}
               demo={
                 <VitalsDemo caption={tr("Threshold breached", "Had paar ho gayi")} />
@@ -421,8 +337,8 @@ export function Bento() {
               icon="receipt_long"
               title={tr("Billing that just happens", "Billing jo khud ho jaati hai")}
               body={tr(
-                "An invoice is created the moment a consultation is completed. Exactly one, however many times it retries.",
-                "Consultation mukammal hote hi invoice ban jaata hai. Sirf ek — chahe system kitni hi baar koshish kare.",
+                "A finished consultation raises its own invoice.",
+                "Consultation khatam, invoice khud ban gaya.",
               )}
               demo={
                 <BillingDemo
@@ -445,8 +361,8 @@ export function Bento() {
               icon="policy"
               title={tr("Emergency access, on the record", "Emergency access, poore record ke saath")}
               body={tr(
-                "Break-glass opens one chart, expires on a clock, and lands in a hash-chained trail nobody can edit.",
-                "Emergency access sirf ek mareez ki file kholta hai, waqt par khatam hota hai — aur aise record mein darj hota hai jise koi badal nahi sakta.",
+                "One chart, on a timer, in a record nobody can edit.",
+                "Ek file, waqt ki had mein, aise record mein jo badla nahi ja sakta.",
               )}
               demo={
                 <AuditDemo caption={tr("Append-only", "Sirf barhta hai")} />

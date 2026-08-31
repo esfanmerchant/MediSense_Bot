@@ -106,9 +106,28 @@ function readingMs(text: string): number {
   return Math.min(6200, 1500 + words(text) * 130);
 }
 
+/** Per character, while the question is being written into the composer. */
+const KEYSTROKE_MS = 34;
+/** The beat between the last character and the message leaving — a thumb
+    travelling to send. Without it the bubble appears the instant typing stops,
+    which reads as a machine rather than a person. */
+const SEND_MS = 420;
+
 // ---------------------------------------------------------------------------
 
-export function AssistantChatDemo({ className }: { className?: string }) {
+export function AssistantChatDemo({
+  className,
+  chrome = "phone",
+}: {
+  className?: string;
+  /**
+   * `phone` draws the handset shell and the "Example" caption — right on the
+   * sign-in page, where the demo is the only thing in its column. `bare` drops
+   * both for a panel that already has a frame and a heading of its own, so the
+   * page does not end up with a border inside a border inside a card.
+   */
+  chrome?: "phone" | "bare";
+}) {
   const tr = useTr();
   const still = usePrefersStillness();
   const hidden = useTabHidden();
@@ -166,6 +185,10 @@ export function AssistantChatDemo({ className }: { className?: string }) {
       empty in the prerendered HTML. */
   const [shown, setShown] = useState(1);
   const [typing, setTyping] = useState(false);
+  /** The question as far as it has been written into the composer. */
+  const [draft, setDraft] = useState("");
+  /** True while a question is being written rather than waiting to be sent. */
+  const [composing, setComposing] = useState(false);
   /** Bumped on every restart, so a loop's bubbles never share a key with the
       bubbles still fading out from the loop before it. */
   const [cycle, setCycle] = useState(0);
@@ -181,6 +204,8 @@ export function AssistantChatDemo({ className }: { className?: string }) {
       id = window.setTimeout(() => {
         setShown(0);
         setTyping(false);
+        setComposing(false);
+        setDraft("");
         setCycle((current) => current + 1);
       }, HOLD_MS);
     } else if (script[shown].from === "assistant") {
@@ -191,36 +216,87 @@ export function AssistantChatDemo({ className }: { className?: string }) {
           }, typingMs(script[shown].text))
         : window.setTimeout(() => setTyping(true), THINKING_MS);
     } else {
-      // A question waits for the previous answer to have been read.
+      // A question waits for the previous answer to have been read, and is then
+      // *written* rather than appearing whole — see the composing effect below.
       const previous = script[shown - 1];
       id = window.setTimeout(
-        () => setShown((current) => current + 1),
+        () => setComposing(true),
         previous ? readingMs(previous.text) : OPENING_MS,
       );
     }
     return () => window.clearTimeout(id);
   }, [script, shown, typing, frozen]);
 
+  /**
+   * The question being written, one character at a time, into the composer.
+   *
+   * This is the half a still screenshot cannot show: a person types, and only
+   * then does a bubble exist. Driven by `draft.length` rather than an interval
+   * so it is a chain of single timeouts — each render schedules exactly one
+   * more keystroke, and React's cleanup cancels it, which means a language
+   * flip or an unmount mid-sentence leaves nothing running.
+   */
+  useEffect(() => {
+    if (!composing || frozen) return;
+
+    const full = script[shown]?.text ?? "";
+
+    if (draft.length >= full.length) {
+      const id = window.setTimeout(() => {
+        setComposing(false);
+        setDraft("");
+        setShown((current) => current + 1);
+      }, SEND_MS);
+      return () => window.clearTimeout(id);
+    }
+
+    const id = window.setTimeout(
+      () => setDraft(full.slice(0, draft.length + 1)),
+      KEYSTROKE_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [composing, draft, shown, script, frozen]);
+
   // Reduced motion gets the end of the conversation rather than the start of
   // it: the point is what the assistant says, not the order it arrives in.
   const turns = still ? script : script.slice(0, shown);
   const enter = still ? { duration: 0 } : { duration: 0.34, ease: "easeOut" as const };
 
+  const bare = chrome === "bare";
+
   return (
-    <div aria-hidden className={cx("relative", className)}>
+    <div aria-hidden className={cx("relative", bare && "h-full", className)}>
       {/* Honest labelling, for eyes only — the demo is hidden from assistive
-          technology, so this caption lives inside it rather than beside it. */}
-      <p className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/80">
-        <span className="pulse-dot-brand h-1.5 w-1.5 rounded-full bg-accent-bright" />
-        {tr("Example", "Misal")}
-      </p>
+          technology, so this caption lives inside it rather than beside it.
+          The bare variant leaves it out because the panel around it is already
+          captioned. */}
+      {!bare && (
+        <p className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/80">
+          <span className="pulse-dot-brand h-1.5 w-1.5 rounded-full bg-accent-bright" />
+          {tr("Example", "Misal")}
+        </p>
+      )}
 
       {/* The handset. */}
-      <div className="relative rounded-[1.9rem] border border-white/25 bg-white/10 p-2.5 shadow-float backdrop-blur-sm">
-        <div className="overflow-hidden rounded-[1.4rem] bg-card">
-          <div className="flex justify-center pt-2.5">
-            <span className="h-1 w-9 rounded-full bg-line-strong" />
-          </div>
+      <div
+        className={cx(
+          "relative",
+          bare
+            ? "h-full"
+            : "rounded-[1.9rem] border border-white/25 bg-white/10 p-2.5 shadow-float backdrop-blur-sm",
+        )}
+      >
+        <div
+          className={cx(
+            "flex flex-col overflow-hidden bg-card",
+            bare ? "h-full rounded-xl" : "rounded-[1.4rem]",
+          )}
+        >
+          {!bare && (
+            <div className="flex justify-center pt-2.5">
+              <span className="h-1 w-9 rounded-full bg-line-strong" />
+            </div>
+          )}
 
           {/* Who you are talking to. */}
           <div className="flex items-center gap-2.5 border-b border-line px-3.5 pb-3 pt-2.5">
@@ -241,7 +317,7 @@ export function AssistantChatDemo({ className }: { className?: string }) {
 
           {/* The thread. Messages stack from the bottom and the oldest ones
               slide up under the fade, the way a real one scrolls. */}
-          <div className="relative">
+          <div className={cx("relative", bare && "flex-1")}>
             {/* Wallpaper, in the logo's circuit traces. A chat with one message
                 in it should read as a chat that has just started, and an empty
                 white rectangle reads as something broken. */}
@@ -250,7 +326,12 @@ export function AssistantChatDemo({ className }: { className?: string }) {
               className="circuit-pattern-light pointer-events-none absolute inset-0 opacity-70"
             />
             <div
-              className="relative flex h-[212px] flex-col justify-end gap-2 px-3.5 pb-3 pt-5 xl:h-[252px]"
+              className={cx(
+                "relative flex flex-col justify-end gap-2 px-3.5 pb-3 pt-5",
+                // Fixed on the sign-in page, where the column has a known
+                // height; grown to fill inside a tile, which sets its own.
+                bare ? "h-full min-h-[248px]" : "h-[212px] xl:h-[252px]",
+              )}
               style={{
                 maskImage: "linear-gradient(to bottom, transparent, #000 14%)",
                 WebkitMaskImage: "linear-gradient(to bottom, transparent, #000 14%)",
@@ -310,12 +391,35 @@ export function AssistantChatDemo({ className }: { className?: string }) {
             </div>
           </div>
 
-          {/* The composer is furniture: nothing here can be typed into. */}
+          {/* The composer writes. Nothing here can be typed into by a reader —
+              it is still furniture — but the question is now *composed* in it
+              before it becomes a bubble, which is the half of the exchange a
+              screenshot cannot show: somebody asked this. */}
           <div className="flex items-center gap-2 border-t border-line px-3 py-2.5">
-            <span className="min-w-0 flex-1 truncate rounded-full bg-sunken px-3.5 py-2 text-[12.5px] text-muted">
-              {tr("Ask about your care…", "Apni dekh-bhaal ke baare mein poochhein…")}
+            <span
+              className={cx(
+                "min-w-0 flex-1 rounded-full bg-sunken px-3.5 py-2 text-[12.5px]",
+                draft ? "text-strong" : "truncate text-muted",
+              )}
+            >
+              {draft ? (
+                <>
+                  {/* No truncation while writing: a question that ellipses at
+                      the halfway mark reads as a bug rather than as typing. */}
+                  <span className="line-clamp-2">{draft}</span>
+                </>
+              ) : (
+                tr("Ask about your care…", "Apni dekh-bhaal ke baare mein poochhein…")
+              )}
             </span>
-            <span className="bg-gradient-brand grid h-8 w-8 shrink-0 place-items-center rounded-full text-white shadow-sm">
+            <span
+              className={cx(
+                "grid h-8 w-8 shrink-0 place-items-center rounded-full text-white transition-opacity duration-200",
+                // Dimmed until there is something to send, so the button reads
+                // as part of the same act rather than as decoration.
+                draft ? "bg-gradient-brand opacity-100 shadow-sm" : "bg-line-strong opacity-60",
+              )}
+            >
               <Icon name="send" filled className="text-[16px]" />
             </span>
           </div>

@@ -68,14 +68,16 @@ const LANDING_CSS = `
    owns it — never on a child of a gradient-clipped span — so a headline set in
    the brand ramp animates without the clip losing its text. */
 @keyframes ms-word-rise {
-  from { transform: translateY(110%); }
+  from { transform: translateY(145%); }
   to { transform: translateY(0); }
 }
+/* Padded at both ends for the same reason as .ms-w: a line mask that stops at
+   the line box shears the tops off a bold display face. */
 .ms-line {
   display: block;
   overflow: hidden;
-  padding-bottom: 0.12em;
-  margin-bottom: -0.12em;
+  padding: 0.22em 0 0.12em;
+  margin: -0.22em 0 -0.12em;
 }
 .ms-word {
   display: inline-block;
@@ -84,15 +86,23 @@ const LANDING_CSS = `
 
 /* The scroll-triggered sibling of .ms-word: one mask per word, so the reveal
    survives any wrap at any breakpoint without measuring a line. */
+/* The mask breathes at *both* ends.
+   It used to pad only the bottom, for descenders, which left the top edge
+   sitting on the line box — and a bold display face overshoots its line box at
+   the cap and the ascender, so the tops of letters were being sliced off on the
+   headline. Padding both ends and pulling the same amount back as negative
+   margin gives the glyphs room without moving anything around them. The travel
+   distances below are what keep this honest: they are quoted past 100% so a
+   word still leaves a taller box completely. */
 .ms-w {
   display: inline-block;
   overflow: hidden;
-  padding-bottom: 0.14em;
-  margin-bottom: -0.14em;
+  padding: 0.22em 0 0.14em;
+  margin: -0.22em 0 -0.14em;
   vertical-align: bottom;
 }
 .ms-w > span { display: inline-block; }
-.ms-armed .ms-w > span { transform: translateY(118%); }
+.ms-armed .ms-w > span { transform: translateY(145%); }
 .ms-armed.ms-in .ms-w > span {
   animation: ms-word-rise 0.9s var(--ease-out-soft) both;
 }
@@ -142,14 +152,14 @@ const LANDING_CSS = `
    Gated on .ms-rot-live, added only after mount and never under reduced
    motion, so the first ending is simply *there* for everybody else. */
 @keyframes ms-rot-in {
-  from { opacity: 0; transform: translateY(112%); }
+  from { opacity: 0; transform: translateY(145%); }
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes ms-rot-out {
   from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(-112%); }
+  to { opacity: 0; transform: translateY(-145%); }
 }
-.ms-rot-live .ms-rot .ms-w > span { opacity: 0; transform: translateY(112%); }
+.ms-rot-live .ms-rot .ms-w > span { opacity: 0; transform: translateY(145%); }
 .ms-rot-live .ms-rot.is-in .ms-w > span {
   animation: ms-rot-in 0.66s var(--ease-out-soft) both;
 }

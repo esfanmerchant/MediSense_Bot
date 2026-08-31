@@ -137,6 +137,7 @@ export default function DoctorPatients() {
                       <tr>
                         <th scope="col">{tr("Patient", "Mareez")}</th>
                         <th scope="col">{tr("Record", "Record")}</th>
+                        <th scope="col">{tr("Last seen", "Aakhri baar")}</th>
                         <th scope="col">{tr("Blood group", "Blood group")}</th>
                         <th scope="col">{tr("Allergies", "Allergies")}</th>
                         <th scope="col">{tr("Conditions", "Bimariyan")}</th>
@@ -174,6 +175,23 @@ export default function DoctorPatients() {
                           </td>
                           <td className="whitespace-nowrap tabular-nums text-muted">
                             {patient.medicalRecordNumber}
+                          </td>
+                          {/* The caseload now holds past patients as well as
+                              current ones, and this is what tells them apart —
+                              "who have I not seen in a while" is the question a
+                              doctor scans this list with. */}
+                          <td className="whitespace-nowrap text-muted">
+                            {patient.lastSeenAt ? (
+                              new Date(patient.lastSeenAt).toLocaleDateString(undefined, {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })
+                            ) : (
+                              <span className="text-faint">
+                                {tr("Not yet", "Abhi nahi")}
+                              </span>
+                            )}
                           </td>
                           <td>
                             {patient.bloodGroup ? (

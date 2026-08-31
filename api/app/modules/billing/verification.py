@@ -171,6 +171,7 @@ async def confirm_payment(
     await db.flush()
 
     await _credit_the_doctor(db, invoice)
+    await _tell_the_patient(db, invoice, payment, reason=None)
 
     await record_audit(
         db,
@@ -197,6 +198,66 @@ async def confirm_payment(
     )
 
     return ok(service.serialize_payment(payment))
+
+
+async def _tell_the_patient(
+    db: DbSession, invoice: Invoice, payment: Payment, *, reason: str | None
+) -> None:
+    """Say whether the money was found, either way.
+
+    The refusal matters more than the confirmation: the patient believes they
+    have paid, the bill is about to reappear as due, and without a reason they
+    have no idea whether to re-upload, transfer again, or come in.
+    """
+    row = (
+        await db.execute(
+            select(Patient.user_id, User.name, User.email)
+            .join(User, User.id == Patient.user_id)
+            .where(Patient.id == invoice.patient_id)
+        )
+    ).first()
+    if row is None:
+        return
+    user_id, name, address = row
+
+    message = (
+        email_templates.payment_rejected(
+            name=name,
+            invoice_number=invoice.invoice_number,
+            currency=payment.currency,
+            amount=str(payment.amount),
+            reason=reason,
+        )
+        if reason is not None
+        else email_templates.payment_confirmed(
+            name=name,
+            invoice_number=invoice.invoice_number,
+            currency=payment.currency,
+            amount=str(payment.amount),
+        )
+    )
+
+    await notify(
+        db,
+        user_id=user_id,
+        notification_type=NotificationType.INVOICE_ISSUED,
+        title=(
+            "Payment could not be confirmed" if reason else "Payment received"
+        ),
+        body=(
+            f"Invoice {invoice.invoice_number} is still unpaid."
+            if reason
+            else f"Invoice {invoice.invoice_number} is now paid."
+        ),
+        link="/patient/billing",
+        email=False,
+    )
+    await email_service.send(
+        to=address,
+        subject=message.subject,
+        text_body=message.text,
+        html_body=message.html,
+    )
 
 
 async def _credit_the_doctor(db: DbSession, invoice: Invoice) -> None:
@@ -297,6 +358,11 @@ async def reject_payment(
     await db.flush()
 
     invoice = await db.get(Invoice, payment.invoice_id)
+    if invoice is not None:
+        # The invoice was never marked paid, so it is still outstanding and the
+        # patient's billing page shows it as due again on its own — no state to
+        # put back, only somebody to tell.
+        await _tell_the_patient(db, invoice, payment, reason=payload.reason)
 
     await record_audit(
         db,

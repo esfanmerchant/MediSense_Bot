@@ -541,7 +541,16 @@ export interface PatientSummary {
   bloodGroup: string | null;
   allergies: string | null;
   chronicConditions: string | null;
-  isPrimary: boolean;
+  /**
+   * Whether this is a standing assignment.
+   *
+   * Null, not false, when there is no assignment at all: "not my primary" and
+   * "no standing relationship, I have just treated them" are different facts,
+   * and the caseload now contains both kinds.
+   */
+  isPrimary: boolean | null;
+  /** The last appointment this doctor actually had with them, if any. */
+  lastSeenAt: string | null;
 }
 
 export interface TimeOff {
@@ -641,7 +650,13 @@ export const doctors = {
     longitude?: number;
   }) => apiRequest<DoctorProfile>("/doctors/me", { method: "PATCH", body: input }),
 
-  myPatients: (query?: { limit?: number; offset?: number }) =>
+  /**
+   * Everyone this doctor may open a record for: standing assignments *and*
+   * anyone they have an encounter with, past or present. The list is built from
+   * the same rule that grants access, so it can never be narrower than what the
+   * doctor is actually allowed to see.
+   */
+  myPatients: (query?: { search?: string; limit?: number; offset?: number }) =>
     apiList<PatientSummary>("/doctors/me/patients", query),
 
   timeOff: () => apiRequest<TimeOff[]>("/doctors/me/time-off"),

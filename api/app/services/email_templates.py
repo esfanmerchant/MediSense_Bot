@@ -290,7 +290,10 @@ def invoice_issued(
 ) -> Email:
     """To the patient, when a consultation is billed."""
     greeting = f"Hello {name.split()[0]}," if name.strip() else "Hello,"
-    lead = f"Your invoice {invoice_number} for {currency} {amount} is ready."
+    lead = (
+        f"Your consultation is complete, and invoice {invoice_number} for "
+        f"{currency} {amount} is ready."
+    )
     detail = (
         f"Please pay by {due}. You can pay from your billing page — the account "
         "details are shown there."
@@ -428,5 +431,60 @@ def doctor_withdrawal_rejected(
             f'line-height:1.6;color:{_INK}">{_escape(reason)}</blockquote>'
             + _note(detail)
             + _button("View your earnings", url),
+        ),
+    )
+
+
+def payment_confirmed(
+    *, name: str, invoice_number: str, currency: str, amount: str
+) -> Email:
+    """To the patient, once somebody has checked the money arrived."""
+    greeting = f"Hello {name.split()[0]}," if name.strip() else "Hello,"
+    lead = f"We have received your payment of {currency} {amount}."
+    detail = f"Invoice {invoice_number} is now marked paid. Nothing further is due."
+    url = portal_url("/patient/billing")
+
+    return Email(
+        subject=f"Payment received — invoice {invoice_number}",
+        text="\n\n".join([greeting, lead, detail, f"Your bills: {url}", _SIGNOFF]),
+        html=_shell(
+            "Your payment has been received",
+            _paragraph(greeting) + _paragraph(lead) + _note(detail),
+        ),
+    )
+
+
+def payment_rejected(
+    *, name: str, invoice_number: str, currency: str, amount: str, reason: str
+) -> Email:
+    """To the patient, when the transfer could not be matched.
+
+    The reason is quoted rather than summarised. Somebody who has genuinely paid
+    needs to know whether to re-upload a clearer screenshot, transfer again, or
+    come to the desk — and "rejected" on its own tells them none of that.
+    """
+    greeting = f"Hello {name.split()[0]}," if name.strip() else "Hello,"
+    lead = (
+        f"We could not confirm your payment of {currency} {amount} for invoice "
+        f"{invoice_number}."
+    )
+    detail = (
+        "The invoice is still unpaid. You can submit your payment again from your "
+        "billing page, or pay at the hospital billing desk."
+    )
+    url = portal_url("/patient/billing")
+
+    return Email(
+        subject=f"About your payment for invoice {invoice_number}",
+        text="\n\n".join([greeting, lead, f"Reason: {reason}", detail, url, _SIGNOFF]),
+        html=_shell(
+            "We could not confirm your payment",
+            _paragraph(greeting)
+            + _paragraph(lead)
+            + '<blockquote style="margin:0 0 14px;padding:12px 16px;background:#f8fafc;'
+            f'border-left:3px solid {GRADIENT_FALLBACK};border-radius:6px;font-size:15px;'
+            f'line-height:1.6;color:{_INK}">{_escape(reason)}</blockquote>'
+            + _note(detail)
+            + _button("Try again", url),
         ),
     )

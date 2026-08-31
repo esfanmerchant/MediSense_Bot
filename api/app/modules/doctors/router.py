@@ -22,7 +22,7 @@ from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
 from app.api.responses import Page, ok, pagination
 from app.core.errors import bad_request, conflict, forbidden, not_found
 from app.db.base import new_id, utcnow
-from app.db.enums import AuditAction, Role, UserStatus
+from app.db.enums import ENCOUNTER_STATUSES, AuditAction, Role, UserStatus
 from app.db.models import (
     Appointment,
     Department,
@@ -306,28 +306,83 @@ async def my_patients(
     db: DbSession,
     page: Annotated[Page, Depends(pagination)],
     _: Annotated[object, Depends(require_permission(Permission.PATIENT_READ_ASSIGNED))],
+    search: str | None = Query(default=None, max_length=100),
 ) -> dict[str, Any]:
-    """The doctor's caseload — patients they hold a care relationship with.
+    """Everyone this doctor may open a record for.
 
-    Scoped by assignment rather than by role: "DOCTOR" alone never means "every
-    patient in the hospital".
+    **The list is built from the same rule that grants access**, and that is the
+    whole fix. It used to show standing assignments only, while
+    ``resolve_patient_access`` has always also allowed a doctor to open a
+    patient they have an encounter with — so a doctor who had actually treated
+    somebody could read their record but could not find them in their own
+    caseload, and the page said "No patients assigned" to a doctor with a full
+    clinic. A list narrower than the permission is a list that lies.
+
+    So: a standing assignment, **or** an appointment in an encounter status —
+    confirmed, checked in, in progress, or completed. The last of those is what
+    makes past patients appear, which is what a doctor needs when somebody comes
+    back six months later.
+
+    Scoped by relationship rather than by role either way: "DOCTOR" alone never
+    means "every patient in the hospital".
     """
     if not auth.doctor_id:
         raise forbidden("This endpoint is for doctors.")
 
-    filters = [
+    assigned = select(DoctorPatientAssignment.patient_id).where(
         DoctorPatientAssignment.doctor_id == auth.doctor_id,
         DoctorPatientAssignment.ended_at.is_(None),
-    ]
+    )
+    treated = select(Appointment.patient_id).where(
+        Appointment.doctor_id == auth.doctor_id,
+        Appointment.status.in_(ENCOUNTER_STATUSES),
+    )
+    # Two membership tests rather than a union subquery: a union renames its
+    # columns after the first select's *database* name, which is a detail this
+    # query would then depend on silently.
+    filters: list[Any] = [or_(Patient.id.in_(assigned), Patient.id.in_(treated))]
+    if search:
+        filters.append(
+            or_(
+                User.name.ilike(f"%{search}%"),
+                Patient.medical_record_number.ilike(f"%{search}%"),
+            )
+        )
 
     total = (
-        await db.execute(select(func.count(DoctorPatientAssignment.id)).where(*filters))
+        await db.execute(
+            select(func.count(Patient.id))
+            .join(User, User.id == Patient.user_id)
+            .where(*filters)
+        )
     ).scalar_one()
+
+    # Whether the relationship is a standing one, and when they were last seen.
+    # Both are what a doctor scans a caseload by — "who is mine" and "who have I
+    # not seen in a while" — and neither is derivable from a name.
+    is_primary = (
+        select(DoctorPatientAssignment.is_primary)
+        .where(
+            DoctorPatientAssignment.doctor_id == auth.doctor_id,
+            DoctorPatientAssignment.patient_id == Patient.id,
+            DoctorPatientAssignment.ended_at.is_(None),
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
+    last_seen = (
+        select(func.max(Appointment.start_time))
+        .where(
+            Appointment.doctor_id == auth.doctor_id,
+            Appointment.patient_id == Patient.id,
+            Appointment.status.in_(ENCOUNTER_STATUSES),
+        )
+        .scalar_subquery()
+    )
 
     rows = (
         await db.execute(
-            select(Patient, User, DoctorPatientAssignment.is_primary)
-            .join(DoctorPatientAssignment, DoctorPatientAssignment.patient_id == Patient.id)
+            select(Patient, User, is_primary, last_seen)
             .join(User, User.id == Patient.user_id)
             .where(*filters)
             .order_by(User.name)
@@ -349,9 +404,13 @@ async def my_patients(
                 "bloodGroup": patient.blood_group,
                 "allergies": patient.allergies,
                 "chronicConditions": patient.chronic_conditions,
-                "isPrimary": is_primary,
+                # Null rather than false when there is no assignment: "not my
+                # primary" and "no standing relationship at all" are different
+                # facts, and the caseload distinguishes them.
+                "isPrimary": primary,
+                "lastSeenAt": iso_utc(seen) if seen else None,
             }
-            for patient, user, is_primary in rows
+            for patient, user, primary, seen in rows
         ],
         page.meta(total),
     )

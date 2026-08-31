@@ -242,7 +242,23 @@ def assess(text: str) -> TriageResult:
             tuple(dict.fromkeys(flag.advice for flag in urgent)),
         )
 
-    return TriageResult(Urgency.ROUTINE, (), ())
+    # Nothing matched, so this layer says nothing — it does not assert that the
+    # message was clinical.
+    #
+    # This used to return ROUTINE, and because `combine` lets the model raise
+    # urgency but never lower it, ROUTINE became a floor under *every* non-empty
+    # sentence. "What is MediSense", "thanks", and "I do not want to book an
+    # appointment" all came back as routine care, and the portal put a "see a
+    # doctor" card under every single answer — which is how a recommendation
+    # stops meaning anything, including on the answers where it matters.
+    #
+    # The safety property is untouched. It lives in the two branches above: a
+    # message carrying an emergency or urgent signal still floors the model and
+    # still cannot be reasoned down. What changes is only the case where this
+    # module found no signal at all, and there the model — which has the
+    # sentence, the history and the patient's record — is better placed to say
+    # whether somebody should be seen.
+    return TriageResult(Urgency.INFORMATION, (), ())
 
 
 def combine(deterministic: TriageResult, model_urgency: str | None) -> Urgency:

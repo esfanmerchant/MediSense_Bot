@@ -114,6 +114,44 @@ class TestEmergencyDetection:
         assert result.blocks_reassurance
 
 
+class TestSilenceIsNotAFinding:
+    """When this layer detects nothing, it says nothing.
+
+    It used to return ROUTINE for every non-empty sentence, and because the
+    model may raise urgency but never lower it, that became a floor under every
+    answer — the portal recommended a doctor's visit for "what is MediSense"
+    and for "I do not want to book an appointment". A recommendation that
+    appears every time stops meaning anything, including where it matters.
+    """
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "mujhe appointment fix nahi karna",
+            "what is MediSense",
+            "thanks, that helps",
+            "how does billing work",
+            "kya main apna record download kar sakta hoon",
+        ],
+    )
+    def test_a_message_with_no_clinical_signal_is_information(self, message: str) -> None:
+        assert assess(message).urgency == Urgency.INFORMATION
+
+    def test_the_model_may_still_call_it_routine(self, ) -> None:
+        # The point is not that everything becomes INFORMATION — it is that this
+        # layer stops deciding. The model, which has the sentence and the
+        # patient's record, may still say somebody should be seen.
+        detected = assess("I have had a mild headache for three days")
+        assert detected.urgency == Urgency.INFORMATION
+        assert combine(detected, "ROUTINE") == Urgency.ROUTINE
+
+    def test_detected_danger_is_still_a_floor(self) -> None:
+        # The safety property this change must not touch.
+        assert assess("crushing chest pain").urgency == Urgency.EMERGENCY
+        assert combine(assess("crushing chest pain"), "INFORMATION") == Urgency.EMERGENCY
+        assert combine(assess("high fever"), "INFORMATION") == Urgency.URGENT
+
+
 class TestUrgencyIsOneDirectional:
     """The model may raise urgency. It may never lower it."""
 

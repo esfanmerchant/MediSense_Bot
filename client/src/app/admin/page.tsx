@@ -38,7 +38,12 @@ const ACTION_LABELS: Record<string, [string, string]> = {
 };
 
 export default function AdminDashboard() {
-  const { data, error, loading, reload } = useAsync(() => dashboard.admin());
+  // This dashboard carries the recent security events, and the API audits the
+  // read for that reason — so it refreshes when the administrator returns to
+  // the window rather than on a timer. See lib/useAsync.ts.
+  const { data, error, loading, reload } = useAsync(() => dashboard.admin(), [], {
+    live: "on-return",
+  });
   const tr = useTr();
   const lang = useLang();
   const locale = lang === "ur" ? "en-PK" : undefined;

@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * How the application looks and how much it moves.
+ * How the application looks, how much it moves, and how it stays current.
  *
- * Four controls, all of them local to this browser and none of them a network
- * request: theme, text size, motion, language. That is not a limitation to
- * apologise for — a person on a ward terminal changes the text size for the
- * shift they are working, not for their account.
+ * Five controls, all of them local to this browser and none of them a network
+ * request: theme, text size, motion, live updates, language. That is not a
+ * limitation to apologise for — a person on a ward terminal changes the text
+ * size for the shift they are working, not for their account.
  *
  * The theme cards are miniatures rather than swatches. A row of coloured
  * squares does not answer the question somebody actually has, which is "what
@@ -22,8 +22,10 @@ import { Segmented, Switch } from "@/components/forms";
 import { Card, cx } from "@/components/ui";
 import {
   setFontScale,
+  setLiveUpdates,
   setMotionPreference,
   useFontScale,
+  useLiveUpdates,
   useMotionPreference,
   type FontScale,
 } from "@/components/settings/preferences";
@@ -90,6 +92,7 @@ export function AppearanceTab() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const fontScale = useFontScale();
   const motion = useMotionPreference();
+  const live = useLiveUpdates();
   // The chosen theme is not knowable on the server, so the cards render
   // unselected until hydration rather than guessing and correcting themselves
   // in front of the reader.
@@ -235,6 +238,32 @@ export function AppearanceTab() {
           description={tr(
             "Entrances, sliding indicators and the loading pulse stop moving. Nothing is hidden — only the movement goes.",
             "Entrance, sarakne wale indicators aur loading ki dhadkan ruk jati hain. Kuch chhupta nahi — sirf harkat jati hai.",
+          )}
+        />
+      </Card>
+
+      <Card
+        title={tr("Staying up to date", "Khud-ba-khud taza")}
+        description={tr(
+          "On by default. Turn it off on a metered connection, or while you are comparing figures and want the screen to hold still.",
+          "Default par on hai. Mehdood data par, ya jab aap aankray mila rahe hon aur screen ko theher jana chahiye, isse off kar dein.",
+        )}
+        icon="sync"
+      >
+        <Switch
+          checked={live}
+          onChange={(next) => {
+            setLiveUpdates(next);
+            setAnnouncement(
+              next
+                ? tr("Live updates on", "Live updates on")
+                : tr("Live updates off", "Live updates off"),
+            );
+          }}
+          label={tr("Keep pages up to date", "Safhe khud taza karein")}
+          description={tr(
+            "Lists and queues re-check the server about once a minute, and again whenever you come back to this window. It happens quietly — the page never blinks back to a skeleton while you are reading it, and a failed check leaves what is on screen alone. Nothing you have typed is touched.",
+            "Lists aur queues taqreeban har minute server se dobara poochhti hain, aur jab bhi aap is window par wapas aayein. Yeh khamoshi se hota hai — parhte waqt safha skeleton par wapas nahi jhapakta, aur nakaam koshish screen par mojood cheez ko haath nahi lagati. Aap ka likha hua kuch nahi badalta.",
           )}
         />
       </Card>

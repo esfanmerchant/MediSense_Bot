@@ -125,7 +125,11 @@ const VITALS: { key: keyof Vital; type: VitalType; unit: string; name: [string, 
  */
 function HealthSnapshot({ patientId }: { patientId: string }) {
   const tr = useTr();
-  const readings = useAsync(() => vitals.list(patientId, { limit: 30 }), [patientId]);
+  // Audited on the server as a record access, so it catches up when the reader
+  // comes back rather than on a timer. See the note in lib/useAsync.ts.
+  const readings = useAsync(() => vitals.list(patientId, { limit: 30 }), [patientId], {
+    live: "on-return",
+  });
   const thresholds = useAsync(() => vitals.thresholds(patientId), [patientId]);
 
   if (readings.loading || thresholds.loading) {

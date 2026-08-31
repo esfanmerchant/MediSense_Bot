@@ -94,10 +94,17 @@ export default function PatientChart() {
   const [refresh, setRefresh] = useState(0);
   const reloadAll = useCallback(() => setRefresh((n) => n + 1), []);
 
-  const profile = useAsync(() => patients.get(patientId), [patientId]);
+  // Refreshed when the reader comes back, never on a timer. The API writes
+  // both of these to the audit trail as "this clinician opened this patient's
+  // record", because looking at a chart is itself an event somebody may later
+  // have to account for — and a timer would fill that trail with accesses no
+  // person made. Returning to the window is different in the way that matters:
+  // somebody really did just look at it again.
+  const profile = useAsync(() => patients.get(patientId), [patientId], { live: "on-return" });
   const history = useAsync(
     () => records.list({ patientId, includePrescriptions: true, limit: 50 }),
     [patientId, refresh],
+    { live: "on-return" },
   );
   const medication = useAsync(
     () => prescriptionsApi.list({ patientId, limit: 50 }),

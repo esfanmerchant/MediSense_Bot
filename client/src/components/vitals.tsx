@@ -525,7 +525,12 @@ function VitalsSnapshot({
  */
 export function VitalsTable({ patientId, snapshot = false }: { patientId: string; snapshot?: boolean }) {
   const tr = useTr();
-  const readings = useAsync(() => vitalsApi.list(patientId, { limit: 50 }), [patientId]);
+  // Reading somebody's vitals is written to the audit trail, so this catches up
+  // on return rather than on a timer: a timer would record accesses no person
+  // made. See lib/useAsync.ts.
+  const readings = useAsync(() => vitalsApi.list(patientId, { limit: 50 }), [patientId], {
+    live: "on-return",
+  });
   const rules = useAsync(() => vitalsApi.thresholds(patientId), [patientId]);
 
   const byType = useMemo(() => {

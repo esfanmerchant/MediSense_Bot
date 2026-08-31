@@ -400,10 +400,14 @@ function EntryNode({ entry }: { entry: AuditEntry }) {
 export function AuditPanel() {
   const tr = useTr();
   const [securityOnly, setSecurityOnly] = useState(false);
+  // Reading the audit trail is itself audited, so a timer would write an entry
+  // a minute about a person who looked once — each one a new link in a hash
+  // chain that exists to be trustworthy. It refreshes when they come back.
   const fetched = useAsync(
     () =>
       auditApi.list(securityOnly ? { severity: "SECURITY", limit: 50 } : { limit: 50 }),
     [securityOnly],
+    { live: "on-return" },
   );
 
   const rows = fetched.data?.data ?? [];

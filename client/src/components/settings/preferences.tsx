@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Two reading preferences the browser cannot express for us: text size and
- * motion.
+ * Three preferences the browser cannot express for us: text size, motion, and
+ * whether pages keep themselves current.
  *
  * `prefers-reduced-motion` and the browser's own zoom already exist, and this
  * does not replace either — it exists because a person reading a vital sign on
@@ -34,6 +34,7 @@ export const MOTION_PREFERENCES: readonly MotionPreference[] = ["full", "reduced
 
 const FONT_KEY = "medisense:font-scale";
 const MOTION_KEY = "medisense:motion";
+const LIVE_KEY = "medisense:live-updates";
 const STYLE_ID = "medisense-reading-preferences";
 
 /**
@@ -60,6 +61,7 @@ const CSS = `
 
 let fontScale: FontScale | null = null;
 let motionPreference: MotionPreference | null = null;
+let liveUpdates: boolean | null = null;
 const listeners = new Set<() => void>();
 
 function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
@@ -90,6 +92,23 @@ export function getMotionPreference(): MotionPreference {
     motionPreference = readStored(MOTION_KEY, MOTION_PREFERENCES, "full");
   }
   return motionPreference;
+}
+
+/**
+ * Whether pages re-ask the server on their own.
+ *
+ * On by default, because the alternative is what people were doing instead:
+ * pressing refresh, losing their place, and reading a screen they cannot tell
+ * is stale. It is a preference rather than a fixed behaviour because a metered
+ * connection is a real thing, and because somebody comparing two numbers wants
+ * the screen to hold still while they do it.
+ *
+ * "off" is stored explicitly rather than by absence — an unset key has to mean
+ * the default, and the default is on.
+ */
+export function getLiveUpdates(): boolean {
+  if (liveUpdates === null) liveUpdates = readStored(LIVE_KEY, ["on", "off"], "on") === "on";
+  return liveUpdates;
 }
 
 /** Writes both preferences onto `<html>`, where the CSS above can see them. */
@@ -125,12 +144,31 @@ export function setMotionPreference(next: MotionPreference): void {
   emit();
 }
 
+export function setLiveUpdates(next: boolean): void {
+  liveUpdates = next;
+  persist(LIVE_KEY, next ? "on" : "off");
+  // No `apply()`: this one writes no attribute and has no stylesheet. It is
+  // read by useAsync, which re-subscribes on the change emitted below — so
+  // turning it off stops every timer on the page at once rather than at each
+  // page's next navigation.
+  emit();
+}
+
 export function useFontScale(): FontScale {
   return useSyncExternalStore(subscribe, getFontScale, () => "base" as FontScale);
 }
 
 export function useMotionPreference(): MotionPreference {
   return useSyncExternalStore(subscribe, getMotionPreference, () => "full" as MotionPreference);
+}
+
+/**
+ * The server snapshot is `true`, matching the default. Prerendered HTML and the
+ * first client render therefore agree, and somebody who has turned this off
+ * loses one frame of a timer that is cleaned up on the very next render.
+ */
+export function useLiveUpdates(): boolean {
+  return useSyncExternalStore(subscribe, getLiveUpdates, () => true);
 }
 
 /**

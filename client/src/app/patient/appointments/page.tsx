@@ -410,6 +410,9 @@ function Booking({
       ? chosenDoctor.consultationFee
       : null;
   const doctorName = chosenDoctor?.name ?? moving?.doctorName ?? tr("Your doctor", "Aap ka doctor");
+  // Only the directory carries a picture; an appointment being moved does not,
+  // and falls back to initials rather than showing the wrong person's face.
+  const doctorAvatarUrl = chosenDoctor?.avatarUrl ?? null;
   const doctorSpecialization = chosenDoctor?.specialization ?? moving?.specialization ?? null;
   const chosenDay = days.find((entry) => entry.date === day) ?? null;
   const chosenSlot = days.flatMap((entry) => entry.slots).find((option) => option.startTime === slot) ?? null;
@@ -498,7 +501,12 @@ function Booking({
                             selected ? "border-gradient-thick" : "border border-line bg-card",
                           )}
                         >
-                          <Avatar name={doctor.name} size="lg" ring={selected ? "active" : undefined} />
+                          <Avatar
+                            name={doctor.name}
+                            src={doctor.avatarUrl}
+                            size="lg"
+                            ring={selected ? "active" : undefined}
+                          />
                           <span className="min-w-0 flex-1">
                             <span className="block font-display text-base font-bold text-strong">
                               {doctor.name}
@@ -608,7 +616,7 @@ function Booking({
                   <div className="border-gradient rounded-2xl p-5 shadow-card">
                     <dl className="grid gap-4 sm:grid-cols-3">
                       <div className="flex items-center gap-3 sm:col-span-3">
-                        <Avatar name={doctorName} size="lg" />
+                        <Avatar name={doctorName} src={doctorAvatarUrl} size="lg" />
                         <div className="min-w-0">
                           <dt className="text-[11px] font-bold uppercase tracking-wider text-faint">
                             {tr("Doctor", "Doctor")}

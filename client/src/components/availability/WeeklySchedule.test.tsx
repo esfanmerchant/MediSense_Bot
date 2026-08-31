@@ -39,6 +39,7 @@ function doctorProfile(
   return {
     id: "d1",
     name: "Dr Ayesha",
+    avatarUrl: null,
     specialization: "Cardiology",
     qualifications: null,
     yearsExperience: 8,

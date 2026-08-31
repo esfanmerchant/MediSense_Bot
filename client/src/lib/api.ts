@@ -132,6 +132,84 @@ function announceIfGated(error: ApiError) {
   window.dispatchEvent(new CustomEvent(DOCTOR_GATED_EVENT, { detail: { code: error.code } }));
 }
 
+/**
+ * Endpoints that must never trigger a refresh-and-retry.
+ *
+ * Refreshing in response to a failure on one of these is either circular (the
+ * refresh call itself) or wrong: a rejected sign-in is a rejected sign-in, and
+ * silently minting a new token behind it would replay the attempt against a
+ * session the person was just told they do not have.
+ */
+const NEVER_REFRESH: ReadonlySet<string> = new Set([
+  "/auth/login",
+  "/auth/refresh",
+  "/auth/logout",
+  "/auth/register",
+  "/auth/verify-email",
+  "/auth/2fa/verify",
+]);
+
+/**
+ * The one refresh attempt every request shares.
+ *
+ * A dashboard fires several requests at once, so an expired token produces
+ * several simultaneous 401s. Without this they would each start their own
+ * refresh — a stampede against the endpoint that rotates the refresh token,
+ * where the first to land invalidates the token the others are still holding,
+ * and the session dies from the very mechanism meant to save it.
+ */
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+
+  const attempt = (async () => {
+    try {
+      const response = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
+      return response.ok;
+    } catch {
+      // Offline, or the server is unreachable. Not a dead session — the caller
+      // reports the original failure and the next request tries again.
+      return false;
+    }
+  })();
+
+  refreshInFlight = attempt;
+  void attempt.finally(() => {
+    if (refreshInFlight === attempt) refreshInFlight = null;
+  });
+  return attempt;
+}
+
+/**
+ * Run a request, and if the access token had expired, renew it once and repeat.
+ *
+ * **This is what stops an active session from dying on a wall clock.** The
+ * access token's life is `min(idle window, 15 minutes)`, and nothing on the
+ * client ever renewed it, so a person reading a record for a quarter of an hour
+ * was thrown back to the landing page mid-task — not for being idle, but for
+ * having been signed in too long.
+ *
+ * It does not weaken the idle policy, because the policy is not enforced here.
+ * The server checks the session's own last-seen time on `/auth/refresh` and
+ * revokes it with `IDLE_TIMEOUT` when the window has passed, so a genuinely
+ * abandoned session still refuses to come back and the retry reports the
+ * failure it was given.
+ *
+ * One retry, never a loop: if the second attempt still says the session is
+ * gone, it is gone.
+ */
+async function withTokenRenewal(path: string, run: () => Promise<Response>): Promise<Response> {
+  const response = await run();
+  if (response.status !== 401 || NEVER_REFRESH.has(path)) return response;
+  if (!(await refreshSession())) return response;
+  return run();
+}
+
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const url = new URL(`${API_URL}${path}`);
   if (query) {
@@ -147,14 +225,16 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   let response: Response;
   try {
-    response = await fetch(buildUrl(path, query), {
-      method,
-      credentials: "include",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-      signal,
-      cache: "no-store",
-    });
+    response = await withTokenRenewal(path, () =>
+      fetch(buildUrl(path, query), {
+        method,
+        credentials: "include",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        signal,
+        cache: "no-store",
+      }),
+    );
   } catch (cause) {
     if ((cause as Error)?.name === "AbortError") throw cause;
     throw new ApiError(
@@ -191,12 +271,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 export async function apiMultipart<T>(path: string, form: FormData): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, {
-      method: "POST",
-      credentials: "include",
-      body: form,
-      cache: "no-store",
-    });
+    response = await withTokenRenewal(path, () =>
+      fetch(`${API_URL}${path}`, {
+        method: "POST",
+        credentials: "include",
+        body: form,
+        cache: "no-store",
+      }),
+    );
   } catch {
     throw new ApiError("NETWORK_ERROR", "Could not reach the server. Try again.", 0);
   }
@@ -222,10 +304,12 @@ export async function apiList<T, Extra = unknown>(
   path: string,
   query?: RequestOptions["query"],
 ): Promise<Paginated<T, Extra>> {
-  const response = await fetch(buildUrl(path, query), {
-    credentials: "include",
-    cache: "no-store",
-  });
+  const response = await withTokenRenewal(path, () =>
+    fetch(buildUrl(path, query), {
+      credentials: "include",
+      cache: "no-store",
+    }),
+  );
   const payload = await response.json().catch(() => null);
 
   if (!response.ok || payload?.success === false) {
@@ -477,6 +561,15 @@ export const SLOT_MINUTES = [10, 15, 20, 30, 45, 60] as const;
 export interface DoctorProfile {
   id: string;
   name: string;
+  /**
+   * The doctor's own picture, if they have set one — a short-lived signed link
+   * minted with the response, never a stored address.
+   *
+   * It belongs on the directory rather than only on the doctor's own session
+   * because this is the card a patient chooses from, and a page of identical
+   * grey initials is a page nobody can tell apart.
+   */
+  avatarUrl: string | null;
   specialization: string;
   qualifications: string | null;
   yearsExperience: number | null;
@@ -529,7 +622,14 @@ export const doctors = {
     apiList<{
       id: string;
       name: string;
+      /** Short-lived signed link, or null when they have not set a picture. */
+      avatarUrl: string | null;
       specialization: string;
+      // The server has always returned these two; the directory simply never
+      // asked for them, which left a patient choosing between doctors on name
+      // and fee alone.
+      qualifications: string | null;
+      yearsExperience: number | null;
       consultationFee: number;
       acceptingPatients: boolean;
       department: { id: string; name: string; code: string } | null;

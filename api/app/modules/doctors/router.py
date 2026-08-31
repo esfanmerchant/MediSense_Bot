@@ -8,6 +8,8 @@ treats, which would leak the care relationship itself.
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
@@ -33,6 +35,7 @@ from app.modules.appointments.schedule import AvailabilityWindow, iso_utc, valid
 from app.modules.appointments.service import holds_a_slot
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
+from app.services import avatars
 
 router = APIRouter(prefix="/doctors", tags=["doctors"])
 
@@ -85,10 +88,32 @@ class TimeOffCreate(BaseModel):
         return self
 
 
-def _serialize(doctor: Doctor, user: User, department: Department | None) -> dict[str, Any]:
+async def _sign_avatars(users: Sequence[User]) -> list[str | None]:
+    """Sign every doctor's picture at once rather than one after another.
+
+    A link to a private object costs one round-trip to storage, so a page of
+    twenty-five doctors costs twenty-five of them. In sequence that is the
+    difference between a directory that opens and one that visibly stalls;
+    issued together they overlap and the page waits for the slowest, not the
+    sum. ``signed_url_for`` never raises, so one unreachable picture returns
+    ``None`` and the rest still arrive.
+    """
+    return list(await asyncio.gather(*(avatars.signed_url_for(u.avatar_path) for u in users)))
+
+
+def _serialize(
+    doctor: Doctor,
+    user: User,
+    department: Department | None,
+    avatar_url: str | None = None,
+) -> dict[str, Any]:
     return {
         "id": doctor.id,
         "name": user.name,
+        # A face on the card a patient chooses from. Signed per response and
+        # short-lived like every other link to this bucket, so it is handed out
+        # with the directory rather than stored anywhere.
+        "avatarUrl": avatar_url,
         "specialization": doctor.specialization,
         "qualifications": doctor.qualifications,
         "yearsExperience": doctor.years_experience,
@@ -145,7 +170,14 @@ async def list_doctors(
         await db.execute(base.order_by(User.name).limit(page.limit).offset(page.offset))
     ).all()
 
-    return ok([_serialize(d, u, dept) for d, u, dept in rows], page.meta(total))
+    urls = await _sign_avatars([u for _, u, _ in rows])
+    return ok(
+        [
+            _serialize(d, u, dept, url)
+            for (d, u, dept), url in zip(rows, urls, strict=True)
+        ],
+        page.meta(total),
+    )
 
 
 @router.get("/me")
@@ -433,4 +465,4 @@ async def _get_doctor(db: DbSession, doctor_id: str) -> dict[str, Any]:
     if row is None:
         raise not_found("Doctor")
     doctor, user, department = row
-    return ok(_serialize(doctor, user, department))
+    return ok(_serialize(doctor, user, department, await avatars.signed_url_for(user.avatar_path)))

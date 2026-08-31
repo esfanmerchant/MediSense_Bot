@@ -119,11 +119,14 @@ def _payment(**overrides: object) -> Payment:
         method=PaymentMethod.NAYAPAY,
         status=PaymentStatus.SUBMITTED,
         reference="123456789",
+        payee_account="03443003108",
         created_at=datetime(2026, 9, 1, 12, 0),
         receipt_read_at=datetime(2026, 9, 1, 12, 0),
         receipt_reference="123456789",
         receipt_amount=Decimal("2500.00"),
         receipt_paid_at=datetime(2026, 9, 1, 11, 0),
+        receipt_sender_account="03001234567",
+        receipt_receiver_account="03443003108",
         receipt_looks_valid=True,
     )
     for key, value in overrides.items():
@@ -198,6 +201,7 @@ class TestConcerns:
             "amount",
             "paidAt",
             "sender",
+            "senderAccount",
             "receiver",
             "receiverAccount",
             "looksLikeAReceipt",
@@ -210,3 +214,157 @@ class TestConcerns:
         # So the reviewer's screen can say "older than 12 days" without a copy
         # of the number drifting away from this one.
         assert service.receipt_reading(_payment())["maxAgeDays"] == 12
+
+
+HOSPITAL = ("03712044479", "03443003108")
+
+
+class TestAccountNumbers:
+    """The same account, spelled the way three different banks spell it."""
+
+    @pytest.mark.parametrize(
+        "written",
+        ["03443003108", "+92 344 3003108", "0092-344-3003108", "92 344 300 3108", "3443003108"],
+    )
+    def test_one_account_in_many_spellings_is_one_account(self, written: str) -> None:
+        assert receipt_ocr.accounts_match("03443003108", written)
+
+    def test_a_different_number_is_a_different_account(self) -> None:
+        # The row that prompted all of this: a receipt naming an account that is
+        # not the hospital's, shown in the ledger as though it were.
+        assert not receipt_ocr.accounts_match("03443003108", "03441729906")
+
+    def test_the_two_hospital_wallets_are_not_each_other(self) -> None:
+        assert not receipt_ocr.accounts_match("03443003108", "03712044479")
+
+    def test_an_unknown_account_matches_nothing(self) -> None:
+        """Including another unknown.
+
+        Two blanks comparing equal would turn the destination check into one
+        that passes precisely when it could not run.
+        """
+        assert not receipt_ocr.accounts_match(None, "03443003108")
+        assert not receipt_ocr.accounts_match(None, None)
+        assert not receipt_ocr.accounts_match("", "")
+
+
+class TestWhereTheMoneyWent:
+    def test_paying_the_right_account_raises_nothing(self) -> None:
+        reading = service.receipt_reading(_payment(), platform_accounts=HOSPITAL)
+        assert reading["concerns"] == []
+
+    def test_the_destination_is_reported(self) -> None:
+        # Both ends, so the ledger can say from whom and to where.
+        reading = service.receipt_reading(_payment(), platform_accounts=HOSPITAL)
+        assert reading["senderAccount"] == "03001234567"
+        assert reading["receiverAccount"] == "03443003108"
+
+    def test_money_sent_to_some_other_account_is_flagged(self) -> None:
+        reading = service.receipt_reading(
+            _payment(receipt_receiver_account="03441729906"), platform_accounts=HOSPITAL
+        )
+        assert "WRONG_DESTINATION" in reading["concerns"]
+
+    def test_paying_the_other_hospital_wallet_is_still_wrong(self) -> None:
+        """The check is against the account this patient was shown.
+
+        Both numbers belong to the hospital, but the payment was raised against
+        one of them, and a transfer into the other is money the reviewer will
+        not find where they are looking for it.
+        """
+        reading = service.receipt_reading(
+            _payment(receipt_receiver_account="03712044479"), platform_accounts=HOSPITAL
+        )
+        assert "WRONG_DESTINATION" in reading["concerns"]
+
+    def test_a_destination_nobody_could_read_is_not_a_wrong_destination(self) -> None:
+        reading = service.receipt_reading(
+            _payment(receipt_receiver_account=None), platform_accounts=HOSPITAL
+        )
+        assert "WRONG_DESTINATION" not in reading["concerns"]
+
+    def test_the_snapshot_is_what_is_compared_against(self) -> None:
+        """Not today's settings.
+
+        An administrator moving the clinic to a new wallet must not retroactively
+        flag every transfer made into the old one, which was correct when it was
+        made and is recorded on the payment for exactly this reason.
+        """
+        old_wallet = _payment(payee_account="03009999999", receipt_receiver_account="03009999999")
+        reading = service.receipt_reading(old_wallet, platform_accounts=HOSPITAL)
+        assert "WRONG_DESTINATION" not in reading["concerns"]
+
+    def test_a_receipt_sent_from_a_hospital_account_is_flagged(self) -> None:
+        """That is money leaving, offered as proof of money arriving.
+
+        A payout screenshot — or a receipt read the wrong way round — and either
+        way not evidence that this bill was paid.
+        """
+        reading = service.receipt_reading(
+            _payment(receipt_sender_account="03712044479"), platform_accounts=HOSPITAL
+        )
+        assert "PAID_FROM_A_HOSPITAL_ACCOUNT" in reading["concerns"]
+
+    def test_an_ordinary_payer_is_not(self) -> None:
+        reading = service.receipt_reading(
+            _payment(receipt_sender_account="03001234567"), platform_accounts=HOSPITAL
+        )
+        assert "PAID_FROM_A_HOSPITAL_ACCOUNT" not in reading["concerns"]
+
+
+class TestRefusingASubmission:
+    """The one check that stops a patient rather than flagging them.
+
+    Everything else the reading finds is a question for a reviewer, because a
+    model can be wrong about a blurry screenshot and somebody who really has
+    paid must not be locked out by it. The transaction ID is different: it is
+    the one field the patient also typed, so a difference is not the model
+    disagreeing with a photograph — it is the screenshot disagreeing with the
+    person about the same number.
+
+    Which makes the shape of this condition the important part. Every test below
+    that asserts `False` is a patient who would otherwise have been refused.
+    """
+
+    def test_a_different_number_conflicts(self) -> None:
+        assert receipt_ocr.reference_conflict("123456789", "987654321")
+
+    def test_one_digit_out_conflicts(self) -> None:
+        # The realistic case: a mistyped receipt, not a forged one.
+        assert receipt_ocr.reference_conflict("83762408296749", "83762408296748")
+
+    @pytest.mark.parametrize(
+        "on_receipt",
+        ["123456789", "123 456 789", "TID: 123456789", "Trx ID 123-456-789"],
+    )
+    def test_the_same_number_written_differently_does_not(self, on_receipt: str) -> None:
+        """Receipts label and space their references; the form strips both.
+
+        Refusing on this would refuse nearly every honest submission, which is
+        the worst possible failure for a check that blocks.
+        """
+        assert not receipt_ocr.reference_conflict("123456789", on_receipt)
+
+    def test_an_unreadable_receipt_does_not_block_anybody(self) -> None:
+        """The provider can be down, out of quota, or beaten by a blurry photo.
+
+        None of that is evidence against the patient, and a check that turns "I
+        could not tell" into "no" stops every payment in the country the day the
+        provider has an outage.
+        """
+        assert not receipt_ocr.reference_conflict("123456789", None)
+        assert not receipt_ocr.reference_conflict("123456789", "")
+
+    def test_a_reference_with_no_digits_at_all_does_not_block(self) -> None:
+        # Whatever the model returned, it was not a transaction ID.
+        assert not receipt_ocr.reference_conflict("123456789", "see attached")
+
+    def test_the_same_rule_is_what_the_reviewer_sees(self) -> None:
+        """Submission and the review panel apply one function, not two.
+
+        Two copies of this condition would drift, and the way they drift is that
+        one starts refusing payments the other lets through.
+        """
+        reading = service.receipt_reading(_payment(receipt_reference="987654321"))
+        assert "REFERENCE_MISMATCH" in reading["concerns"]
+        assert receipt_ocr.reference_conflict("123456789", "987654321")

@@ -1554,6 +1554,8 @@ export interface PaymentClaim {
   method: string;
   status: PaymentClaimStatus;
   reference: string | null;
+  /** The account the patient was told to pay into, as it stood at the time. */
+  payeeAccount: string | null;
   hasProof: boolean;
   /** Short-lived signed link, present only where the endpoint minted one. */
   proofUrl: string | null;
@@ -1576,14 +1578,23 @@ export type ReceiptConcern =
   | "NOT_A_RECEIPT"
   | "REFERENCE_MISMATCH"
   | "AMOUNT_MISMATCH"
-  | "STALE_RECEIPT";
+  | "STALE_RECEIPT"
+  /** The screenshot says the money went somewhere other than the account
+      this patient was told to pay into. */
+  | "WRONG_DESTINATION"
+  /** The screenshot shows money leaving one of the hospital's own wallets —
+      a payout, offered as proof of a payment. */
+  | "PAID_FROM_A_HOSPITAL_ACCOUNT";
 
 export interface ReceiptReading {
   reference: string | null;
   amount: string | null;
   paidAt: string | null;
   sender: string | null;
+  /** The account the screenshot says the money was sent from. */
+  senderAccount: string | null;
   receiver: string | null;
+  /** The account the screenshot says it went to — a claim, not the answer. */
   receiverAccount: string | null;
   /** False means read and judged not to be a receipt; null means not read. */
   looksLikeAReceipt: boolean | null;
@@ -1606,7 +1617,16 @@ export interface LedgerPayment extends PaymentClaim {
   invoiceId: string;
   invoiceNumber: string;
   payerName: string;
-  receiverAccount: string | null;
+  /**
+   * The payer's own account, read from their screenshot.
+   *
+   * `payeeAccount`, the other end, comes from `PaymentClaim`: it is the account
+   * the patient was told to pay into, as it stood when they were told — not
+   * today's setting, and not what the screenshot claims. That claim lives in
+   * `receipt`, where a disagreement between the two shows up as a flag rather
+   * than quietly replacing the answer.
+   */
+  payerAccount: string | null;
   /** The consultation fee — the doctor's share of this bill. */
   doctorShare: string;
   platformFee: string;

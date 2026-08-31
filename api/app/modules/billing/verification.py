@@ -57,6 +57,18 @@ class RejectRequest(BaseModel):
     reason: Annotated[str, Field(min_length=3, max_length=500)]
 
 
+async def _platform_accounts(db: DbSession) -> list[str]:
+    """Every wallet the hospital receives into, as configured right now.
+
+    Used only to recognise a receipt sent *from* one of these — a payout
+    screenshot passed off as proof of a payment. The destination check does not
+    use this: it compares against the account snapshotted on the payment, so
+    changing the clinic's wallet does not retroactively flag older transfers.
+    """
+    rates = await service.load_settings(db)
+    return [number for number in (rates.nayapay_number, rates.easypaisa_number) if number]
+
+
 async def _signed_proof(payment: Payment) -> str | None:
     """A short-lived link to one screenshot, or None.
 
@@ -122,6 +134,11 @@ async def pending_payments(
     # would otherwise be twenty sequential round-trips to storage.
     urls = await asyncio.gather(*(_signed_proof(payment) for payment, _, _ in rows))
 
+    # The hospital's own wallets, so a receipt whose *sender* is one of them can
+    # be recognised for what it is: money leaving, offered as proof of money
+    # arriving.
+    accounts = await _platform_accounts(db)
+
     return ok(
         [
             {
@@ -131,7 +148,7 @@ async def pending_payments(
                 "invoiceTotal": str(invoice.total_amount),
                 # A second opinion on the screenshot, and where it disagrees
                 # with what the patient typed. Null when it was never read.
-                "receipt": service.receipt_reading(payment),
+                "receipt": service.receipt_reading(payment, platform_accounts=accounts),
             }
             for (payment, invoice, patient_name), url in zip(rows, urls, strict=True)
         ],
@@ -183,6 +200,8 @@ async def payment_ledger(
         )
     ).all()
 
+    accounts = await _platform_accounts(db)
+
     # Who signed each one off. Gathered in a single query rather than per row,
     # and by id rather than by name on the payment, because a reviewer's name
     # can change and the record should follow the person.
@@ -202,16 +221,23 @@ async def payment_ledger(
                 **service.serialize_payment(payment),
                 "invoiceId": invoice.id,
                 "invoiceNumber": invoice.invoice_number,
-                # From, and to.
+                # From, and to — both as accounts, not just as a name.
+                #
+                # "To" is the account the patient was *told* to pay into, taken
+                # from the payment rather than from today's settings. What the
+                # screenshot claims about the destination is a separate thing
+                # and travels inside `receipt`, where a mismatch between the two
+                # shows up as a flag rather than quietly replacing the answer.
                 "payerName": patient_name,
-                "receiverAccount": payment.receipt_receiver_account,
+                "payerAccount": payment.receipt_sender_account,
+                "payeeAccount": payment.payee_account,
                 # What the money is made of, as the invoice recorded it.
                 "doctorShare": str(invoice.amount),
                 "platformFee": str(invoice.platform_fee),
                 "tax": str(invoice.tax_amount),
                 "invoiceTotal": str(invoice.total_amount),
                 "reviewedBy": reviewers.get(payment.reviewed_by_id or ""),
-                "receipt": service.receipt_reading(payment),
+                "receipt": service.receipt_reading(payment, platform_accounts=accounts),
             }
             for payment, invoice, patient_name in rows
         ],

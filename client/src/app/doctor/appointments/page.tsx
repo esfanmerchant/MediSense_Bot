@@ -378,6 +378,13 @@ function ConsultationRow({
       onChanged();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not update the appointment.");
+    } finally {
+      // `finally`, not the catch block. Lowering this only on failure assumed
+      // the row goes away on success — and for "Did not attend" it does, since
+      // the appointment leaves the list it is rendered in. Confirming or
+      // checking in keeps it exactly where it is, under the same React key, so
+      // the component is never remounted and the flag stays raised: the button
+      // spins for ever and nothing but a browser reload clears it.
       setBusy(false);
     }
   };

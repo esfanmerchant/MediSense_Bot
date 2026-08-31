@@ -112,6 +112,7 @@ export function PayInvoice({
   const [wallet, setWallet] = useState<PaymentWallet | null>(null);
   const [reference, setReference] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [qrBroken, setQrBroken] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
@@ -166,10 +167,17 @@ export function PayInvoice({
       setFile(null);
       onClose();
     } catch (cause) {
+      const message = cause instanceof ApiError ? cause.message : String(cause);
+      // Kept on the screen as well as announced. A refusal here is usually the
+      // transaction ID not matching the one on the uploaded screenshot, and
+      // that is something the patient has to read carefully and correct — a
+      // toast that fades after four seconds is the wrong place to put a number
+      // somebody is meant to compare against their own receipt.
+      setRefusal(message);
       toast.show({
         tone: "critical",
         title: tr("Could not send", "Bhej nahi saka"),
-        body: cause instanceof ApiError ? cause.message : String(cause),
+        body: message,
       });
     } finally {
       setBusy(false);
@@ -318,9 +326,26 @@ export function PayInvoice({
                 // Stripped as it is typed rather than refused afterwards: a
                 // pasted reference often carries a stray space or dash, and
                 // rejecting the paste is a worse experience than cleaning it.
-                onChange={(event) => setReference(event.target.value.replace(/\D/g, ""))}
+                onChange={(event) => {
+                  setReference(event.target.value.replace(/\D/g, ""));
+                  // Cleared as the number is corrected. Leaving "these do not
+                  // match" beside a value the patient has just fixed is how a
+                  // solved problem goes on looking broken — and it belongs in
+                  // the keystroke that changed it, not an effect reacting to it.
+                  setRefusal(null);
+                }}
               />
             </Field>
+
+            {refusal && (
+              <p
+                role="alert"
+                className="pop-in flex items-start gap-2 rounded-xl border border-critical/50 bg-critical-soft p-3 text-sm font-medium text-critical"
+              >
+                <Icon name="error" className="mt-0.5 shrink-0 text-[18px]" />
+                <span>{refusal}</span>
+              </p>
+            )}
 
             <div>
               <input
@@ -328,7 +353,11 @@ export function PayInvoice({
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 className="sr-only"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => {
+                  setFile(event.target.files?.[0] ?? null);
+                  // A new screenshot is a new comparison.
+                  setRefusal(null);
+                }}
               />
               <Button variant="secondary" onClick={() => picker.current?.click()}>
                 <Icon name="image" className="text-[20px]" />

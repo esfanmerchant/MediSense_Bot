@@ -34,6 +34,7 @@ nothing to do with the real problem.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -491,6 +492,8 @@ def serialize_payment(payment: Payment, *, proof_url: str | None = None) -> dict
         "method": str(payment.method),
         "status": str(payment.status),
         "reference": payment.reference,
+        # The account the patient was told to pay into, as it stood then.
+        "payeeAccount": payment.payee_account,
         "hasProof": payment.proof_path is not None,
         "proofUrl": proof_url,
         "rejectionReason": payment.rejection_reason,
@@ -499,7 +502,9 @@ def serialize_payment(payment: Payment, *, proof_url: str | None = None) -> dict
     }
 
 
-def receipt_reading(payment: Payment) -> dict[str, Any] | None:
+def receipt_reading(
+    payment: Payment, *, platform_accounts: Sequence[str] = ()
+) -> dict[str, Any] | None:
     """What was read off the screenshot, and where it disagrees.
 
     The disagreements are computed here rather than stored, because they are a
@@ -517,24 +522,53 @@ def receipt_reading(payment: Payment) -> dict[str, Any] | None:
     if payment.receipt_read_at is None:
         return None
 
-    typed = receipt_ocr.normalize_reference(payment.reference)
-    read = receipt_ocr.normalize_reference(payment.receipt_reference)
-
     concerns: list[str] = []
     if payment.receipt_looks_valid is False:
         concerns.append("NOT_A_RECEIPT")
-    if typed and read and typed != read:
+    if receipt_ocr.reference_conflict(payment.reference, payment.receipt_reference):
+        # Submission refuses this outright, so a row carrying it is either from
+        # before that check existed or from a path that bypassed it. Kept in the
+        # list because "cannot happen" is not a reason to stop looking.
         concerns.append("REFERENCE_MISMATCH")
     if payment.receipt_amount is not None and payment.receipt_amount != payment.amount:
         concerns.append("AMOUNT_MISMATCH")
     if receipt_ocr.is_stale(payment.receipt_paid_at, now=payment.created_at):
         concerns.append("STALE_RECEIPT")
 
+    # Did the money go where the patient was told to send it?
+    #
+    # This is the question the ledger could not ask before. It compares against
+    # the account snapshotted on the payment — the one the patient was shown —
+    # rather than whatever the settings say today, so an administrator changing
+    # the clinic's wallet does not retroactively flag every older transfer.
+    #
+    # Only raised when both sides are known. An account the model could not read
+    # is not evidence of a wrong destination, and a warning with nothing behind
+    # it is how a reviewer learns to click past warnings.
+    if (
+        payment.payee_account
+        and payment.receipt_receiver_account
+        and not receipt_ocr.accounts_match(
+            payment.payee_account, payment.receipt_receiver_account
+        )
+    ):
+        concerns.append("WRONG_DESTINATION")
+
+    # A receipt whose *sender* is one of the hospital's own accounts is not a
+    # payment arriving. It is money leaving — a payout screenshot, or a receipt
+    # read the wrong way round — offered as proof of a bill being settled.
+    if payment.receipt_sender_account and any(
+        receipt_ocr.accounts_match(payment.receipt_sender_account, account)
+        for account in platform_accounts
+    ):
+        concerns.append("PAID_FROM_A_HOSPITAL_ACCOUNT")
+
     return {
         "reference": payment.receipt_reference,
         "amount": str(payment.receipt_amount) if payment.receipt_amount is not None else None,
         "paidAt": payment.receipt_paid_at.isoformat() + "Z" if payment.receipt_paid_at else None,
         "sender": payment.receipt_sender,
+        "senderAccount": payment.receipt_sender_account,
         "receiver": payment.receipt_receiver,
         "receiverAccount": payment.receipt_receiver_account,
         "looksLikeAReceipt": payment.receipt_looks_valid,

@@ -70,6 +70,11 @@ RECEIPT_SCHEMA: dict[str, Any] = {
             "description": "When the transfer happened, as ISO 8601, e.g. 2026-08-30T14:05:00",
         },
         "senderName": {"type": "string", "nullable": True},
+        "senderAccount": {
+            "type": "string",
+            "nullable": True,
+            "description": "The account or mobile number the money was sent from.",
+        },
         "receiverName": {"type": "string", "nullable": True},
         "receiverAccount": {
             "type": "string",
@@ -121,6 +126,7 @@ class Receipt:
     reference: str | None = None
     paid_at: datetime | None = None
     sender: str | None = None
+    sender_account: str | None = None
     receiver: str | None = None
     receiver_account: str | None = None
     is_receipt: bool | None = None
@@ -128,7 +134,16 @@ class Receipt:
     @property
     def is_empty(self) -> bool:
         return not any(
-            (self.text, self.amount, self.reference, self.paid_at, self.sender, self.receiver)
+            (
+                self.text,
+                self.amount,
+                self.reference,
+                self.paid_at,
+                self.sender,
+                self.sender_account,
+                self.receiver,
+                self.receiver_account,
+            )
         )
 
 
@@ -141,6 +156,53 @@ def normalize_reference(value: str | None) -> str:
     way to teach a reviewer to ignore the flag.
     """
     return re.sub(r"\D", "", value or "")
+
+
+def normalize_account(value: str | None) -> str:
+    """A wallet number in one shape, so two spellings of it compare equal.
+
+    The same mobile account is written `03443003108` by one bank, `+92 344
+    3003108` by another and `0092-344-3003108` by a third, and the number a
+    patient reads off their own screen carries whatever spacing their app uses.
+    Comparing those literally would report a wrong destination for every correct
+    payment — and a warning that fires on correct payments is a warning nobody
+    reads by the second week.
+
+    The canonical form is the national number without its leading zero, which is
+    what survives all three spellings. Leading zeros go first so `0092…` and
+    `03…` reduce the same way.
+    """
+    digits = re.sub(r"\D", "", value or "").lstrip("0")
+    if digits.startswith("92") and len(digits) == 12:
+        digits = digits[2:]
+    return digits
+
+
+def reference_conflict(typed: str | None, read: str | None) -> bool:
+    """Whether the transaction ID on the screenshot contradicts the typed one.
+
+    The whole rule, in one place, because it is applied twice: submission
+    refuses on it, and the reviewer's panel reports it. Two copies of a
+    condition this shape drift, and the way they drift is that one of them
+    starts refusing payments the other lets through.
+
+    True needs **both** numbers. An unreadable receipt is not a contradiction —
+    "I could not tell" must never become "no", or a provider being down would
+    stop every patient in the country from saying they had paid.
+    """
+    a, b = normalize_reference(typed), normalize_reference(read)
+    return bool(a) and bool(b) and a != b
+
+
+def accounts_match(left: str | None, right: str | None) -> bool:
+    """Whether two written account numbers are the same account.
+
+    Two unknowns are not a match. An account nobody could read is not evidence
+    that the money went to the right place, and treating it as one would turn
+    the destination check into a check that passes whenever it fails to run.
+    """
+    a, b = normalize_account(left), normalize_account(right)
+    return bool(a) and a == b
 
 
 #: A money amount inside whatever else the model returned around it.
@@ -251,6 +313,9 @@ async def read(content: bytes, mime_type: str) -> Receipt:
         sender=(str(payload.get("senderName")).strip()[:120] or None)
         if payload.get("senderName")
         else None,
+        sender_account=(str(payload.get("senderAccount")).strip()[:120] or None)
+        if payload.get("senderAccount")
+        else None,
         receiver=(str(payload.get("receiverName")).strip()[:120] or None)
         if payload.get("receiverName")
         else None,
@@ -268,6 +333,7 @@ async def read(content: bytes, mime_type: str) -> Receipt:
         read_amount=receipt.amount is not None,
         read_reference=receipt.reference is not None,
         read_paid_at=receipt.paid_at is not None,
+        read_accounts=(receipt.sender_account is not None, receipt.receiver_account is not None),
         looks_like_a_receipt=receipt.is_receipt,
     )
     return receipt

@@ -562,6 +562,19 @@ async def submit_payment_proof(
         # claiming one has nothing to evidence.
         raise bad_request("Choose the wallet you transferred from.")
 
+    # The account this claim is against, fixed now rather than looked up later.
+    # A clinic that changes wallet next month must not rewrite where last
+    # month's money was supposed to have gone.
+    rates = await service.load_settings(db)
+    payee_account = (
+        rates.nayapay_number if method is PaymentMethod.NAYAPAY else rates.easypaisa_number
+    )
+    if not payee_account:
+        # Nothing to pay into means nothing to claim against. Better a refusal
+        # than a payment recorded as having gone to an account that does not
+        # exist.
+        raise bad_request("That wallet is not set up for payments. Choose the other one.")
+
     waiting = (
         await db.execute(
             select(Payment).where(
@@ -597,6 +610,7 @@ async def submit_payment_proof(
         method=method,
         status=PaymentStatus.SUBMITTED,
         reference=reference.strip(),
+        payee_account=payee_account,
     )
 
     # Read the screenshot before it is filed, so the reviewer opens a payment
@@ -605,12 +619,33 @@ async def submit_payment_proof(
     # down or out of quota costs the reviewer a convenience, and must not cost
     # the patient the ability to say they have paid.
     receipt = await receipt_ocr.read(content, inspected.detected_mime)
+
+    # The one thing that stops the submission rather than flagging it.
+    #
+    # Everything else the reading finds is a question for the reviewer, because
+    # a model can be wrong about a blurry screenshot and a patient who really
+    # has paid must not be locked out by it. A transaction ID is different: it
+    # is the one field the patient also typed, so a mismatch is not the model
+    # disagreeing with a photograph — it is the screenshot disagreeing with the
+    # person, about the same number, and one of the two is wrong before anybody
+    # is asked to review it.
+    #
+    # Note the shape of the condition. It refuses only when a reference was
+    # *read* and *differs*; an unreadable receipt goes through and is flagged,
+    # because "I could not tell" must never become "no".
+    if receipt_ocr.reference_conflict(reference, receipt.reference):
+        raise bad_request(
+            f"The screenshot shows transaction ID {receipt.reference}, but you entered "
+            f"{reference.strip()}. Check the number on your receipt and enter it exactly."
+        )
+
     if not receipt.is_empty:
         payment.receipt_text = receipt.text
         payment.receipt_reference = receipt.reference
         payment.receipt_amount = receipt.amount
         payment.receipt_paid_at = receipt.paid_at
         payment.receipt_sender = receipt.sender
+        payment.receipt_sender_account = receipt.sender_account
         payment.receipt_receiver = receipt.receiver
         payment.receipt_receiver_account = receipt.receiver_account
         payment.receipt_looks_valid = receipt.is_receipt

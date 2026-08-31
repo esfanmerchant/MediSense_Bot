@@ -680,6 +680,12 @@ class Payment(Base):
     #: settle a bill. A duplicate is something for the reviewer to notice, which
     #: is what the reviewer is for.
     reference: Mapped[str | None] = mapped_column(String(120))
+    #: The account the patient was told to pay into, as it stood when they were
+    #: told. Snapshotted rather than looked up for the reason an invoice stores
+    #: its own line items: an administrator changing the clinic's wallet next
+    #: month must not rewrite where last month's money was supposed to go.
+    payee_account: Mapped[str | None] = mapped_column("payeeAccount", String(32))
+
     #: The screenshot, as an object key in the private proofs bucket. A path and
     #: never a URL, like avatars: the bucket has no public address and every
     #: link is signed per response.
@@ -704,6 +710,7 @@ class Payment(Base):
     receipt_amount: Mapped[Decimal | None] = mapped_column("receiptAmount", Numeric(10, 2))
     receipt_paid_at: Mapped[datetime | None] = mapped_column("receiptPaidAt", DateTime)
     receipt_sender: Mapped[str | None] = mapped_column("receiptSender", String(120))
+    receipt_sender_account: Mapped[str | None] = mapped_column("receiptSenderAccount", String(120))
     receipt_receiver: Mapped[str | None] = mapped_column("receiptReceiver", String(120))
     receipt_receiver_account: Mapped[str | None] = mapped_column(
         "receiptReceiverAccount", String(120)

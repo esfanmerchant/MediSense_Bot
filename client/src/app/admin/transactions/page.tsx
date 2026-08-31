@@ -9,11 +9,19 @@
  * status and a doctor's balance, and the transfer itself — the thing anyone
  * reconciling against a bank statement actually looks for — had no page.
  *
- * So each row carries both ends and the split. **From** the patient, by name.
- * **To** the wallet, with the receiving account where the screenshot showed
- * one. And what the money is made of, taken from the invoice as it was issued
- * rather than recomputed from today's rates: the consultation fee belongs to
- * the doctor, the platform fee and the tax to MediSense. A bill from March must
+ * So each row carries both ends and the split. **From** the patient, by name
+ * and by the account their own screenshot says the money left. **To** the
+ * account they were told to pay into — the one snapshotted on the payment, not
+ * whatever the screenshot claims about its destination and not whatever the
+ * settings say today. That distinction is why this column exists in this form:
+ * it used to print the screenshot's claim, which is how an account belonging to
+ * nobody at this hospital came to be displayed as where the money went. The
+ * claim still travels with the row, and where the two disagree it appears as a
+ * flag instead of quietly standing in for the answer.
+ *
+ * And what the money is made of, taken from the invoice as it was issued rather
+ * than recomputed from today's rates: the consultation fee belongs to the
+ * doctor, the platform fee and the tax to MediSense. A bill from March must
  * still explain March's numbers after somebody edits the rates in April.
  */
 
@@ -66,15 +74,25 @@ function Row({ payment }: { payment: LedgerPayment }) {
       <td className="whitespace-nowrap text-muted">
         {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString() : "—"}
       </td>
+      {/* From: the person, and the account their screenshot says it left. */}
       <td>
         <span className="font-semibold text-strong">{payment.payerName}</span>
-        <span className="mt-0.5 block text-xs text-muted">{payment.invoiceNumber}</span>
+        <span className="mt-0.5 block font-mono text-xs text-muted">
+          {payment.payerAccount ? `${payment.method} ${payment.payerAccount}` : payment.method}
+        </span>
+        <span className="mt-0.5 block text-xs text-faint">{payment.invoiceNumber}</span>
       </td>
+      {/* To: the account this patient was told to pay into. Not what the
+          screenshot claims — that is a claim, and where the two disagree it
+          appears as a flag in the status column rather than being shown here as
+          though it were the answer. This column used to show the claim, which
+          is how an account belonging to nobody at the hospital came to be
+          displayed as the destination. */}
       <td>
         <span className="text-strong">{payment.method}</span>
-        {payment.receiverAccount && (
+        {payment.payeeAccount && (
           <span className="mt-0.5 block font-mono text-xs text-muted">
-            {payment.receiverAccount}
+            {payment.payeeAccount}
           </span>
         )}
       </td>

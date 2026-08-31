@@ -310,8 +310,12 @@ function UpcomingRow({
       onChanged();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not cancel the appointment.");
-      setBusy(false);
       setConfirming(false);
+    } finally {
+      // See the note on the doctor's status buttons: a busy flag lowered only
+      // in `catch` is a control that spins for ever whenever the row it lives
+      // in survives the change.
+      setBusy(false);
     }
   };
 
@@ -473,11 +477,12 @@ function Booking({
       // A lost race for the slot is the common case here, and the message the
       // server sends ("that slot has just been taken") is the right one to show.
       setError(caught instanceof ApiError ? caught.message : "Could not book the appointment.");
-      setBusy(false);
       if (caught instanceof ApiError && caught.code === "SLOT_UNAVAILABLE") {
         setSlot(null);
         slots.reload();
       }
+    } finally {
+      setBusy(false);
     }
   };
 

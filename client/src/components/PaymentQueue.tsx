@@ -61,9 +61,12 @@ import { useAsync, QUEUE_REFRESH_MS } from "@/lib/useAsync";
 function ReceiptReadout({
   receipt,
   typed,
+  payeeAccount,
 }: {
   receipt: ReceiptReading | null;
   typed: string | null;
+  /** The account the patient was told to pay into, for the comparison below. */
+  payeeAccount: string | null;
 }) {
   const tr = useTr();
   if (!receipt) return null;
@@ -84,6 +87,18 @@ function ReceiptReadout({
     STALE_RECEIPT: [
       `This transfer is more than ${receipt.maxAgeDays} days older than the submission.`,
       `Yeh transfer submission se ${receipt.maxAgeDays} din se zyada purana hai.`,
+    ],
+    WRONG_DESTINATION: [
+      `The money went to ${receipt.receiverAccount ?? "another account"}, not to ${
+        payeeAccount ?? "the account this patient was given"
+      }.`,
+      `Paisa ${receipt.receiverAccount ?? "kisi aur account"} mein gaya, ${
+        payeeAccount ?? "us account"
+      } mein nahi jo is mareez ko diya gaya tha.`,
+    ],
+    PAID_FROM_A_HOSPITAL_ACCOUNT: [
+      "The sender is one of the hospital's own accounts — this receipt shows money leaving, not arriving.",
+      "Bhejne wala hospital ka apna account hai — yeh raseed paisa jaate hue dikhati hai, aata hua nahi.",
     ],
   };
 
@@ -118,6 +133,12 @@ function ReceiptReadout({
           <div className="flex gap-2">
             <dt className="text-muted">{tr("Transferred", "Transfer hua")}</dt>
             <dd className="text-strong">{new Date(receipt.paidAt).toLocaleString()}</dd>
+          </div>
+        )}
+        {receipt.senderAccount && (
+          <div className="flex gap-2">
+            <dt className="text-muted">{tr("From", "Kis se")}</dt>
+            <dd className="font-mono text-strong">{receipt.senderAccount}</dd>
           </div>
         )}
         {receipt.receiverAccount && (
@@ -256,7 +277,11 @@ function Claim({
             </div>
           </dl>
 
-          <ReceiptReadout receipt={payment.receipt} typed={payment.reference} />
+          <ReceiptReadout
+            receipt={payment.receipt}
+            typed={payment.reference}
+            payeeAccount={payment.payeeAccount}
+          />
 
           {rejecting ? (
             <div className="space-y-3 rounded-xl border border-line bg-sunken p-3">

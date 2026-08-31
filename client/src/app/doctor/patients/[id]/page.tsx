@@ -38,6 +38,7 @@ import {
   prescriptions as prescriptionsApi,
   records,
   type MedicalRecord,
+  type ReportedSymptom,
 } from "@/lib/api";
 import { useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
@@ -101,6 +102,27 @@ export default function PatientChart() {
   const medication = useAsync(
     () => prescriptionsApi.list({ patientId, limit: 50 }),
     [patientId, refresh],
+  );
+  const reported = useAsync(
+    () => records.reportedSymptoms({ patientId, limit: 50 }),
+    [patientId, refresh],
+  );
+
+  // The parts of the note form that the symptoms card also writes to. See
+  // NoteDraft below for why they are up here rather than inside the form.
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteSymptoms, setNoteSymptoms] = useState("");
+  const [answering, setAnswering] = useState<string[]>([]);
+  const draft = useMemo(
+    () => ({
+      open: noteOpen,
+      setOpen: setNoteOpen,
+      symptoms: noteSymptoms,
+      setSymptoms: setNoteSymptoms,
+      answering,
+      setAnswering,
+    }),
+    [noteOpen, noteSymptoms, answering],
   );
 
   const rows = useMemo(() => history.data?.data ?? [], [history.data]);
@@ -206,7 +228,22 @@ export default function PatientChart() {
               )}
             </header>
 
-            <NewRecordForm patientId={patientId} onSaved={reloadAll} />
+            <ReportedSymptomsCard
+              rows={reported.data?.data ?? []}
+              onUse={(picked) => {
+                // The patient's own words go into the Symptoms box, where they
+                // can be edited before anything is filed. A doctor's note has a
+                // doctor's author, and pasting a patient's phrasing in with no
+                // chance to correct it would blur the one line this whole
+                // staging table exists to keep.
+                const text = picked.map(describeSymptom).join("\n");
+                setNoteOpen(true);
+                setAnswering(picked.map((row) => row.id));
+                setNoteSymptoms(noteSymptoms ? `${noteSymptoms}\n${text}` : text);
+              }}
+            />
+
+            <NewRecordForm patientId={patientId} draft={draft} onSaved={reloadAll} />
 
             <Card
               title="Current medication"
@@ -306,15 +343,180 @@ function MedicationItem({ children }: { children: ReactNode }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// What the patient said
+// ---------------------------------------------------------------------------
+
+/** "Headache — severe, three days". One line, the way a doctor would read it. */
+function describeSymptom(row: ReportedSymptom): string {
+  const qualifiers = [row.severity, row.duration].filter(Boolean).join(", ");
+  return qualifiers ? `${row.symptom} — ${qualifiers}` : row.symptom;
+}
+
+/**
+ * Patient-reported symptoms, waiting for a clinician.
+ *
+ * These were being collected and never shown. The assistant asked the patient
+ * what was wrong, stored their answer with its provenance, and the doctor who
+ * saw them the next morning had no way to know any of it existed.
+ *
+ * Two things this card is careful about. It is labelled as the patient's own
+ * account throughout — nothing here is a finding, and the source is on every
+ * row, so a transcription the model made is never mistaken for something a
+ * person confirmed. And it distinguishes what has been dealt with from what has
+ * not: once a note answers a line, the line moves out of the way, because a
+ * list that only grows is a list nobody reads twice.
+ */
+function ReportedSymptomsCard({
+  rows,
+  onUse,
+}: {
+  rows: ReportedSymptom[];
+  onUse: (picked: ReportedSymptom[]) => void;
+}) {
+  const tr = useTr();
+  const [picked, setPicked] = useState<string[]>([]);
+  const [showReviewed, setShowReviewed] = useState(false);
+
+  const open = useMemo(() => rows.filter((row) => !row.promotedAt), [rows]);
+  const reviewed = useMemo(() => rows.filter((row) => row.promotedAt), [rows]);
+
+  // A row that has since been answered must not stay selected underneath.
+  const selected = useMemo(
+    () => open.filter((row) => picked.includes(row.id)),
+    [open, picked],
+  );
+
+  if (rows.length === 0) return null;
+
+  const toggle = (id: string) =>
+    setPicked((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
+    );
+
+  return (
+    <Card
+      icon="record_voice_over"
+      title={tr("Reported by the patient", "Mareez ne khud bataya")}
+      description={tr(
+        "Their own words, from the assistant. Not a diagnosis, and not written by a clinician.",
+        "Assistant par mareez ke apne alfaz. Yeh tashkhees nahi, aur kisi doctor ne nahi likhe.",
+      )}
+      action={
+        selected.length > 0 && (
+          <Button onClick={() => { onUse(selected); setPicked([]); }}>
+            <Icon name="edit_note" className="text-[20px]" />
+            {tr(
+              `Answer ${selected.length} in a note`,
+              `${selected.length} ka note likhein`,
+            )}
+          </Button>
+        )
+      }
+    >
+      {open.length === 0 ? (
+        <p className="flex items-center gap-2 text-sm text-muted">
+          <Icon name="task_alt" className="text-[18px] text-good" />
+          {tr("Everything reported has been answered.", "Jo bataya gaya tha, sab ka jawab ho chuka.")}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {open.map((row) => (
+            <li key={row.id}>
+              <label
+                className={cx(
+                  "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors",
+                  picked.includes(row.id)
+                    ? "border-primary bg-primary-soft"
+                    : "border-line hover:bg-sunken",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 accent-[var(--primary)]"
+                  checked={picked.includes(row.id)}
+                  onChange={() => toggle(row.id)}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{describeSymptom(row)}</span>
+                  <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                    <Badge tone={row.source === "AI_ASSISTED" ? "warning" : "info"}>
+                      {row.source === "AI_ASSISTED"
+                        ? tr("Transcribed by the assistant", "Assistant ne likha")
+                        : tr("Typed by the patient", "Mareez ne likha")}
+                    </Badge>
+                    <span>{new Date(row.createdAt).toLocaleString()}</span>
+                  </span>
+                  {row.rawText && (
+                    <span className="mt-1.5 block text-sm text-muted">“{row.rawText}”</span>
+                  )}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {reviewed.length > 0 && (
+        <div className="mt-4 border-t border-line pt-3">
+          <button
+            type="button"
+            onClick={() => setShowReviewed((value) => !value)}
+            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <Icon
+              name={showReviewed ? "expand_less" : "expand_more"}
+              className="text-[18px]"
+            />
+            {tr(
+              `${reviewed.length} already answered`,
+              `${reviewed.length} ka jawab ho chuka`,
+            )}
+          </button>
+          <Expand open={showReviewed}>
+            <ul className="mt-2 space-y-1.5">
+              {reviewed.map((row) => (
+                <li key={row.id} className="flex items-start gap-2 text-sm text-muted">
+                  <Icon name="task_alt" className="mt-px shrink-0 text-[16px] text-good" />
+                  <span>{describeSymptom(row)}</span>
+                </li>
+              ))}
+            </ul>
+          </Expand>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Three pieces of this form's state live in the page above it.
+ *
+ * Choosing patient-reported symptoms has to open this form and fill its
+ * Symptoms box, and that happens in the click that chooses them — not in an
+ * effect down here reacting to a prop that changed. An effect would be a second
+ * render pass doing what the event already knew, and React says so out loud.
+ */
+interface NoteDraft {
+  open: boolean;
+  setOpen: (value: boolean) => void;
+  symptoms: string;
+  setSymptoms: (value: string) => void;
+  /** Ids of the reported rows this note answers. */
+  answering: string[];
+  setAnswering: (value: string[]) => void;
+}
+
 function NewRecordForm({
   patientId,
+  draft,
   onSaved,
 }: {
   patientId: string;
+  draft: NoteDraft;
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [symptoms, setSymptoms] = useState("");
+  const { open, setOpen, symptoms, setSymptoms, answering, setAnswering } = draft;
   const [diagnosis, setDiagnosis] = useState("");
   const [treatmentPlan, setTreatmentPlan] = useState("");
   const [notes, setNotes] = useState("");
@@ -335,7 +537,9 @@ function NewRecordForm({
         treatmentPlan: treatmentPlan || undefined,
         notes: notes || undefined,
         followUpNotes: followUpNotes || undefined,
+        reportedSymptomIds: answering.length > 0 ? answering : undefined,
       });
+      setAnswering([]);
       setSymptoms("");
       setDiagnosis("");
       setTreatmentPlan("");

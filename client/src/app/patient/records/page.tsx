@@ -22,6 +22,7 @@ import {
   SkeletonRows,
   SkeletonTiles,
   StatTile,
+  cx,
 } from "@/components/ui";
 import { prescriptions as prescriptionsApi, records } from "@/lib/api";
 import { useTr } from "@/lib/lang";
@@ -34,11 +35,13 @@ export default function PatientRecords() {
     [],
   );
   const medication = useAsync(() => prescriptionsApi.list({ limit: 50 }), []);
+  const reported = useAsync(() => records.reportedSymptoms({ limit: 30 }), []);
 
   const rows = useMemo(() => history.data?.data ?? [], [history.data]);
   const meds = useMemo(() => medication.data?.data ?? [], [medication.data]);
   const active = useMemo(() => meds.filter((m) => m.active), [meds]);
   const stopped = useMemo(() => meds.filter((m) => !m.active), [meds]);
+  const told = useMemo(() => reported.data?.data ?? [], [reported.data]);
 
   return (
     <AppShell role="PATIENT">
@@ -127,6 +130,54 @@ export default function PatientRecords() {
                 )}
               />
             </Card>
+
+            {told.length > 0 && (
+              <Card
+                icon="record_voice_over"
+                title={tr("What you told the assistant", "Aap ne assistant ko kya bataya")}
+                description={tr(
+                  "Your own words, kept with your record. These are not a diagnosis.",
+                  "Aap ke apne alfaz, aap ke record ke saath. Yeh tashkhees nahi hai.",
+                )}
+              >
+                <ul className="space-y-2">
+                  {told.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex items-start gap-3 rounded-xl border border-line p-3"
+                    >
+                      <Icon
+                        name={row.promotedAt ? "task_alt" : "hourglass_top"}
+                        className={cx(
+                          "mt-0.5 shrink-0 text-[18px]",
+                          row.promotedAt ? "text-good" : "text-faint",
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">
+                          {[row.symptom, row.severity, row.duration].filter(Boolean).join(" — ")}
+                        </p>
+                        <p className="mt-0.5 text-sm text-muted">
+                          {new Date(row.createdAt).toLocaleDateString()} ·{" "}
+                          {/* Said plainly, because the difference matters to
+                              the patient: one of these has been read by their
+                              doctor and one is still only their own note. */}
+                          {row.promotedAt
+                            ? tr(
+                                "A doctor has written this into your record",
+                                "Doctor ne isay aap ke record mein likh diya hai",
+                              )
+                            : tr(
+                                "Waiting for a doctor to review it",
+                                "Doctor ke dekhne ka intezar",
+                              )}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
 
             {stopped.length > 0 && (
               <Card

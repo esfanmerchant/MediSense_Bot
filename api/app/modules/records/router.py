@@ -15,14 +15,14 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
 from app.api.responses import Page, ok, pagination
 from app.core.errors import bad_request
 from app.db.base import new_id
 from app.db.enums import AuditAction, DataSource, Role
-from app.db.models import MedicalRecord
+from app.db.models import MedicalRecord, ReportedSymptom
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
 from app.modules.records import service
@@ -56,6 +56,12 @@ class RecordCreate(BaseModel):
     follow_up_date: datetime | None = Field(default=None, alias="followUpDate")
     follow_up_notes: Annotated[str, Field(max_length=2000)] | None = Field(
         default=None, alias="followUpNotes"
+    )
+    #: Patient-reported rows this note accounts for. Naming them here is what
+    #: "a doctor validated this" means in practice: the words the patient typed
+    #: stop being an open question and point at the record that answered them.
+    reported_symptom_ids: list[Annotated[str, Field(max_length=64)]] = Field(
+        default_factory=list, alias="reportedSymptomIds", max_length=50
     )
 
     @field_validator("follow_up_date")
@@ -202,6 +208,49 @@ async def list_records(
     )
 
 
+@router.get("/reported-symptoms")
+async def list_reported_symptoms(
+    request: Request,
+    auth: CurrentAuth,
+    db: DbSession,
+    page: Annotated[Page, Depends(pagination)],
+    patient_id: Annotated[str | None, Query(alias="patientId", max_length=64)] = None,
+) -> dict[str, Any]:
+    """What the patient said, before any clinician touched it.
+
+    These rows are the missing half of the symptom checker. They were being
+    written and never read: a patient described their symptoms to the assistant,
+    the words were stored with their provenance, and no screen anywhere showed
+    them to the doctor who would sit down with that patient an hour later.
+
+    Gated exactly like the chart, because that is what they are part of. What
+    they are *not* is clinical findings — every row carries the source it came
+    from and whether a doctor has since promoted it into a record, so nothing
+    here can be mistaken for a diagnosis somebody made.
+    """
+    if patient_id:
+        await require_clinical_access(db, auth, request, patient_id)
+        filters = [ReportedSymptom.patient_id == patient_id]
+    else:
+        filters = [clinical_scope(auth, ReportedSymptom.patient_id)]
+
+    total = (
+        await db.execute(select(func.count(ReportedSymptom.id)).where(*filters))
+    ).scalar_one()
+
+    rows = (
+        await db.execute(
+            select(ReportedSymptom)
+            .where(*filters)
+            .order_by(ReportedSymptom.created_at.desc())
+            .limit(page.limit)
+            .offset(page.offset)
+        )
+    ).scalars().all()
+
+    return ok([service.serialize_reported_symptom(row) for row in rows], page.meta(total))
+
+
 @router.get("/{record_id}")
 async def get_record(
     record_id: str, request: Request, auth: CurrentAuth, db: DbSession
@@ -258,6 +307,23 @@ async def create_record(
     db.add(record)
     await db.flush()
 
+    if payload.reported_symptom_ids:
+        # Scoped to this patient on purpose. The ids arrive from a client, and
+        # without the patient filter a doctor with access to one chart could
+        # stamp somebody else's rows as reviewed by naming their ids.
+        await db.execute(
+            update(ReportedSymptom)
+            .where(
+                ReportedSymptom.id.in_(payload.reported_symptom_ids),
+                ReportedSymptom.patient_id == payload.patient_id,
+            )
+            .values(
+                promoted_to_record_id=record.id,
+                promoted_by_id=auth.doctor_id,
+                promoted_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+        )
+
     await _audit_record(
         request,
         db,
@@ -268,9 +334,15 @@ async def create_record(
             "appointmentId": payload.appointment_id,
             "fields": sorted(
                 key
-                for key, value in payload.model_dump(exclude={"patient_id", "appointment_id"}).items()
+                for key, value in payload.model_dump(
+                    exclude={"patient_id", "appointment_id", "reported_symptom_ids"}
+                ).items()
                 if value is not None
             ),
+            # Counted rather than listed: which rows a doctor closed out is on
+            # the rows themselves, and the audit entry only needs to say that
+            # this note answered some.
+            "reportedSymptomsPromoted": len(payload.reported_symptom_ids),
         },
     )
 

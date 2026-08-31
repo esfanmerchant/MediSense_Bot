@@ -923,6 +923,23 @@ export interface MedicalRecord {
   prescriptions?: Prescription[];
 }
 
+export interface ReportedSymptom {
+  id: string;
+  patientId: string;
+  symptom: string;
+  severity: string | null;
+  duration: string | null;
+  rawText: string | null;
+  /** PATIENT_REPORTED when typed, AI_ASSISTED when the model transcribed it. */
+  source: string;
+  inputType: string;
+  confidence: number | null;
+  /** Set once a doctor filed a record that accounts for this. */
+  promotedToRecordId: string | null;
+  promotedAt: string | null;
+  createdAt: string;
+}
+
 export const records = {
   list: (query?: {
     patientId?: string;
@@ -942,7 +959,19 @@ export const records = {
     notes?: string;
     followUpDate?: string;
     followUpNotes?: string;
+    /** Patient-reported rows this note answers; they are marked reviewed. */
+    reportedSymptomIds?: string[];
   }) => apiRequest<MedicalRecord>("/records", { method: "POST", body: input }),
+
+  /**
+   * What the patient told the assistant, before a clinician saw it.
+   *
+   * Kept beside the records API because it is gated identically, and kept
+   * separate from it because it is not a record: nothing here has a clinical
+   * author until a doctor files a note that names it.
+   */
+  reportedSymptoms: (query?: { patientId?: string; limit?: number; offset?: number }) =>
+    apiList<ReportedSymptom>("/records/reported-symptoms", query),
 
   amend: (
     id: string,

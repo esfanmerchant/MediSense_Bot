@@ -28,6 +28,7 @@ from app.db.models import (
     Doctor,
     MedicalRecord,
     Prescription,
+    ReportedSymptom,
     User,
 )
 from app.modules.appointments.schedule import iso_utc
@@ -225,3 +226,28 @@ def require_prescriber(auth: AuthContext, prescription: Prescription) -> None:
     """
     if auth.role != Role.DOCTOR or auth.doctor_id != prescription.doctor_id:
         raise forbidden("Only the prescribing doctor can change this prescription.")
+
+
+def serialize_reported_symptom(row: ReportedSymptom) -> dict[str, Any]:
+    """One thing a patient said about themselves, with where it came from.
+
+    ``source`` and ``inputType`` travel with every row because the whole point
+    of this table is that it is *not* a clinical finding. ``promotedAt`` is how
+    a doctor tells what they have already dealt with from what is still new —
+    without it the same three symptoms would sit at the top of the panel
+    forever, and a panel that never empties stops being read.
+    """
+    return {
+        "id": row.id,
+        "patientId": row.patient_id,
+        "symptom": row.symptom,
+        "severity": row.severity,
+        "duration": row.duration_text,
+        "rawText": row.raw_text,
+        "source": str(row.source),
+        "inputType": str(row.input_type),
+        "confidence": row.confidence,
+        "promotedToRecordId": row.promoted_to_record_id,
+        "promotedAt": iso_or_none(row.promoted_at),
+        "createdAt": iso_utc(row.created_at),
+    }

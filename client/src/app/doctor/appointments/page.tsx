@@ -261,6 +261,20 @@ export default function DoctorAppointments() {
                           : ""}
                       </p>
                     </div>
+                    {/* The consultation notes on the appointment are the
+                        doctor's own working record. What the patient reads in
+                        their history is a filed record, and nothing files one
+                        by itself — so the way to write it is offered here,
+                        while the visit is still the thing on the screen. */}
+                    {completed.patientId && (
+                      <Link
+                        href={`/doctor/patients/${completed.patientId}`}
+                        className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-line bg-card px-3 text-sm font-semibold text-primary transition-colors hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      >
+                        <Icon name="edit_note" className="text-[18px]" />
+                        {tr("Write the record", "Record likhein")}
+                      </Link>
+                    )}
                     <IconButton
                       label={tr("Dismiss", "Band karein")}
                       icon="close"

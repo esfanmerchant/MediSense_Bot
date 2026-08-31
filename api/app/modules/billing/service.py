@@ -60,7 +60,7 @@ from app.db.models import (
 from app.modules.billing import earnings
 from app.modules.notifications.service import notify
 from app.services import email as email_service
-from app.services import email_templates
+from app.services import email_templates, receipt_ocr
 
 #: How long a patient has before an invoice is considered overdue.
 #:
@@ -496,6 +496,54 @@ def serialize_payment(payment: Payment, *, proof_url: str | None = None) -> dict
         "rejectionReason": payment.rejection_reason,
         "createdAt": payment.created_at.isoformat() + "Z" if payment.created_at else None,
         "reviewedAt": payment.reviewed_at.isoformat() + "Z" if payment.reviewed_at else None,
+    }
+
+
+def receipt_reading(payment: Payment) -> dict[str, Any] | None:
+    """What was read off the screenshot, and where it disagrees.
+
+    The disagreements are computed here rather than stored, because they are a
+    comparison against the payment as it stands now — and a stored verdict would
+    go stale the moment anything it compared against changed.
+
+    Three careful distinctions run through this. ``None`` means the screenshot
+    was never read, which is not the same as reading it and finding nothing.
+    A field the model could not read produces no flag at all, because "I could
+    not tell" is not evidence of a mismatch and a warning with nothing behind it
+    is how a reviewer learns to click past warnings. And none of this decides
+    anything: an administrator who has looked at the receiving account is still
+    what turns a claim into a payment.
+    """
+    if payment.receipt_read_at is None:
+        return None
+
+    typed = receipt_ocr.normalize_reference(payment.reference)
+    read = receipt_ocr.normalize_reference(payment.receipt_reference)
+
+    concerns: list[str] = []
+    if payment.receipt_looks_valid is False:
+        concerns.append("NOT_A_RECEIPT")
+    if typed and read and typed != read:
+        concerns.append("REFERENCE_MISMATCH")
+    if payment.receipt_amount is not None and payment.receipt_amount != payment.amount:
+        concerns.append("AMOUNT_MISMATCH")
+    if receipt_ocr.is_stale(payment.receipt_paid_at, now=payment.created_at):
+        concerns.append("STALE_RECEIPT")
+
+    return {
+        "reference": payment.receipt_reference,
+        "amount": str(payment.receipt_amount) if payment.receipt_amount is not None else None,
+        "paidAt": payment.receipt_paid_at.isoformat() + "Z" if payment.receipt_paid_at else None,
+        "sender": payment.receipt_sender,
+        "receiver": payment.receipt_receiver,
+        "receiverAccount": payment.receipt_receiver_account,
+        "looksLikeAReceipt": payment.receipt_looks_valid,
+        "readAt": payment.receipt_read_at.isoformat() + "Z",
+        "concerns": concerns,
+        # The days a receipt may be old before it is worth a second look. Sent
+        # so the reviewer's screen can say "older than 12 days" without a
+        # constant of its own drifting away from this one.
+        "maxAgeDays": receipt_ocr.MAX_RECEIPT_AGE.days,
     }
 
 

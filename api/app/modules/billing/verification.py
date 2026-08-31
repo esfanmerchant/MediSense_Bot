@@ -129,8 +129,91 @@ async def pending_payments(
                 "invoiceNumber": invoice.invoice_number,
                 "patientName": patient_name,
                 "invoiceTotal": str(invoice.total_amount),
+                # A second opinion on the screenshot, and where it disagrees
+                # with what the patient typed. Null when it was never read.
+                "receipt": service.receipt_reading(payment),
             }
             for (payment, invoice, patient_name), url in zip(rows, urls, strict=True)
+        ],
+        page.meta(total),
+    )
+
+
+@router.get("/ledger")
+async def payment_ledger(
+    auth: CurrentAuth,
+    db: DbSession,
+    page: Annotated[Page, Depends(pagination)],
+    _: RequireInvoiceManage,
+    status: PaymentStatus | None = None,
+) -> dict[str, Any]:
+    """Every transfer this platform has been told about — who, to where, and what came of it.
+
+    The pending queue answers "what needs me now" and deliberately shows nothing
+    else. This answers the other question, the one nobody could ask before: what
+    has actually moved. A confirmed payment vanished from the queue and appeared
+    nowhere — the money was in the invoice's status and the doctor's balance, and
+    the transfer itself, the thing an accountant reconciles against a bank
+    statement, had no page at all.
+
+    Each row carries both ends. **From** the patient, by name. **To** the wallet
+    the transfer was made into, with the account read off the receipt where one
+    was read. And the split, taken from the invoice as it was issued rather than
+    recomputed from today's rates: the consultation fee is the doctor's, the
+    platform fee and the tax are the hospital's.
+
+    Newest first, unlike the queue above. This is a record being read, not work
+    being worked through.
+    """
+    filters = [] if status is None else [Payment.status == status]
+
+    base = (
+        select(Payment, Invoice, User.name)
+        .join(Invoice, Invoice.id == Payment.invoice_id)
+        .join(Patient, Patient.id == Invoice.patient_id)
+        .join(User, User.id == Patient.user_id)
+        .where(*filters)
+    )
+
+    total = (await db.execute(select(func.count(Payment.id)).where(*filters))).scalar_one()
+
+    rows = (
+        await db.execute(
+            base.order_by(Payment.created_at.desc()).limit(page.limit).offset(page.offset)
+        )
+    ).all()
+
+    # Who signed each one off. Gathered in a single query rather than per row,
+    # and by id rather than by name on the payment, because a reviewer's name
+    # can change and the record should follow the person.
+    reviewer_ids = {payment.reviewed_by_id for payment, _, _ in rows if payment.reviewed_by_id}
+    reviewers: dict[str, str] = {}
+    if reviewer_ids:
+        reviewers = {
+            row_id: name
+            for row_id, name in (
+                await db.execute(select(User.id, User.name).where(User.id.in_(reviewer_ids)))
+            ).all()
+        }
+
+    return ok(
+        [
+            {
+                **service.serialize_payment(payment),
+                "invoiceId": invoice.id,
+                "invoiceNumber": invoice.invoice_number,
+                # From, and to.
+                "payerName": patient_name,
+                "receiverAccount": payment.receipt_receiver_account,
+                # What the money is made of, as the invoice recorded it.
+                "doctorShare": str(invoice.amount),
+                "platformFee": str(invoice.platform_fee),
+                "tax": str(invoice.tax_amount),
+                "invoiceTotal": str(invoice.total_amount),
+                "reviewedBy": reviewers.get(payment.reviewed_by_id or ""),
+                "receipt": service.receipt_reading(payment),
+            }
+            for payment, invoice, patient_name in rows
         ],
         page.meta(total),
     )

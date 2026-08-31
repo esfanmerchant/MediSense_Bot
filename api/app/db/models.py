@@ -691,6 +691,28 @@ class Payment(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column("reviewedAt", DateTime)
     rejection_reason: Mapped[str | None] = mapped_column("rejectionReason", Text)
 
+    #: What a model read off the screenshot when it was uploaded.
+    #:
+    #: Advisory, every field nullable, and none of it decides anything. It sits
+    #: beside the image on the reviewer's screen so the comparison people are
+    #: worst at — is this the same reference, the same amount, a receipt from
+    #: this month — happens without squinting. Read once, at upload, so the
+    #: queue never waits on a provider and the record is of the image as it
+    #: arrived.
+    receipt_text: Mapped[str | None] = mapped_column("receiptText", Text)
+    receipt_reference: Mapped[str | None] = mapped_column("receiptReference", String(120))
+    receipt_amount: Mapped[Decimal | None] = mapped_column("receiptAmount", Numeric(10, 2))
+    receipt_paid_at: Mapped[datetime | None] = mapped_column("receiptPaidAt", DateTime)
+    receipt_sender: Mapped[str | None] = mapped_column("receiptSender", String(120))
+    receipt_receiver: Mapped[str | None] = mapped_column("receiptReceiver", String(120))
+    receipt_receiver_account: Mapped[str | None] = mapped_column(
+        "receiptReceiverAccount", String(120)
+    )
+    #: NULL is "not read"; False is "read, and this is not a receipt". Different
+    #: answers, and the reviewer wants the second one.
+    receipt_looks_valid: Mapped[bool | None] = mapped_column("receiptLooksValid", Boolean)
+    receipt_read_at: Mapped[datetime | None] = mapped_column("receiptReadAt", DateTime)
+
     #: Left from the gateway that preceded this. Unused and nullable; kept
     #: rather than dropped because the column costs nothing and dropping one is
     #: a migration that can go wrong for no gain.

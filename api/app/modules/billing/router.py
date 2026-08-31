@@ -15,6 +15,7 @@ something other than a document would be worse than not having one.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -43,7 +44,7 @@ from app.modules.auth.rbac import Permission
 from app.modules.billing import revenue, service
 from app.modules.notifications.service import notify
 from app.services import email as email_service
-from app.services import email_templates, storage
+from app.services import email_templates, receipt_ocr, storage
 from app.services.files import FileRejectedError, inspect_upload
 
 router = APIRouter(prefix="/invoices", tags=["billing"])
@@ -598,6 +599,23 @@ async def submit_payment_proof(
         reference=reference.strip(),
     )
 
+    # Read the screenshot before it is filed, so the reviewer opens a payment
+    # that already carries its second opinion rather than waiting on a provider
+    # with the queue in front of them. `read` never raises: a provider that is
+    # down or out of quota costs the reviewer a convenience, and must not cost
+    # the patient the ability to say they have paid.
+    receipt = await receipt_ocr.read(content, inspected.detected_mime)
+    if not receipt.is_empty:
+        payment.receipt_text = receipt.text
+        payment.receipt_reference = receipt.reference
+        payment.receipt_amount = receipt.amount
+        payment.receipt_paid_at = receipt.paid_at
+        payment.receipt_sender = receipt.sender
+        payment.receipt_receiver = receipt.receiver
+        payment.receipt_receiver_account = receipt.receiver_account
+        payment.receipt_looks_valid = receipt.is_receipt
+        payment.receipt_read_at = datetime.now(UTC).replace(tzinfo=None)
+
     bucket = settings.SUPABASE_PAYMENT_PROOFS_BUCKET
     path = f"{invoice.patient_id}/{payment.id}{inspected.extension}"
     await storage.upload(bucket, path, content, inspected.detected_mime)
@@ -628,6 +646,10 @@ async def submit_payment_proof(
                 "invoiceId": invoice.id,
                 "amount": str(payment.amount),
                 "method": str(method),
+                # Whether the screenshot was read, never what it said: the
+                # audit trail is queried by people who are not in this
+                # patient's care, and a bank screenshot is not theirs to read.
+                "receiptRead": payment.receipt_read_at is not None,
             },
         ),
     )

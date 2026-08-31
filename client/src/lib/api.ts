@@ -1564,10 +1564,56 @@ export interface PaymentClaim {
 }
 
 /** A claim in the administrator's queue, with who and what it is against. */
+/**
+ * What a model read off the uploaded screenshot, and where it disagrees.
+ *
+ * Advisory only. It sits beside the picture so the reviewer does not have to
+ * compare four numbers by eye; the reviewer still decides. A field the model
+ * could not read produces no concern at all — "I could not tell" is not
+ * evidence of a mismatch.
+ */
+export type ReceiptConcern =
+  | "NOT_A_RECEIPT"
+  | "REFERENCE_MISMATCH"
+  | "AMOUNT_MISMATCH"
+  | "STALE_RECEIPT";
+
+export interface ReceiptReading {
+  reference: string | null;
+  amount: string | null;
+  paidAt: string | null;
+  sender: string | null;
+  receiver: string | null;
+  receiverAccount: string | null;
+  /** False means read and judged not to be a receipt; null means not read. */
+  looksLikeAReceipt: boolean | null;
+  readAt: string;
+  concerns: ReceiptConcern[];
+  /** How old a receipt may be before it is worth a second look. */
+  maxAgeDays: number;
+}
+
 export interface PendingPayment extends PaymentClaim {
   invoiceNumber: string;
   patientName: string;
   invoiceTotal: string;
+  /** Null when the screenshot was never read. */
+  receipt: ReceiptReading | null;
+}
+
+/** One transfer in the administrator's ledger: from whom, to where, split how. */
+export interface LedgerPayment extends PaymentClaim {
+  invoiceId: string;
+  invoiceNumber: string;
+  payerName: string;
+  receiverAccount: string | null;
+  /** The consultation fee — the doctor's share of this bill. */
+  doctorShare: string;
+  platformFee: string;
+  tax: string;
+  invoiceTotal: string;
+  reviewedBy: string | null;
+  receipt: ReceiptReading | null;
 }
 
 export const paymentReview = {
@@ -1589,6 +1635,15 @@ export const paymentReview = {
   /** A fresh link to one screenshot, for a tab left open past the last one. */
   proof: (id: string) =>
     apiRequest<{ url: string; expiresInSeconds: number }>(`/payments/${id}/proof`),
+
+  /**
+   * Every transfer, not only the ones still waiting.
+   *
+   * Newest first: this is a record being read, where `pending` is work being
+   * worked through.
+   */
+  ledger: (query?: { status?: PaymentClaimStatus; limit?: number; offset?: number }) =>
+    apiList<LedgerPayment>("/payments/ledger", query),
 };
 
 export interface BillingSettings {

@@ -32,10 +32,122 @@ import {
   Field,
   Input,
   SkeletonRows,
+  cx,
 } from "@/components/ui";
-import { ApiError, paymentReview, type PendingPayment } from "@/lib/api";
+import {
+  ApiError,
+  paymentReview,
+  type PendingPayment,
+  type ReceiptConcern,
+  type ReceiptReading,
+} from "@/lib/api";
 import { useTr } from "@/lib/lang";
 import { useAsync, QUEUE_REFRESH_MS } from "@/lib/useAsync";
+
+/**
+ * What was read off the screenshot, beside what the patient typed.
+ *
+ * This is the only part of the queue that is not evidence, and it says so. A
+ * model read the picture when it was uploaded; it can be wrong about a blurry
+ * screenshot, and it has certainly not watched money arrive in anybody's
+ * account. What it is reliably better than a tired person at is noticing that
+ * two long reference numbers differ in the middle, or that a receipt is from
+ * three weeks ago.
+ *
+ * So concerns are stated as questions for the reviewer, never as verdicts, and
+ * a field the model could not read produces nothing at all rather than a
+ * warning with no evidence behind it.
+ */
+function ReceiptReadout({
+  receipt,
+  typed,
+}: {
+  receipt: ReceiptReading | null;
+  typed: string | null;
+}) {
+  const tr = useTr();
+  if (!receipt) return null;
+
+  const CONCERNS: Record<ReceiptConcern, [string, string]> = {
+    NOT_A_RECEIPT: [
+      "This image does not look like a payment receipt.",
+      "Yeh tasveer adaigi ki raseed nahi lagti.",
+    ],
+    REFERENCE_MISMATCH: [
+      `The receipt shows ${receipt.reference ?? "—"}, not ${typed ?? "—"}.`,
+      `Raseed par ${receipt.reference ?? "—"} hai, ${typed ?? "—"} nahi.`,
+    ],
+    AMOUNT_MISMATCH: [
+      `The receipt shows ${receipt.amount ?? "—"}, not the amount owed.`,
+      `Raseed par ${receipt.amount ?? "—"} hai, jo waajib raqam nahi.`,
+    ],
+    STALE_RECEIPT: [
+      `This transfer is more than ${receipt.maxAgeDays} days older than the submission.`,
+      `Yeh transfer submission se ${receipt.maxAgeDays} din se zyada purana hai.`,
+    ],
+  };
+
+  const clean = receipt.concerns.length === 0;
+
+  return (
+    <div
+      className={cx(
+        "rounded-xl border p-3",
+        clean ? "border-line bg-sunken" : "border-warning/50 bg-warning-soft",
+      )}
+    >
+      <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-faint">
+        <Icon name="document_scanner" className="text-[15px]" />
+        {tr("Read from the screenshot", "Screenshot se parha gaya")}
+      </p>
+
+      <dl className="mt-2 grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+        {receipt.reference && (
+          <div className="flex gap-2">
+            <dt className="text-muted">{tr("Reference", "Reference")}</dt>
+            <dd className="select-all font-mono font-semibold text-strong">{receipt.reference}</dd>
+          </div>
+        )}
+        {receipt.amount && (
+          <div className="flex gap-2">
+            <dt className="text-muted">{tr("Amount", "Raqam")}</dt>
+            <dd className="font-semibold tabular-nums text-strong">{receipt.amount}</dd>
+          </div>
+        )}
+        {receipt.paidAt && (
+          <div className="flex gap-2">
+            <dt className="text-muted">{tr("Transferred", "Transfer hua")}</dt>
+            <dd className="text-strong">{new Date(receipt.paidAt).toLocaleString()}</dd>
+          </div>
+        )}
+        {receipt.receiverAccount && (
+          <div className="flex gap-2">
+            <dt className="text-muted">{tr("Into", "Kis account mein")}</dt>
+            <dd className="font-mono text-strong">{receipt.receiverAccount}</dd>
+          </div>
+        )}
+      </dl>
+
+      {receipt.concerns.length > 0 && (
+        <ul className="mt-2.5 space-y-1">
+          {receipt.concerns.map((concern) => (
+            <li key={concern} className="flex items-start gap-1.5 text-sm font-medium text-warning">
+              <Icon name="warning" className="mt-px shrink-0 text-[16px]" />
+              {tr(...CONCERNS[concern])}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mt-2.5 text-xs text-faint">
+        {tr(
+          "Read automatically. Check the receiving account before confirming — this has not seen the money arrive.",
+          "Khud-ba-khud parha gaya. Tasdeeq se pehle apna account khud dekh lein — is ne paisa aata nahi dekha.",
+        )}
+      </p>
+    </div>
+  );
+}
 
 function Claim({
   payment,
@@ -144,10 +256,12 @@ function Claim({
             </div>
           </dl>
 
+          <ReceiptReadout receipt={payment.receipt} typed={payment.reference} />
+
           {rejecting ? (
             <div className="space-y-3 rounded-xl border border-line bg-sunken p-3">
               <Field
-                label={tr("Why is this being rejected?", "Yeh kyun mustard ho raha hai?")}
+                label={tr("Why is this being rejected?", "Yeh kyun mustarad ho raha hai?")}
                 htmlFor={`reject-${payment.id}`}
                 hint={tr(
                   "The patient reads this, so tell them what to do next.",
@@ -169,7 +283,7 @@ function Claim({
                   disabled={reason.trim().length < 3}
                   onClick={() => decide("reject")}
                 >
-                  {tr("Reject payment", "Adaigi mustard karein")}
+                  {tr("Reject payment", "Adaigi mustarad karein")}
                 </Button>
                 <Button variant="ghost" onClick={() => setRejecting(false)}>
                   {tr("Cancel", "Cancel")}

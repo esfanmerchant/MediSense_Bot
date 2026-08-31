@@ -95,6 +95,7 @@ const NAV: Record<Role, NavGroup[]> = {
         { href: "/doctor/patients", label: ["My patients", "Mere mareez"], icon: "group" },
         { href: "/doctor/appointments", label: ["Appointments", "Appointments"], icon: "calendar_today" },
         { href: "/doctor/availability", label: ["Availability", "Dastyabi"], icon: "event_available" },
+        { href: "/doctor/earnings", label: ["Earnings", "Kamai"], icon: "payments" },
         { href: "/doctor/alerts", label: ["Alerts", "Alerts"], icon: "notifications_active" },
       ],
     },
@@ -114,6 +115,7 @@ const NAV: Record<Role, NavGroup[]> = {
         { href: "/admin/appointments", label: ["Appointments", "Appointments"], icon: "calendar_today" },
         { href: "/admin/departments", label: ["Departments", "Departments"], icon: "domain" },
         { href: "/admin/billing", label: ["Billing", "Billing"], icon: "payments" },
+        { href: "/admin/withdrawals", label: ["Withdrawals", "Withdrawals"], icon: "account_balance" },
       ],
     },
     {

@@ -31,15 +31,19 @@ from app.db.enums import (
     AuditAction,
     FeeMode,
     InvoiceStatus,
+    NotificationType,
     PaymentMethod,
     PaymentStatus,
     Role,
+    UserStatus,
 )
-from app.db.models import Invoice, Payment
+from app.db.models import Invoice, Patient, Payment, User
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
 from app.modules.billing import service
-from app.services import storage
+from app.modules.notifications.service import notify
+from app.services import email as email_service
+from app.services import email_templates, storage
 from app.services.files import FileRejectedError, inspect_upload
 
 router = APIRouter(prefix="/invoices", tags=["billing"])
@@ -586,7 +590,63 @@ async def submit_payment_proof(
         ),
     )
 
+    await _tell_administrators(db, invoice=invoice, payment=payment, auth=auth)
+
     return ok(service.serialize_payment(payment))
+
+
+async def _tell_administrators(
+    db: DbSession, *, invoice: Invoice, payment: Payment, auth: CurrentAuth
+) -> None:
+    """Put the claim in front of whoever can check the receiving account.
+
+    In-app and by email, because this is work that only happens if somebody
+    notices it: a patient who has transferred is waiting on a person, and a
+    queue nobody is told about is a queue nobody opens.
+    """
+    payer = (
+        await db.execute(
+            select(User.name)
+            .join(Patient, Patient.user_id == User.id)
+            .where(Patient.id == invoice.patient_id)
+        )
+    ).scalar_one_or_none() or "A patient"
+
+    admins = (
+        (
+            await db.execute(
+                select(User).where(User.role == Role.ADMIN, User.status == UserStatus.ACTIVE)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    message = email_templates.admin_payment_submitted(
+        patient_name=payer,
+        invoice_number=invoice.invoice_number,
+        currency=payment.currency,
+        amount=str(payment.amount),
+        reference=payment.reference or "",
+    )
+
+    for admin in admins:
+        await notify(
+            db,
+            user_id=admin.id,
+            notification_type=NotificationType.INVOICE_ISSUED,
+            title="A payment is waiting for confirmation",
+            body=f"{payer} sent {payment.currency} {payment.amount} for {invoice.invoice_number}.",
+            link="/admin/billing",
+            # Sent directly below; queuing one too would deliver it twice.
+            email=False,
+        )
+        await email_service.send(
+            to=admin.email,
+            subject=message.subject,
+            text_body=message.text,
+            html_body=message.html,
+        )
 
 
 @router.get("/{invoice_id}/payments")

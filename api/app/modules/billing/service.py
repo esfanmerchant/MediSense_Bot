@@ -58,6 +58,8 @@ from app.db.models import (
     User,
 )
 from app.modules.notifications.service import notify
+from app.services import email as email_service
+from app.services import email_templates
 
 #: How long a patient has before an invoice is considered overdue.
 #:
@@ -301,13 +303,17 @@ async def announce(db: AsyncSession, invoice: Invoice) -> None:
     they owe something, and the administrators need the receivable to appear
     without anyone watching for it.
     """
-    patient_user_id = (
-        await db.execute(select(Patient.user_id).where(Patient.id == invoice.patient_id))
-    ).scalar_one_or_none()
+    patient = (
+        await db.execute(
+            select(Patient.user_id, User.name, User.email)
+            .join(User, User.id == Patient.user_id)
+            .where(Patient.id == invoice.patient_id)
+        )
+    ).first()
 
     await notify(
         db,
-        user_id=patient_user_id,
+        user_id=patient[0] if patient else None,
         notification_type=NotificationType.INVOICE_ISSUED,
         title="Invoice for your consultation",
         body=(
@@ -316,7 +322,29 @@ async def announce(db: AsyncSession, invoice: Invoice) -> None:
         ),
         link="/patient/billing",
         metadata={"invoiceId": invoice.id},
+        # The templated message below carries the amount, the date and a link
+        # to pay; the generic one would deliver a second, thinner copy.
+        email=False,
     )
+
+    if patient is not None:
+        _, patient_name, patient_email = patient
+        message = email_templates.invoice_issued(
+            name=patient_name,
+            invoice_number=invoice.invoice_number,
+            currency=invoice.currency,
+            amount=str(invoice.total_amount),
+            due=invoice.due_at.strftime("%d %B %Y") if invoice.due_at else "the due date",
+        )
+        # A bill that failed to email is still a bill: it is in the portal, the
+        # notification row exists, and raising here would roll back the invoice
+        # a consultation just produced.
+        await email_service.send(
+            to=patient_email,
+            subject=message.subject,
+            text_body=message.text,
+            html_body=message.html,
+        )
 
     admin_ids = (
         (await db.execute(select(User.id).where(User.role == Role.ADMIN))).scalars().all()

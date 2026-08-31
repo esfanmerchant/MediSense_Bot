@@ -149,6 +149,46 @@ class PaymentStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class LedgerEntryKind(StrEnum):
+    """Why a doctor's balance moved.
+
+    A ledger of signed entries rather than a running total on the doctor row.
+    A stored balance is one bad write away from being wrong with nothing to
+    compare it against; a sum of entries can always be recomputed, and every
+    movement says what caused it.
+    """
+
+    #: A confirmed patient payment. Credit.
+    EARNING = "EARNING"
+    #: Money set aside the moment a withdrawal is requested. Debit — held then,
+    #: not when it is paid out, or the same balance could be requested twice.
+    WITHDRAWAL = "WITHDRAWAL"
+    #: A refused withdrawal handing the held money back. Credit.
+    WITHDRAWAL_REVERSAL = "WITHDRAWAL_REVERSAL"
+
+
+class WithdrawalMethod(StrEnum):
+    """Where a doctor wants their money sent."""
+
+    BANK = "BANK"
+    EASYPAISA = "EASYPAISA"
+    JAZZCASH = "JAZZCASH"
+    NAYAPAY = "NAYAPAY"
+
+
+class WithdrawalStatus(StrEnum):
+    """How far a withdrawal has got.
+
+    ``PAID`` means an administrator has actually sent the money and attached
+    proof — the same distinction the patient side makes between a claim and a
+    confirmation, for the same reason: nothing here moves money by itself.
+    """
+
+    REQUESTED = "REQUESTED"
+    PAID = "PAID"
+    REJECTED = "REJECTED"
+
+
 class DocumentType(StrEnum):
     PRESCRIPTION = "PRESCRIPTION"
     LAB_REPORT = "LAB_REPORT"

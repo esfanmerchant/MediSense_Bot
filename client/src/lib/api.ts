@@ -1965,3 +1965,109 @@ export const doctorRequests = {
       body: input,
     }),
 };
+
+
+// ---------------------------------------------------------------------------
+// A doctor's money
+// ---------------------------------------------------------------------------
+
+export type WithdrawalMethod = "BANK" | "EASYPAISA" | "JAZZCASH" | "NAYAPAY";
+export type WithdrawalStatus = "REQUESTED" | "PAID" | "REJECTED";
+
+/**
+ * One movement in a doctor's balance.
+ *
+ * `amount` is signed: credits positive, debits negative, and the balance is
+ * their sum. Format it, never do arithmetic on it — it is a decimal string for
+ * the same reason every other amount here is.
+ */
+export interface LedgerEntry {
+  id: string;
+  amount: string;
+  currency: string;
+  kind: "EARNING" | "WITHDRAWAL" | "WITHDRAWAL_REVERSAL";
+  description: string | null;
+  invoiceId: string | null;
+  withdrawalId: string | null;
+  createdAt: string | null;
+}
+
+export interface Withdrawal {
+  id: string;
+  amount: string;
+  currency: string;
+  method: WithdrawalMethod;
+  accountName: string;
+  accountNumber: string;
+  bankName: string | null;
+  status: WithdrawalStatus;
+  /** The administrator's transfer reference, once it has been paid. */
+  reference: string | null;
+  hasProof: boolean;
+  proofUrl: string | null;
+  rejectionReason: string | null;
+  createdAt: string | null;
+  reviewedAt: string | null;
+}
+
+/** A request in the administrator's queue, with whose it is. */
+export interface PendingWithdrawal extends Withdrawal {
+  doctorName: string;
+}
+
+export interface DoctorEarnings {
+  /** What can be withdrawn now — money held against a pending request is
+      already excluded. */
+  balance: string;
+  /** Everything ever credited, before anything was taken out. The difference
+      between the two is what tells a doctor whether they have earned little or
+      simply withdrawn a lot. */
+  lifetimeEarned: string;
+  currency: string;
+  minimumWithdrawal: string;
+  canWithdraw: boolean;
+  entries: LedgerEntry[];
+  withdrawals: Withdrawal[];
+}
+
+export const earnings = {
+  /** Balance, statement and requests together: a balance with no statement
+      behind it is a number to be argued with. */
+  me: (query?: { limit?: number; offset?: number }) =>
+    apiRequest<DoctorEarnings>("/withdrawals/me", { query }),
+
+  /** Asks for a payout. The amount is held against the balance immediately. */
+  request: (input: {
+    amount: string;
+    method: WithdrawalMethod;
+    accountName: string;
+    accountNumber: string;
+    bankName?: string;
+  }) => apiRequest<Withdrawal>("/withdrawals", { method: "POST", body: input }),
+};
+
+export const withdrawalReview = {
+  pending: (query?: { limit?: number; offset?: number }) =>
+    apiList<PendingWithdrawal>("/withdrawals/pending", query),
+
+  /**
+   * Records that the money has been sent, with the receipt.
+   *
+   * Multipart because of the screenshot. The receipt is optional in the schema
+   * and expected in practice — its absence is visible on the record rather
+   * than blocking an administrator who paid by a route that produces none.
+   */
+  markPaid: (id: string, input: { reference?: string; file?: File }) => {
+    const form = new FormData();
+    form.append("reference", input.reference ?? "");
+    if (input.file) form.append("file", input.file);
+    return apiMultipart<Withdrawal>(`/withdrawals/${id}/paid`, form);
+  },
+
+  /** Refuses it and hands the money back to the doctor's balance. */
+  reject: (id: string, reason: string) =>
+    apiRequest<Withdrawal>(`/withdrawals/${id}/reject`, {
+      method: "POST",
+      body: { reason },
+    }),
+};

@@ -694,6 +694,93 @@ class Payment(Base):
     completed_at: Mapped[datetime | None] = mapped_column("completedAt", DateTime)
 
 
+class Withdrawal(Base):
+    """A doctor asking for their balance, and what became of it.
+
+    The account details sit on this row rather than on the doctor, because a
+    doctor may be paid to a different account each time and the record has to
+    say where *this* money went — changing bank next month must not silently
+    rewrite where last month's payment was sent.
+    """
+
+    __tablename__ = "withdrawals"
+
+    id: Mapped[str] = _id()
+    doctor_id: Mapped[str] = mapped_column(
+        "doctorId",
+        Text,
+        ForeignKey("doctors.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(Text, default="PKR", nullable=False)
+    method: Mapped[enums.WithdrawalMethod] = mapped_column(
+        pg_enum(enums.WithdrawalMethod, "WithdrawalMethod"), nullable=False
+    )
+    account_name: Mapped[str] = mapped_column("accountName", String(160), nullable=False)
+    account_number: Mapped[str] = mapped_column("accountNumber", String(64), nullable=False)
+    #: Only meaningful for a bank transfer; a wallet is identified by its number.
+    bank_name: Mapped[str | None] = mapped_column("bankName", String(120))
+
+    status: Mapped[enums.WithdrawalStatus] = mapped_column(
+        pg_enum(enums.WithdrawalStatus, "WithdrawalStatus"),
+        default=enums.WithdrawalStatus.REQUESTED,
+        nullable=False,
+    )
+    #: The administrator's screenshot of the outgoing transfer — the mirror of
+    #: what a patient uploads coming in. Both sides carry evidence.
+    proof_path: Mapped[str | None] = mapped_column("proofPath", Text)
+    reference: Mapped[str | None] = mapped_column(String(120))
+
+    reviewed_by_id: Mapped[str | None] = mapped_column("reviewedById", Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column("reviewedAt", DateTime)
+    rejection_reason: Mapped[str | None] = mapped_column("rejectionReason", Text)
+    created_at: Mapped[datetime] = _created()
+
+
+class DoctorLedgerEntry(Base):
+    """One movement in a doctor's balance.
+
+    A list of signed entries rather than a total on the doctor row: a stored
+    balance is one bad write away from being wrong with nothing to check it
+    against, and no way to answer "wrong since when, and why". This can be
+    recomputed at any time, and a mistake is a correcting entry rather than an
+    edit to a number somebody is owed.
+    """
+
+    __tablename__ = "doctor_ledger_entries"
+
+    id: Mapped[str] = _id()
+    doctor_id: Mapped[str] = mapped_column(
+        "doctorId",
+        Text,
+        ForeignKey("doctors.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+    )
+    #: Credits positive, debits negative; the balance is their sum. One column
+    #: rather than two, so no query can add up the wrong one and no entry can be
+    #: both at once.
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(Text, default="PKR", nullable=False)
+    kind: Mapped[enums.LedgerEntryKind] = mapped_column(
+        pg_enum(enums.LedgerEntryKind, "LedgerEntryKind"), nullable=False
+    )
+    #: What a doctor reads in their own statement.
+    description: Mapped[str | None] = mapped_column(Text)
+
+    invoice_id: Mapped[str | None] = mapped_column(
+        "invoiceId",
+        Text,
+        ForeignKey("invoices.id", ondelete="SET NULL", onupdate="CASCADE"),
+    )
+    withdrawal_id: Mapped[str | None] = mapped_column(
+        "withdrawalId",
+        Text,
+        ForeignKey("withdrawals.id", ondelete="SET NULL", onupdate="CASCADE"),
+    )
+    created_at: Mapped[datetime] = _created()
+
+
 class Prescription(Base):
     __tablename__ = "prescriptions"
 

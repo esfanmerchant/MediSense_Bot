@@ -27,6 +27,7 @@ from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.billing.router import router as billing_router
 from app.modules.billing.verification import router as payment_verification_router
+from app.modules.billing.withdrawals import router as withdrawals_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.departments.router import router as departments_router
 from app.modules.doctor_applications.admin_router import router as doctor_applications_admin_router
@@ -177,6 +178,7 @@ def create_app() -> FastAPI:
         alerts_router,
         billing_router,
         payment_verification_router,
+        withdrawals_router,
         emergency_router,
         audit_router,
         notifications_router,

@@ -273,3 +273,160 @@ def admin_new_doctor_request(*, applicant_name: str, specialization: str | None)
             _paragraph(lead) + _note(detail) + _button("Review the application", url),
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Money
+# ---------------------------------------------------------------------------
+#
+# Every message below names an amount, and none of them is a receipt. A
+# notification that reads like a receipt is one somebody keeps and later waves
+# at a billing desk, so each says plainly what stage it is describing: a bill
+# raised, a claim received, a payment confirmed, money sent.
+
+
+def invoice_issued(
+    *, name: str, invoice_number: str, currency: str, amount: str, due: str
+) -> Email:
+    """To the patient, when a consultation is billed."""
+    greeting = f"Hello {name.split()[0]}," if name.strip() else "Hello,"
+    lead = f"Your invoice {invoice_number} for {currency} {amount} is ready."
+    detail = (
+        f"Please pay by {due}. You can pay from your billing page — the account "
+        "details are shown there."
+    )
+    url = portal_url("/patient/billing")
+
+    return Email(
+        subject=f"{BRAND} invoice {invoice_number} — {currency} {amount}",
+        text="\n\n".join([greeting, lead, detail, f"Your bills: {url}", _SIGNOFF]),
+        html=_shell(
+            "Your invoice is ready",
+            _paragraph(greeting)
+            + _paragraph(lead)
+            + _note(detail)
+            + _button("View and pay", url),
+        ),
+    )
+
+
+def admin_payment_submitted(
+    *, patient_name: str, invoice_number: str, currency: str, amount: str, reference: str
+) -> Email:
+    """To administrators, when a patient says they have transferred.
+
+    Names the reference, because that is the one thing the reviewer will look
+    for in the receiving account — and nothing else about the patient, since
+    this is a prompt to open the queue rather than a way to decide from an inbox.
+    """
+    lead = f"{patient_name} has sent {currency} {amount} for invoice {invoice_number}."
+    detail = f"Transaction ID: {reference}"
+    action = "Check the transfer arrived, then confirm or reject it in the portal."
+    url = portal_url("/admin/billing")
+
+    return Email(
+        subject=f"Payment to confirm — {currency} {amount}",
+        text="\n\n".join([lead, detail, action, f"Open billing: {url}", _SIGNOFF]),
+        html=_shell(
+            "A payment is waiting for confirmation",
+            _paragraph(lead)
+            + _code_block(reference)
+            + _note(action)
+            + _button("Open billing", url),
+        ),
+    )
+
+
+def doctor_earning_credited(
+    *, name: str, patient_name: str, currency: str, amount: str, invoice_number: str
+) -> Email:
+    """To the doctor, when a patient's payment clears."""
+    greeting = f"Hello Dr {name.split()[-1]}," if name.strip() else "Hello,"
+    lead = f"{currency} {amount} has been added to your account."
+    detail = f"From {patient_name}'s consultation, invoice {invoice_number}."
+    url = portal_url("/doctor/earnings")
+
+    return Email(
+        subject=f"{currency} {amount} added to your {BRAND} account",
+        text="\n\n".join([greeting, lead, detail, f"Your earnings: {url}", _SIGNOFF]),
+        html=_shell(
+            "You have been paid for a consultation",
+            _paragraph(greeting)
+            + _paragraph(lead)
+            + _note(detail)
+            + _button("View your earnings", url),
+        ),
+    )
+
+
+def admin_withdrawal_requested(
+    *, doctor_name: str, currency: str, amount: str, method: str, account: str
+) -> Email:
+    """To administrators, when a doctor asks for their balance."""
+    lead = f"Dr {doctor_name.split()[-1]} has requested {currency} {amount}."
+    detail = f"Send to: {method} · {account}"
+    action = "Transfer the amount, then upload the receipt in the portal."
+    url = portal_url("/admin/withdrawals")
+
+    return Email(
+        subject=f"Withdrawal request — {currency} {amount}",
+        text="\n\n".join([lead, detail, action, f"Open withdrawals: {url}", _SIGNOFF]),
+        html=_shell(
+            "A doctor has asked to withdraw",
+            _paragraph(lead)
+            + _code_block(f"{method}  {account}")
+            + _note(action)
+            + _button("Open withdrawals", url),
+        ),
+    )
+
+
+def doctor_withdrawal_paid(
+    *, name: str, currency: str, amount: str, account: str, reference: str | None
+) -> Email:
+    """To the doctor, when the money has actually been sent."""
+    greeting = f"Hello Dr {name.split()[-1]}," if name.strip() else "Hello,"
+    lead = f"{currency} {amount} has been sent to {account}."
+    detail = (
+        f"Reference: {reference}"
+        if reference
+        else "The receipt is on your earnings page."
+    )
+    url = portal_url("/doctor/earnings")
+
+    return Email(
+        subject=f"{currency} {amount} sent to you",
+        text="\n\n".join([greeting, lead, detail, f"Your earnings: {url}", _SIGNOFF]),
+        html=_shell(
+            "Your withdrawal has been paid",
+            _paragraph(greeting)
+            + _paragraph(lead)
+            + _note(detail)
+            + _button("View your earnings", url),
+        ),
+    )
+
+
+def doctor_withdrawal_rejected(
+    *, name: str, currency: str, amount: str, reason: str
+) -> Email:
+    """To the doctor, when a request is refused and the money handed back."""
+    greeting = f"Hello Dr {name.split()[-1]}," if name.strip() else "Hello,"
+    lead = f"Your withdrawal of {currency} {amount} was not paid."
+    detail = "The amount has been returned to your balance, so you can request it again."
+    url = portal_url("/doctor/earnings")
+
+    return Email(
+        subject=f"About your {currency} {amount} withdrawal",
+        text="\n\n".join([greeting, lead, f"Reason: {reason}", detail, url, _SIGNOFF]),
+        html=_shell(
+            "Your withdrawal was not paid",
+            _paragraph(greeting)
+            + _paragraph(lead)
+            + '<blockquote style="margin:0 0 14px;padding:12px 16px;background:#f8fafc;'
+            f'border-left:3px solid {GRADIENT_FALLBACK};border-radius:6px;font-size:15px;'
+            f'line-height:1.6;color:{_INK}">{_escape(reason)}</blockquote>'
+            + _note(detail)
+            + _button("View your earnings", url),
+        ),
+    )

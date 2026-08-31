@@ -69,8 +69,8 @@ export function FinalCta({
                   style={{ animationDelay: "400ms" }}
                 >
                   {tr(
-                    "Takes about a minute. You can book your first appointment straight after.",
-                    "Bas ek minute lagta hai — us ke foran baad aap apni pehli appointment book kar sakte hain.",
+                    "About a minute, and you can book.",
+                    "Ek minute, aur booking ho sakti hai.",
                   )}
                 </p>
                 <div

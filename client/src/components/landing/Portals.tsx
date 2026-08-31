@@ -190,7 +190,7 @@ export function Portals() {
       who: tr("Patients", "Mareez"),
       line: tr(
         "Book a visit, read your own history, ask a question at 2am.",
-        "Appointment book karein, apni puri history parhein, raat 2 baje bhi sawal poochein.",
+        "Book karein, history parhein, raat 2 baje bhi poochein.",
       ),
       points: [
         tr("Appointments and reminders", "Appointments aur yaad-dehani"),

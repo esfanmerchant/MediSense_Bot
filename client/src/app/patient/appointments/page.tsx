@@ -14,6 +14,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { ClinicMap } from "@/components/doctors/ClinicMap";
+import { DoctorAbout, type DirectoryDoctor } from "@/components/doctors/DoctorAbout";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -399,6 +400,8 @@ function Booking({
   // filtered client-side because the directory is paged: filtering the fifty
   // rows that happened to arrive would silently hide doctors on page two.
   const [city, setCity] = useState<string>("");
+  // The doctor whose details are open, or none.
+  const [about, setAbout] = useState<DirectoryDoctor | null>(null);
   const directory = useAsync(
     () => doctors.directory({ limit: 50, city: city || undefined }),
     [city],
@@ -553,79 +556,67 @@ function Booking({
                     {(directory.data?.data ?? []).map((doctor) => {
                       const selected = doctor.id === doctorId;
                       return (
-                        <button
+                        // A container, not one big button: "About" is a
+                        // second action, and a button inside a button is
+                        // invalid markup that browsers resolve by guessing.
+                        <div
                           key={doctor.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={selected}
-                          onClick={() => {
-                            setDoctorId(doctor.id);
-                            setDay(null);
-                            setSlot(null);
-                            setVisited("date");
-                          }}
                           className={cx(
-                            "group flex items-center gap-3 rounded-2xl p-4 text-left shadow-card transition-[transform,box-shadow] duration-200 ease-out hover:scale-[1.02] hover:shadow-overlay active:scale-[0.99]",
-                            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                            "group flex flex-col rounded-2xl p-4 shadow-card transition-[box-shadow] duration-200 ease-out hover:shadow-overlay",
                             selected ? "border-gradient-thick" : "border border-line bg-card",
                           )}
                         >
-                          <Avatar
-                            name={doctor.name}
-                            src={doctor.avatarUrl}
-                            size="lg"
-                            ring={selected ? "active" : undefined}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-display text-base font-bold text-strong">
-                              {doctor.name}
-                            </span>
-                            <span className="block text-sm text-muted">{doctor.specialization}</span>
-
-                            {/* The three things a patient actually weighs, after
-                                the name: where, how long, and what they hold. */}
-                            {(doctor.clinicName || doctor.city) && (
-                              <span className="mt-1 flex items-center gap-1 text-xs font-medium text-strong">
-                                <Icon name="location_on" className="shrink-0 text-[14px] text-primary" />
-                                <span className="truncate">
-                                  {[doctor.clinicName, doctor.city].filter(Boolean).join(" · ")}
-                                </span>
-                              </span>
-                            )}
-                            {(doctor.yearsExperience !== null || doctor.qualifications) && (
-                              <span className="mt-0.5 block truncate text-xs text-muted">
-                                {[
-                                  doctor.qualifications,
-                                  doctor.yearsExperience !== null
-                                    ? tr(
-                                        `${doctor.yearsExperience} yrs experience`,
-                                        `${doctor.yearsExperience} saal tajurba`,
-                                      )
-                                    : null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </span>
-                            )}
-                            {doctor.department && (
-                              <span className="mt-1 inline-flex items-center gap-1 text-xs text-faint">
-                                <Icon name="domain" className="text-[14px]" />
-                                {doctor.department.name}
-                              </span>
-                            )}
-                          </span>
-                          <span
-                            aria-hidden
-                            className={cx(
-                              "grid h-8 w-8 shrink-0 place-items-center rounded-full transition-[background-color,color,transform] duration-200",
-                              selected
-                                ? "bg-gradient-brand text-white"
-                                : "bg-sunken text-faint group-hover:translate-x-0.5 group-hover:text-primary",
-                            )}
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() => {
+                              setDoctorId(doctor.id);
+                              setDay(null);
+                              setSlot(null);
+                              setVisited("date");
+                            }}
+                            className="flex items-center gap-3 rounded-xl text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                           >
-                            <Icon name={selected ? "check" : "arrow_forward"} className="text-[18px]" />
-                          </span>
-                        </button>
+                            <Avatar
+                              name={doctor.name}
+                              src={doctor.avatarUrl}
+                              size="lg"
+                              ring={selected ? "active" : undefined}
+                            />
+                            {/* The two things somebody scans a list by. Every
+                                other fact moved into the panel, because six
+                                facts per card is a grid nobody reads. */}
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-display text-base font-bold text-strong">
+                                {doctor.name}
+                              </span>
+                              <span className="block text-sm text-muted">
+                                {doctor.specialization}
+                              </span>
+                            </span>
+                            <span
+                              aria-hidden
+                              className={cx(
+                                "grid h-8 w-8 shrink-0 place-items-center rounded-full transition-[background-color,color,transform] duration-200",
+                                selected
+                                  ? "bg-gradient-brand text-white"
+                                  : "bg-sunken text-faint group-hover:translate-x-0.5 group-hover:text-primary",
+                              )}
+                            >
+                              <Icon name={selected ? "check" : "arrow_forward"} className="text-[18px]" />
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setAbout(doctor)}
+                            className="mt-3 inline-flex min-h-9 items-center gap-1.5 self-start rounded-lg px-2 text-[13px] font-semibold text-primary transition-colors hover:bg-gradient-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                          >
+                            <Icon name="info" className="text-[17px]" />
+                            {tr("About this doctor", "Is doctor ke bare mein")}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -832,6 +823,23 @@ function Booking({
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Outside the step transition on purpose: it is a layer over the whole
+          flow, and re-mounting it as the step slides would close it mid-read. */}
+      <DoctorAbout
+        doctor={about}
+        open={about !== null}
+        onClose={() => setAbout(null)}
+        onBook={(id) => {
+          // The decision was made in the panel, so this is the same act as
+          // pressing the card — choose, and move on.
+          setDoctorId(id);
+          setDay(null);
+          setSlot(null);
+          setVisited("date");
+          setAbout(null);
+        }}
+      />
     </Card>
   );
 }

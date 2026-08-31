@@ -86,40 +86,40 @@ export function HowItWorks() {
       icon: "record_voice_over",
       title: tr("Speak or type", "Bolein ya likhein"),
       body: tr(
-        "Say what is wrong in your own words, or type it. Speech becomes text on your device.",
-        "Apni takleef apne alfaz mein bolein ya likhein. Awaaz aap ke apne device par likhai banti hai.",
+        "Say what is wrong, in your own words.",
+        "Apni takleef apne alfaz mein batayein.",
       ),
     },
     {
       icon: "psychology",
       title: tr("Symptoms are picked out", "Symptoms nikalti hain"),
       body: tr(
-        "The parts that matter are pulled out of the sentence and shown back to you first.",
-        "Jumle se ahem baatein alag ki jaati hain aur pehle aap ko hi dikhai jaati hain.",
+        "The parts that matter come back for you to check.",
+        "Ahem baatein aap ke samne aa jaati hain.",
       ),
     },
     {
       icon: "hub",
       title: tr("A department is suggested", "AI department suggest karta hai"),
       body: tr(
-        "The assistant proposes where to go — and escalates instead when it sounds serious.",
-        "Assistant batata hai kahan jana hai — aur baat sangeen lage to seedha doctor ki taraf bhejta hai.",
+        "It says where to go, or sends you straight on.",
+        "Batata hai kahan jana hai — ya seedha aage bhej deta hai.",
       ),
     },
     {
       icon: "inventory_2",
       title: tr("It is saved to your record", "Record mein save ho jata hai"),
       body: tr(
-        "Nothing is retyped later. The note joins your history the moment you send it.",
-        "Baad mein kuchh dobara likhna nahi parta. Bhejte hi yeh baat aap ki history ka hissa ban jaati hai.",
+        "It joins your history the moment you send it.",
+        "Bhejte hi yeh aap ki history ka hissa ban jaata hai.",
       ),
     },
     {
       icon: "stethoscope",
       title: tr("Your doctor reads it first", "Doctor visit se pehle dekh leta hai"),
       body: tr(
-        "The visit starts with your story already read, not with the same three questions.",
-        "Visit ka aaghaz aap ki kahani parh kar hota hai — wahi teen sawal dobara nahi.",
+        "The visit starts with your story already read.",
+        "Visit shuru hoti hai aap ki kahani parhi hui.",
       ),
     },
   ];
@@ -134,8 +134,8 @@ export function HowItWorks() {
             { text: tr("actually works", "kaam karta hai"), gradient: true },
           ]}
           lede={tr(
-            "One sentence from you, and it is already where it needs to be by the time you sit down.",
-            "Aap ka ek jumla — aur baithne se pehle hi woh apni sahi jagah pahunch chuka hota hai.",
+            "One sentence from you. That is the whole of it.",
+            "Aap ka ek jumla. Bas itna hi.",
           )}
         />
 

@@ -26,6 +26,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { Icon } from "@/components/Icon";
+import { useToast } from "@/components/overlays";
 import {
   Badge,
   Button,
@@ -247,22 +248,68 @@ function InvoiceDetail({ invoice }: { invoice: Invoice }) {
                 {money(invoice.amount, invoice.currency)}
               </td>
             </tr>
+            {Number(invoice.platformFee) > 0 && (
+              <tr>
+                <td colSpan={2} className="px-4 py-1 text-right text-sm text-muted">
+                  {tr("Platform fee", "Platform fee")}
+                </td>
+                <td className="px-4 py-1 text-right text-sm tabular-nums text-strong">
+                  {money(invoice.platformFee, invoice.currency)}
+                </td>
+              </tr>
+            )}
             <tr>
               <td colSpan={2} className="px-4 py-1 text-right text-sm text-muted">
+                {/* The rate, beside the amount: an old invoice should be able to
+                    explain its own tax without anyone looking up what the rate
+                    was that month. */}
                 {tr("Tax", "Tax")}
+                {Number(invoice.taxPercent) > 0 && (
+                  <span className="ml-1 text-faint">({invoice.taxPercent}%)</span>
+                )}
               </td>
               <td className="px-4 py-1 text-right text-sm tabular-nums text-strong">
                 {money(invoice.taxAmount, invoice.currency)}
               </td>
             </tr>
             <tr>
-              <td colSpan={2} className="px-4 pt-2 pb-4 text-right font-display text-base font-bold text-strong">
+              <td colSpan={2} className="px-4 pt-2 pb-1 text-right font-display text-base font-bold text-strong">
                 {tr("Total", "Mila kar total")}
               </td>
-              <td className="px-4 pt-2 pb-4 text-right font-display text-base font-bold tabular-nums text-strong">
+              <td className="px-4 pt-2 pb-1 text-right font-display text-base font-bold tabular-nums text-strong">
                 {money(invoice.totalAmount, invoice.currency)}
               </td>
             </tr>
+
+            {/* The late charge is shown *under* the total rather than folded
+                into it. A patient was sent a bill for one number; a total that
+                silently grew since they last looked, with no line explaining
+                it, is how a bill loses somebody's trust. */}
+            {Number(invoice.lateFeeCharged) > 0 && (
+              <>
+                <tr>
+                  <td colSpan={2} className="px-4 py-1 text-right text-sm text-critical">
+                    {tr("Late payment charge", "Der se adaigi ka charge")}
+                  </td>
+                  <td className="px-4 py-1 text-right text-sm tabular-nums text-critical">
+                    {money(invoice.lateFeeCharged, invoice.currency)}
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={2} className="px-4 pt-2 pb-4 text-right font-display text-base font-bold text-strong">
+                    {tr("Amount due now", "Abhi qabil-e-adaigi")}
+                  </td>
+                  <td className="px-4 pt-2 pb-4 text-right font-display text-base font-bold tabular-nums text-strong">
+                    {money(invoice.amountDue, invoice.currency)}
+                  </td>
+                </tr>
+              </>
+            )}
+            {Number(invoice.lateFeeCharged) <= 0 && (
+              <tr>
+                <td colSpan={3} className="pb-4" />
+              </tr>
+            )}
           </tfoot>
         </table>
       </div>
@@ -435,6 +482,70 @@ function AdminActions({
   );
 }
 
+/**
+ * The button that sends a patient to JazzCash.
+ *
+ * A redirect gateway is a *form post*, not a fetch: the payer's browser has to
+ * end up on JazzCash's own page, on their domain, with their certificate in the
+ * address bar. That is the whole security property of a hosted checkout, and it
+ * is why this builds a real form and submits it rather than posting JSON and
+ * following a link. Anything that put the payment form on our page would be
+ * asking a person to type a wallet PIN into a screen we control.
+ *
+ * The fields are signed on the server and are opaque here. Nothing in them can
+ * be edited into a smaller amount without the gateway refusing the signature.
+ */
+function PayButton({ invoice }: { invoice: Invoice }) {
+  const tr = useTr();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+
+  const owed = Number(invoice.amountDue);
+  if (invoice.status !== "ISSUED" && invoice.status !== "OVERDUE") return null;
+  if (!(owed > 0)) return null;
+
+  async function pay() {
+    setBusy(true);
+    try {
+      const { endpoint, fields } = await invoicesApi.checkout(invoice.id);
+
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = endpoint;
+      for (const [name, value] of Object.entries<string>(fields)) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+        form.append(input);
+      }
+      // Appended before submitting because a form outside the document does not
+      // submit — a detail that fails silently and looks like a dead button.
+      document.body.append(form);
+      form.submit();
+    } catch (cause) {
+      setBusy(false);
+      toast.show({
+        tone: "critical",
+        title: tr("Payment could not start", "Adaigi shuru nahi ho saki"),
+        // The server's own words. When online payment is not configured it says
+        // so and names the alternative, which is more use than "try again".
+        body: cause instanceof ApiError ? cause.message : String(cause),
+      });
+    }
+  }
+
+  return (
+    <Button onClick={pay} loading={busy}>
+      <Icon name="payments" className="text-[20px]" />
+      {tr(
+        `Pay ${money(invoice.amountDue, invoice.currency)}`,
+        `${money(invoice.amountDue, invoice.currency)} ada karein`,
+      )}
+    </Button>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Rows
 // ---------------------------------------------------------------------------
@@ -533,6 +644,12 @@ function InvoiceRow({
                     </Button>
                   </div>
                   <InvoiceDetail invoice={invoice} />
+                  {/* A patient's own action. Administrators keep the counter
+                      controls below; both can appear, because an administrator
+                      looking at their own bill is not a special case. */}
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <PayButton invoice={invoice} />
+                  </div>
                   {canManage && <AdminActions invoice={invoice} onChanged={onChanged} />}
                 </div>
               </motion.div>

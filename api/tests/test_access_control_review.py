@@ -53,6 +53,16 @@ from app.modules.auth.rbac import ROLE_PERMISSIONS, Permission
 #:
 #: All four are rate limited, and every one of them refuses on a counter that
 #: lives in Postgres rather than in this process.
+#:
+#: The last one is the payment gateway's callback, and it is the only route here
+#: that is not a way in for a person. JazzCash posts to it from their own
+#: servers, or redirects a browser to it; neither carries a cookie for this API,
+#: and there is no credential we could demand that they hold. What replaces the
+#: session is a signature: every field is re-hashed with the shared integrity
+#: salt and compared with the one they attached, before a single row is read.
+#: A response that does not verify is discarded — so an unsigned "invoice paid"
+#: posted by anybody on the internet changes nothing. It is also idempotent, so
+#: a genuine callback delivered twice is still one payment.
 PUBLIC_PATHS = {
     "/api/health",
     "/api/health/ready",
@@ -73,6 +83,8 @@ PUBLIC_PATHS = {
     # session can still clear its cookies. Requiring a valid token would leave
     # a signed-out-but-not-really state that nobody can escape.
     "/api/auth/logout",
+    # Verified by HMAC signature rather than by session — see the note above.
+    "/api/payments/jazzcash/callback",
 }
 
 #: Routes that authenticate but deliberately have no permission requirement:

@@ -105,6 +105,34 @@ class InvoiceStatus(StrEnum):
     OVERDUE = "OVERDUE"
 
 
+class PaymentMethod(StrEnum):
+    """How a payment was attempted.
+
+    ``COUNTER`` is the one that is not a gateway: money handed over at the
+    billing desk and recorded afterwards by staff. It is kept in the same enum
+    because the question a payment row answers is "how was this settled", and a
+    cash payment is an answer to it.
+    """
+
+    JAZZCASH = "JAZZCASH"
+    EASYPAISA = "EASYPAISA"
+    COUNTER = "COUNTER"
+
+
+class PaymentStatus(StrEnum):
+    """Where an attempt got to.
+
+    ``INITIATED`` exists because a redirect gateway takes the payer away from
+    this system: the row is written *before* they leave, so a person who pays
+    and then closes the tab is a payment we know to go and reconcile, rather
+    than money with no trace on our side at all.
+    """
+
+    INITIATED = "INITIATED"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
 class DocumentType(StrEnum):
     PRESCRIPTION = "PRESCRIPTION"
     LAB_REPORT = "LAB_REPORT"

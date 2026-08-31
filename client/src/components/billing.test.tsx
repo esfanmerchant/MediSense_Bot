@@ -27,8 +27,13 @@ function invoice(overrides: Partial<Invoice> = {}): Invoice {
     appointmentId: "appt-1",
     invoiceNumber: "INV-2026-000042",
     amount: "500.10",
+    platformFee: "0.00",
+    taxPercent: "0.00",
     taxAmount: "0.20",
     totalAmount: "500.30",
+    lateFee: "0.00",
+    lateFeeCharged: "0.00",
+    amountDue: "500.30",
     currency: "PKR",
     status: "ISSUED",
     lineItems: [

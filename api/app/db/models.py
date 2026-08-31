@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, Numeric, Text
 from sqlalchemy.dialects.postgresql import ENUM, JSONB
@@ -558,6 +558,72 @@ class MedicalRecord(Base):
     updated_at: Mapped[datetime] = _updated()
 
 
+class BillingSettings(Base):
+    """The rates an administrator owns. One row, ever.
+
+    These used to be environment variables, which meant the person accountable
+    for the tax rate could not change it without the person who holds the
+    server. The single row is enforced by a check constraint on a fixed primary
+    key, not by convention: "we only ever insert one" is a rule that survives
+    until somebody writes a second insert.
+    """
+
+    __tablename__ = "billing_settings"
+
+    #: Fixed, so the settings can be fetched without first asking which row.
+    SINGLETON: ClassVar[str] = "singleton"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True, default=SINGLETON)
+    tax_percent: Mapped[Decimal] = mapped_column(
+        "taxPercent", Numeric(5, 2), default=Decimal("0"), nullable=False
+    )
+    platform_fee: Mapped[Decimal] = mapped_column(
+        "platformFee", Numeric(10, 2), default=Decimal("0"), nullable=False
+    )
+    #: Added once, when a bill passes its due date — not per day. A daily charge
+    #: on a hospital bill compounds while somebody is too ill to deal with it.
+    late_fee: Mapped[Decimal] = mapped_column(
+        "lateFee", Numeric(10, 2), default=Decimal("0"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column("updatedAt", DateTime, nullable=False)
+    updated_by_id: Mapped[str | None] = mapped_column("updatedById", Text)
+
+
+class Payment(Base):
+    """One attempt to settle an invoice — not one success.
+
+    A redirect gateway takes the payer out of this system entirely, so the row
+    is written *before* they leave. Somebody who pays and then closes the tab is
+    then a payment to reconcile, rather than money with no trace on our side.
+    """
+
+    __tablename__ = "payments"
+
+    id: Mapped[str] = _id()
+    invoice_id: Mapped[str] = mapped_column(
+        "invoiceId",
+        Text,
+        ForeignKey("invoices.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(Text, default="PKR", nullable=False)
+    method: Mapped[enums.PaymentMethod] = mapped_column(
+        pg_enum(enums.PaymentMethod, "PaymentMethod"), nullable=False
+    )
+    status: Mapped[enums.PaymentStatus] = mapped_column(
+        pg_enum(enums.PaymentStatus, "PaymentStatus"), nullable=False
+    )
+    #: Our reference, sent to the gateway and echoed back. Unique, because it is
+    #: the only thing standing between one payment and a callback delivered
+    #: twice.
+    gateway_ref: Mapped[str] = mapped_column("gatewayRef", Text, nullable=False, unique=True)
+    gateway_code: Mapped[str | None] = mapped_column("gatewayCode", Text)
+    gateway_message: Mapped[str | None] = mapped_column("gatewayMessage", Text)
+    created_at: Mapped[datetime] = _created()
+    completed_at: Mapped[datetime | None] = mapped_column("completedAt", DateTime)
+
+
 class Prescription(Base):
     __tablename__ = "prescriptions"
 
@@ -804,6 +870,23 @@ class Invoice(Base):
     #: Stored per invoice rather than read from configuration at display
     #: time: a bill says what it was raised in, and a clinic that changes
     #: currency must not silently restate every invoice it ever issued.
+    #: What this bill charged, copied from settings when it was issued — never
+    #: read live. An invoice is a statement of a debt as it stood; reading the
+    #: current rate would silently restate every unpaid bill in the hospital
+    #: whenever an administrator corrected a number.
+    platform_fee: Mapped[Decimal] = mapped_column(
+        "platformFee", Numeric(10, 2), default=Decimal("0"), nullable=False
+    )
+    tax_percent: Mapped[Decimal] = mapped_column(
+        "taxPercent", Numeric(5, 2), default=Decimal("0"), nullable=False
+    )
+    #: What will be charged if this goes past `due_at`. Whether it *has* is
+    #: computed from the date, never stored — a stored flag needs a nightly
+    #: sweep to stay true, and a bill that is overdue only once a job has run is
+    #: a bill that lies between midnights.
+    late_fee: Mapped[Decimal] = mapped_column(
+        "lateFee", Numeric(10, 2), default=Decimal("0"), nullable=False
+    )
     currency: Mapped[str] = mapped_column(Text, default="PKR", nullable=False)
     status: Mapped[enums.InvoiceStatus] = mapped_column(
         pg_enum(enums.InvoiceStatus, "InvoiceStatus"), default=enums.InvoiceStatus.DRAFT, nullable=False

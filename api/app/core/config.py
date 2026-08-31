@@ -47,6 +47,49 @@ class Settings(BaseSettings):
     #: default for a deployment that has not been told its local rate.
     INVOICE_TAX_PERCENT: float = 0.0
 
+    # --- JazzCash --------------------------------------------------------
+    #: Merchant credentials for the hosted checkout a patient is redirected to.
+    #:
+    #: **Server-side only, and that is not a style preference.** The integrity
+    #: salt is what signs a payment request and verifies the response that comes
+    #: back; anything holding it can mint a request the gateway will honour and
+    #: forge a "paid" callback. It must never reach a browser, which is why none
+    #: of these is a NEXT_PUBLIC value and why the client is never handed them —
+    #: it receives only the finished, signed form to post.
+    #:
+    #: Empty means the gateway is not configured, and the API says so plainly
+    #: rather than sending a patient to a checkout that will refuse them.
+    JAZZCASH_MERCHANT_ID: str = ""
+    JAZZCASH_PASSWORD: str = ""
+    JAZZCASH_INTEGRITY_SALT: str = ""
+    #: Where JazzCash sends the payer back to. Must be reachable by *their*
+    #: servers, so localhost works for a browser-side test and not for the
+    #: server-to-server confirmation.
+    JAZZCASH_RETURN_URL: str = ""
+    #: "sandbox" or "live". Anything other than "live" uses the sandbox host, so
+    #: a typo bills nobody.
+    JAZZCASH_ENVIRONMENT: str = "sandbox"
+
+    @property
+    def jazzcash_configured(self) -> bool:
+        """Whether a payment can actually be started."""
+        return bool(
+            self.JAZZCASH_MERCHANT_ID
+            and self.JAZZCASH_PASSWORD
+            and self.JAZZCASH_INTEGRITY_SALT
+            and self.JAZZCASH_RETURN_URL
+        )
+
+    @property
+    def jazzcash_endpoint(self) -> str:
+        """The hosted form to post to. Sandbox unless explicitly told otherwise."""
+        host = (
+            "payments.jazzcash.com.pk"
+            if self.JAZZCASH_ENVIRONMENT.strip().lower() == "live"
+            else "sandbox.jazzcash.com.pk"
+        )
+        return f"https://{host}/CustomerPortal/transactionmanagement/merchantform"
+
     # --- Database --------------------------------------------------------
     DATABASE_URL: str = ""
     DIRECT_URL: str = ""

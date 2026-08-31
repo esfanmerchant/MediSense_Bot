@@ -1397,8 +1397,23 @@ export interface Invoice {
    * error waiting for a total. Format it; do not do arithmetic on it.
    */
   amount: string;
+  /** The platform fee this bill charged, as it stood when it was issued. */
+  platformFee: string;
+  /** The rate applied, kept so an old invoice can explain its own tax. */
+  taxPercent: string;
   taxAmount: string;
+  /**
+   * What the invoice was issued for. This never changes — not even once the
+   * bill is late. See `amountDue` for what actually settles it today.
+   */
   totalAmount: string;
+  /** What a late payment will cost. Present before it is charged, so the
+      consequence is visible in advance rather than as a surprise. */
+  lateFee: string;
+  /** The late fee currently being charged: "0.00" until the due date passes. */
+  lateFeeCharged: string;
+  /** Total plus any late fee — the figure a payment is taken for. */
+  amountDue: string;
   currency: string;
   status: InvoiceStatus;
   lineItems: InvoiceLine[];
@@ -1412,6 +1427,33 @@ export interface Invoice {
   createdAt: string;
 }
 
+export interface BillingSettings {
+  /** A percentage. Applied to the consultation fee and the platform fee. */
+  taxPercent: string;
+  platformFee: string;
+  /** Charged once when a bill passes its due date, never per day. */
+  lateFee: string;
+  /** How many days a patient has before that happens. */
+  paymentTermsDays: number;
+  currency: string;
+  updatedAt: string | null;
+}
+
+export const billingSettings = {
+  read: () => apiRequest<BillingSettings>("/invoices/settings/billing"),
+
+  /**
+   * Changes the rates. Only invoices issued afterwards take them: every invoice
+   * stores what it charged, so a bill already sent to a patient never changes
+   * because somebody corrected a percentage this morning.
+   */
+  update: (input: { taxPercent?: string; platformFee?: string; lateFee?: string }) =>
+    apiRequest<BillingSettings>("/invoices/settings/billing", {
+      method: "PATCH",
+      body: input,
+    }),
+};
+
 export const invoices = {
   list: (query?: {
     status?: InvoiceStatus;
@@ -1422,7 +1464,22 @@ export const invoices = {
 
   get: (id: string) => apiRequest<Invoice>(`/invoices/${id}`),
 
+  /** Records money taken at the billing desk. Administrators only. */
   pay: (id: string) => apiRequest<Invoice>(`/invoices/${id}/pay`, { method: "POST" }),
+
+  /**
+   * Starts a JazzCash payment for one's own invoice.
+   *
+   * Returns the gateway's endpoint and a set of signed form fields to POST
+   * there from the browser. The signature was produced on the server; nothing
+   * secret is in what comes back, and nothing here can be edited without the
+   * gateway refusing it.
+   */
+  checkout: (id: string) =>
+    apiRequest<{ endpoint: string; fields: Record<string, string>; reference: string }>(
+      `/invoices/${id}/checkout`,
+      { method: "POST" },
+    ),
 
   void: (id: string, reason: string) =>
     apiRequest<Invoice>(`/invoices/${id}/void`, { method: "POST", body: { reason } }),

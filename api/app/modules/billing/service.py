@@ -34,6 +34,7 @@ nothing to do with the real problem.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
@@ -47,11 +48,16 @@ from app.core.errors import bad_request, conflict
 from app.core.logging import logger
 from app.db.base import new_id, utcnow
 from app.db.enums import InvoiceStatus, NotificationType, Role
-from app.db.models import Appointment, Doctor, Invoice, Patient, User
+from app.db.models import Appointment, BillingSettings, Doctor, Invoice, Patient, User
 from app.modules.notifications.service import notify
 
 #: How long a patient has before an invoice is considered overdue.
-PAYMENT_TERMS_DAYS = 30
+#:
+#: Three days, not a month. A consultation fee is a small, immediate debt and a
+#: month-long window means a bill is forgotten long before it is chased. The
+#: consequence of missing it is a single late fee, added once — see
+#: ``amount_due`` for why it is never charged per day.
+PAYMENT_TERMS_DAYS = 3
 
 CENTS = Decimal("0.01")
 
@@ -94,17 +100,65 @@ def build_line_items(*, doctor_name: str, specialization: str, fee: Decimal) -> 
     ]
 
 
-def totals(subtotal: Decimal) -> tuple[Decimal, Decimal, Decimal]:
-    """Subtotal, tax and total.
+async def load_settings(db: AsyncSession) -> BillingSettings:
+    """The rates in force right now.
 
-    The tax rate is configuration, not a literal: rates differ by jurisdiction
-    and change, and a number compiled into the billing code is a number nobody
-    can correct without a deployment. It defaults to zero, so an unconfigured
-    deployment bills the fee and nothing else rather than inventing a tax.
+    These were environment variables, which meant the administrator accountable
+    for the tax rate could not change it without the person holding the server.
+    The row is created on first read rather than assumed, so a database restored
+    from before this feature does not fail every consultation that completes.
+    """
+    row = (
+        await db.execute(
+            select(BillingSettings).where(BillingSettings.id == BillingSettings.SINGLETON)
+        )
+    ).scalar_one_or_none()
+
+    if row is None:
+        row = BillingSettings(
+            id=BillingSettings.SINGLETON,
+            # Seeded from the setting this replaces, so a deployment that had a
+            # tax rate configured keeps charging it across the upgrade.
+            tax_percent=_money(Decimal(str(settings.INVOICE_TAX_PERCENT))),
+            platform_fee=Decimal("0"),
+            late_fee=Decimal("0"),
+            updated_at=utcnow(),
+        )
+        db.add(row)
+        await db.flush()
+
+    return row
+
+
+@dataclass(frozen=True)
+class Charges:
+    """What one bill comes to, broken into the parts a patient can read."""
+
+    subtotal: Decimal
+    platform_fee: Decimal
+    tax: Decimal
+    total: Decimal
+
+
+def totals(subtotal: Decimal, *, platform_fee: Decimal, tax_percent: Decimal) -> Charges:
+    """The consultation fee, the platform fee, the tax on both, and the sum.
+
+    Tax is charged on the fee **and** the platform fee rather than the fee
+    alone: the platform fee is part of what is being sold, and taxing only half
+    of a bill is the kind of quiet arithmetic error nobody notices until an
+    audit. The rates arrive as arguments rather than being read here, because
+    the caller has to store the ones it used on the invoice — see ``Invoice``.
     """
     subtotal = _money(subtotal)
-    tax = _money(subtotal * Decimal(str(settings.INVOICE_TAX_PERCENT)) / Decimal("100"))
-    return subtotal, tax, _money(subtotal + tax)
+    platform_fee = _money(platform_fee)
+    taxable = subtotal + platform_fee
+    tax = _money(taxable * tax_percent / Decimal("100"))
+    return Charges(
+        subtotal=subtotal,
+        platform_fee=platform_fee,
+        tax=tax,
+        total=_money(taxable + tax),
+    )
 
 
 async def existing_for_appointment(db: AsyncSession, appointment_id: str) -> Invoice | None:
@@ -141,16 +195,27 @@ async def generate_for_appointment(
         raise bad_request("The consultation has no doctor to bill for.")
 
     record, doctor_name = doctor
-    subtotal, tax, total = totals(record.consultation_fee)
+    rates = await load_settings(db)
+    charges = totals(
+        record.consultation_fee,
+        platform_fee=rates.platform_fee,
+        tax_percent=rates.tax_percent,
+    )
 
     invoice = Invoice(
         id=new_id(),
         patient_id=appointment.patient_id,
         appointment_id=appointment.id,
         invoice_number=await next_invoice_number(db),
-        amount=subtotal,
-        tax_amount=tax,
-        total_amount=total,
+        amount=charges.subtotal,
+        tax_amount=charges.tax,
+        total_amount=charges.total,
+        # Copied, never read live afterwards: an invoice states a debt as it
+        # stood when it was issued, and reading current settings would restate
+        # every unpaid bill in the hospital whenever a rate was corrected.
+        platform_fee=charges.platform_fee,
+        tax_percent=rates.tax_percent,
+        late_fee=rates.late_fee,
         currency=settings.INVOICE_CURRENCY,
         # Issued, not draft: the patient is notified about it in the next step,
         # and notifying someone about a document they cannot see would be worse
@@ -301,6 +366,35 @@ def is_overdue(invoice: Invoice) -> bool:
     )
 
 
+def late_fee_applies(invoice: Invoice) -> Decimal:
+    """The late fee currently owed on this invoice — zero, or the whole of it.
+
+    **Once, not per day.** A daily charge on a hospital bill compounds while the
+    person owing it is too ill to deal with it, which is the exact circumstance
+    this system exists inside. So the fee is a single fixed amount that lands
+    when the due date passes and never grows.
+
+    Computed from ``due_at`` for the same reason ``is_overdue`` is: storing it
+    would need a nightly sweep, and a bill that only becomes overdue once a job
+    has run is a bill that lies between midnights.
+    """
+    return invoice.late_fee if is_overdue(invoice) else Decimal("0")
+
+
+def amount_due(invoice: Invoice) -> Decimal:
+    """What settles this invoice today.
+
+    Distinct from ``total_amount``, which is what the invoice was issued for and
+    never changes. A late fee is an additional charge, not a rewrite of a
+    document the patient has already been sent — showing them a total that grew
+    since they last looked, with no line explaining it, is how a bill loses a
+    patient's trust.
+    """
+    if invoice.status in (InvoiceStatus.PAID, InvoiceStatus.VOID, InvoiceStatus.REFUNDED):
+        return Decimal("0")
+    return _money(invoice.total_amount + late_fee_applies(invoice))
+
+
 def serialize(invoice: Invoice) -> dict[str, Any]:
     return {
         "id": invoice.id,
@@ -310,8 +404,17 @@ def serialize(invoice: Invoice) -> dict[str, Any]:
         # Decimal is rendered as a string, not a float: 0.1 + 0.2 is not 0.3 in
         # binary floating point, and a currency amount must survive the trip.
         "amount": str(invoice.amount),
+        "platformFee": str(invoice.platform_fee),
+        "taxPercent": str(invoice.tax_percent),
         "taxAmount": str(invoice.tax_amount),
         "totalAmount": str(invoice.total_amount),
+        # What this bill *would* cost if it goes past its date, and what it is
+        # actually charging right now. The first is on every invoice so a
+        # patient can see the consequence before it arrives; the second is zero
+        # until it does.
+        "lateFee": str(invoice.late_fee),
+        "lateFeeCharged": str(late_fee_applies(invoice)),
+        "amountDue": str(amount_due(invoice)),
         "currency": invoice.currency,
         "status": "OVERDUE" if is_overdue(invoice) else str(invoice.status),
         "lineItems": invoice.line_items,

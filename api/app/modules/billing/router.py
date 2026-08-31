@@ -15,6 +15,7 @@ something other than a document would be worse than not having one.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -23,18 +24,41 @@ from sqlalchemy import func, select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
 from app.api.responses import Page, ok, pagination
-from app.core.errors import forbidden, not_found
-from app.db.enums import AuditAction, InvoiceStatus, Role
-from app.db.models import Invoice
+from app.core.config import settings
+from app.core.errors import bad_request, forbidden, not_found, service_unavailable
+from app.db.base import new_id, utcnow
+from app.db.enums import AuditAction, InvoiceStatus, PaymentMethod, PaymentStatus, Role
+from app.db.models import Invoice, Payment
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
 from app.modules.billing import service
+from app.services import jazzcash
 
 router = APIRouter(prefix="/invoices", tags=["billing"])
 
 RequireInvoiceManage = Annotated[
     object, Depends(require_permission(Permission.INVOICE_MANAGE))
 ]
+
+
+class BillingSettingsUpdate(BaseModel):
+    """The rates an administrator may change. Every field optional."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    #: A percentage, not a multiplier. Bounded here as well as by a database
+    #: constraint, so the refusal names the field instead of surfacing as a
+    #: constraint violation.
+    tax_percent: Annotated[Decimal, Field(ge=0, le=100)] | None = Field(
+        default=None, alias="taxPercent"
+    )
+    platform_fee: Annotated[Decimal, Field(ge=0, le=1_000_000)] | None = Field(
+        default=None, alias="platformFee"
+    )
+    #: Charged once when a bill passes its due date, never per day.
+    late_fee: Annotated[Decimal, Field(ge=0, le=1_000_000)] | None = Field(
+        default=None, alias="lateFee"
+    )
 
 
 class VoidRequest(BaseModel):
@@ -261,3 +285,171 @@ async def issue_credit_note(
             "original": service.serialize(original),
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# The rates, and who owns them
+# ---------------------------------------------------------------------------
+
+
+def _settings_payload(row: Any) -> dict[str, Any]:
+    return {
+        "taxPercent": str(row.tax_percent),
+        "platformFee": str(row.platform_fee),
+        "lateFee": str(row.late_fee),
+        "paymentTermsDays": service.PAYMENT_TERMS_DAYS,
+        "currency": settings.INVOICE_CURRENCY,
+        "updatedAt": row.updated_at.isoformat() + "Z" if row.updated_at else None,
+    }
+
+
+@router.get("/settings/billing")
+async def read_billing_settings(
+    auth: CurrentAuth, db: DbSession, _: RequireInvoiceManage
+) -> dict[str, Any]:
+    """The rates in force. Administrators only, because they are the rates."""
+    return ok(_settings_payload(await service.load_settings(db)))
+
+
+@router.patch("/settings/billing")
+async def update_billing_settings(
+    payload: BillingSettingsUpdate,
+    request: Request,
+    auth: CurrentAuth,
+    db: DbSession,
+    _: RequireInvoiceManage,
+) -> dict[str, Any]:
+    """Change the tax rate, the platform fee, or the late fee.
+
+    **Only invoices issued after this take the new rates.** Every invoice stores
+    what it charged, so nothing already issued is touched -- which is the point:
+    a bill a patient has already been sent must not quietly change because an
+    administrator corrected a percentage this morning.
+
+    Audited with both the old and the new value. "The tax rate is 17%" answers
+    nothing six months later; "it went from 0 to 17, on this date, by this
+    person" is what a reconciliation actually needs.
+    """
+    row = await service.load_settings(db)
+    changes = payload.model_dump(exclude_none=True)
+    if not changes:
+        return ok(_settings_payload(row))
+
+    before = {
+        "taxPercent": str(row.tax_percent),
+        "platformFee": str(row.platform_fee),
+        "lateFee": str(row.late_fee),
+    }
+
+    for field, value in changes.items():
+        setattr(row, field, value)
+    row.updated_at = utcnow()
+    row.updated_by_id = auth.user_id
+    await db.flush()
+
+    await record_audit(
+        db,
+        AuditEntry(
+            action=AuditAction.CONFIG_CHANGED,
+            user_id=auth.user_id,
+            actor_role=auth.role,
+            entity_type="BillingSettings",
+            entity_id=row.id,
+            ip_address=client_ip(request),
+            request_id=getattr(request.state, "request_id", None),
+            metadata={
+                "before": before,
+                "after": {
+                    "taxPercent": str(row.tax_percent),
+                    "platformFee": str(row.platform_fee),
+                    "lateFee": str(row.late_fee),
+                },
+            },
+        ),
+    )
+
+    return ok(_settings_payload(row))
+
+
+# ---------------------------------------------------------------------------
+# Paying one
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{invoice_id}/checkout")
+async def start_checkout(
+    invoice_id: str, request: Request, auth: CurrentAuth, db: DbSession
+) -> dict[str, Any]:
+    """Begin a JazzCash payment for an invoice the caller can see.
+
+    Deliberately *not* behind ``INVOICE_MANAGE``: this is the endpoint a patient
+    uses to pay their own bill, and ``load_visible`` already restricts them to
+    their own invoices. The billing desk's ``/pay`` route stays where it is, for
+    money taken at the counter.
+
+    The amount charged is ``amountDue``, not ``totalAmount`` -- so a bill past
+    its date is paid together with its late fee in one transaction, rather than
+    settling the original and leaving a stub nobody chases.
+
+    A ``Payment`` row is written **before** the payer is sent away. A redirect
+    gateway means the next thing that happens is out of our sight; without the
+    row, somebody who pays and closes the tab is money with no record on our
+    side at all.
+    """
+    invoice = await load_visible(db, auth, invoice_id)
+
+    if invoice.status == InvoiceStatus.PAID:
+        raise bad_request("This invoice has already been paid.")
+    if invoice.status in (InvoiceStatus.VOID, InvoiceStatus.REFUNDED):
+        raise bad_request("This invoice is not payable.")
+    if not settings.jazzcash_configured:
+        # Named plainly rather than dressed up: sending a patient to a checkout
+        # that will refuse them is worse than telling them it is unavailable.
+        raise service_unavailable(
+            "Online payment is not set up yet. You can pay at the hospital billing desk."
+        )
+
+    due = service.amount_due(invoice)
+    reference = f"MS{utcnow().strftime('%y%m%d%H%M%S')}{new_id()[:6].upper()}"
+
+    payment = Payment(
+        id=new_id(),
+        invoice_id=invoice.id,
+        amount=due,
+        currency=invoice.currency,
+        method=PaymentMethod.JAZZCASH,
+        status=PaymentStatus.INITIATED,
+        gateway_ref=reference,
+    )
+    db.add(payment)
+    await db.flush()
+
+    fields = jazzcash.build_request(
+        reference=reference,
+        amount=due,
+        description=f"Invoice {invoice.invoice_number}",
+        bill_reference=invoice.invoice_number,
+    )
+
+    await record_audit(
+        db,
+        AuditEntry(
+            action=AuditAction.INVOICE_UPDATED,
+            user_id=auth.user_id,
+            actor_role=auth.role,
+            entity_type="Payment",
+            entity_id=payment.id,
+            patient_id=invoice.patient_id,
+            ip_address=client_ip(request),
+            request_id=getattr(request.state, "request_id", None),
+            metadata={
+                "operation": "checkout_started",
+                "invoiceId": invoice.id,
+                "amount": str(due),
+                "method": "JAZZCASH",
+            },
+        ),
+    )
+
+    # The signed form, and where to post it. The salt that signed it stays here.
+    return ok({"endpoint": settings.jazzcash_endpoint, "fields": fields, "reference": reference})

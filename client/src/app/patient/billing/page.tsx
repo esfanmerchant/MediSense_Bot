@@ -21,7 +21,7 @@ export default function PatientBilling() {
           eyebrow={tr("Patient portal", "Mareez ka portal")}
           title={tr("Billing", "Billing")}
           subtitle={tr(
-            "An invoice is created automatically when a consultation is completed. Payments are recorded by the hospital's billing desk.",
+            "Raised automatically when a consultation is completed.",
             "Consultation mukammal hote hi invoice khud ban jaata hai. Adaigi hospital ka billing desk darj karta hai.",
           )}
         />

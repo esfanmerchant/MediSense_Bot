@@ -76,8 +76,8 @@ export default function AdminAppointments() {
           eyebrow={tr("Admin portal", "Intezami portal")}
           title={tr("Appointments", "Appointments")}
           subtitle={tr(
-            "Every booking in the hospital. Clinical notes and consultation outcomes stay with the treating doctor.",
-            "Hospital ki har booking. Clinical notes aur consultation ke nataij ilaaj karne wale doctor ke paas hi rehte hain.",
+            "Every booking in the hospital.",
+            "Hospital ki har booking.",
           )}
         />
 

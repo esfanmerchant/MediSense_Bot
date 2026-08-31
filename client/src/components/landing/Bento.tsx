@@ -19,10 +19,10 @@ import type { CSSProperties } from "react";
 
 import { Icon } from "@/components/Icon";
 import { AssistantChatDemo } from "@/components/auth/ChatDemo";
-import { EcgLine } from "@/components/brand/EcgLine";
 import { cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 
+import { AuditPlate, BillingPlate, VitalsPlate } from "./illustrations";
 import { Grain, Parallax, Rise, SectionHead, Shell, useOneShot } from "./parts";
 
 /* ------------------------------------------------------------------ */
@@ -164,68 +164,6 @@ function OcrDemo({ caption }: { caption: string }) {
   );
 }
 
-function VitalsDemo({ caption }: { caption: string }) {
-  return (
-    <div className="relative flex h-full flex-col justify-center gap-1 px-4">
-      {/* The resting shape, so the tile is never an empty box. */}
-      <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 text-line-strong opacity-70">
-        <EcgLine color="currentColor" width={2} height={44} speed={0.001} />
-      </div>
-      {/* The bright trace, which only draws while the tile is hovered. */}
-      <div className="ms-demo relative">
-        <EcgLine loop width={2} height={44} speed={2.2} />
-      </div>
-      <span className="mono-caps relative mt-1 flex items-center gap-1.5 text-[0.55rem] text-critical">
-        <span aria-hidden className="pulse-dot ms-demo h-1.5 w-1.5 rounded-full bg-critical" />
-        {caption}
-      </span>
-    </div>
-  );
-}
-
-function BillingDemo({ rows, total }: { rows: [string, string][]; total: string }) {
-  return (
-    <div className="flex h-full flex-col justify-center gap-1.5 p-4">
-      {rows.map(([label, amount], index) => (
-        <span
-          key={label}
-          className="ms-bill-row flex items-center gap-2 rounded-md border border-line bg-card px-2 py-1"
-          style={{ transitionDelay: `${index * 110}ms` }}
-        >
-          <span className="mono-caps text-[0.5rem] text-faint">{label}</span>
-          <span className="ml-auto font-mono text-[0.6rem] font-semibold text-strong">{amount}</span>
-        </span>
-      ))}
-      <span className="mt-1 flex items-center gap-2 px-2">
-        <span className="mono-caps text-[0.5rem] text-accent">TOTAL</span>
-        <span className="ml-auto font-mono text-[0.75rem] font-bold text-strong">{total}</span>
-      </span>
-    </div>
-  );
-}
-
-function AuditDemo({ caption }: { caption: string }) {
-  return (
-    <div className="ms-demo flex h-full flex-col justify-center gap-1.5 p-4">
-      {["a41f", "9c07", "e2b8"].map((hash, index) => (
-        <span key={hash} className="flex items-center gap-2">
-          <span
-            className={cx(
-              "grid h-5 w-5 shrink-0 place-items-center rounded-md text-[11px]",
-              index === 1 ? "bg-critical-soft text-critical glow-critical" : "bg-gradient-soft text-primary",
-            )}
-          >
-            <Icon name={index === 1 ? "e911_emergency" : "link"} className="text-[12px]" />
-          </span>
-          <span className="font-mono text-[0.55rem] text-faint">sha256:{hash}…</span>
-          <span className="h-px flex-1 bg-line-strong" />
-        </span>
-      ))}
-      <span className="mono-caps mt-1 text-[0.5rem] text-faint">{caption}</span>
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* The section                                                         */
 /* ------------------------------------------------------------------ */
@@ -324,7 +262,12 @@ export function Bento() {
                 "Had se bahar reading foran doctor tak pahunchti hai.",
               )}
               demo={
-                <VitalsDemo caption={tr("Threshold breached", "Had paar ho gayi")} />
+                <VitalsPlate
+                  label={tr(
+                    "A reading crosses its limit and a doctor is told",
+                    "Reading had paar karti hai aur doctor ko khabar jaati hai",
+                  )}
+                />
               }
             />
           </Rise>
@@ -341,13 +284,12 @@ export function Bento() {
                 "Consultation khatam, invoice khud ban gaya.",
               )}
               demo={
-                <BillingDemo
-                  rows={[
-                    [tr("Consultation", "Consultation"), "2,000"],
-                    [tr("Lab", "Lab"), "1,450"],
-                    [tr("Pharmacy", "Dawai"), "860"],
-                  ]}
-                  total="4,310"
+                <BillingPlate
+                  currency="PKR"
+                  label={tr(
+                    "A finished visit raises exactly one invoice",
+                    "Mukammal visit sirf ek invoice banati hai",
+                  )}
                 />
               }
             />
@@ -365,7 +307,12 @@ export function Bento() {
                 "Ek file, waqt ki had mein, aise record mein jo badla nahi ja sakta.",
               )}
               demo={
-                <AuditDemo caption={tr("Append-only", "Sirf barhta hai")} />
+                <AuditPlate
+                  label={tr(
+                    "One link opened, on a clock, in a chain nobody can edit",
+                    "Ek kari kholi gayi, waqt ki had mein, aise silsile mein jise koi badal nahi sakta",
+                  )}
+                />
               }
             />
           </Rise>

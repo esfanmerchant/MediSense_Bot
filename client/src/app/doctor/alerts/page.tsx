@@ -22,8 +22,8 @@ export default function DoctorAlerts() {
           eyebrow={tr("Doctor portal", "Doctor ka portal")}
           title={tr("Alerts", "Alerts")}
           subtitle={tr(
-            "Raised automatically when a patient's reading crosses its configured threshold. Updates arrive as they happen — this page does not poll.",
-            "Jab kisi mareez ki reading muqarrar had paar karti hai to alert khud uthta hai. Updates usi lamhe pahunchti hain.",
+            "Raised the moment a reading crosses its limit.",
+            "Jab reading had paar kare, alert usi waqt uthta hai.",
           )}
         />
 

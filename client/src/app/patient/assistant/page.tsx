@@ -35,8 +35,8 @@ export default function PatientAssistant() {
           eyebrow={tr("Patient portal", "Mareez ka portal")}
           title={tr("Health assistant", "Health assistant")}
           subtitle={tr(
-            "Ask about your prescriptions, appointments or a report — general guidance to help you decide what to do next. It does not diagnose, and it does not replace your doctor.",
-            "Apne nuskhon, appointments ya kisi report ke baare mein poochein — aam rehnumai taake aap agla qadam tay kar sakein. Yeh tashkhees nahi karta, aur doctor ki jagah nahi leta.",
+            "Ask about your prescriptions, appointments or a report. It does not diagnose.",
+            "Apne nuskhon, appointments ya report ke baare mein poochein. Yeh tashkhees nahi karta.",
           )}
         />
 

@@ -33,8 +33,8 @@ export default function DoctorAvailabilityPage() {
           eyebrow={tr("Doctor portal", "Doctor ka portal")}
           title={tr("Availability", "Dastyabi")}
           subtitle={tr(
-            "The days and times patients can book you, and the periods you are away.",
-            "Woh din aur auqat jin mein mareez aap ki appointment book kar sakte hain, aur woh arsa jab aap dastyab nahi.",
+            "When patients can book you, and when you are away.",
+            "Kab mareez aap ko book kar sakte hain, aur kab aap dastyab nahi.",
           )}
         />
 

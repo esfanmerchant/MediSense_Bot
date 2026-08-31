@@ -22,8 +22,8 @@ export default function AdminBilling() {
           eyebrow={tr("Admin portal", "Intezami portal")}
           title={tr("Billing", "Billing")}
           subtitle={tr(
-            "Every invoice in the hospital. An issued invoice is never edited — cancel it, or issue a credit note against it, and both stay on the record.",
-            "Hospital ka har invoice. Jari shuda invoice kabhi badla nahi jaata — usay mansookh karein ya credit note banayein, dono record par rehte hain.",
+            "Every invoice in the hospital. An issued one is never edited.",
+            "Hospital ka har invoice. Jari shuda kabhi badla nahi jaata.",
           )}
         />
 

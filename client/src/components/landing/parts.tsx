@@ -178,6 +178,10 @@ const LANDING_CSS = `
   .ms-settle,
   .ms-rule,
   .ms-ocr-fill,
+  .ms-plate-draw,
+  .ms-plate-pop,
+  .ms-plate-arc,
+  .ms-plate-fade,
   .ms-bill-row,
   .pop-in,
   .stagger > * { animation-delay: 0ms !important; transition-delay: 0ms !important; }
@@ -445,6 +449,66 @@ const LANDING_CSS = `
 .group:focus-within .ms-demo *,
 .ms-playing .ms-demo,
 .ms-playing .ms-demo * { animation-play-state: running; }
+
+/* ---- the illustrated plates -------------------------------------------
+
+   These replace the tiles' fake mini-interfaces, and they animate on the same
+   terms as everything else here: once as the tile arrives, replayed on hover,
+   and never at rest. Each piece is described by what it *means* rather than by
+   how it moves, because the meaning is the reason it is on the page.
+
+   The fill mode is "both" rather than "forwards" because the drawings begin
+   hidden: it is the backwards half of the fill that stops a flash of the
+   finished picture before the delay elapses.
+
+   (No back-quotes anywhere in this string — the whole stylesheet is a template
+   literal, and one would end it.) */
+
+/* The reading arriving, left to right. A dash array long enough for any path
+   here, offset to hide it and animated back to zero. */
+@keyframes ms-plate-draw {
+  from { stroke-dashoffset: 340; }
+  to { stroke-dashoffset: 0; }
+}
+.ms-plate-draw {
+  stroke-dasharray: 340;
+  animation: ms-plate-draw 1.1s var(--ease-out-soft) both;
+}
+
+/* The thing that gets noticed: it lands after the trace reaches it, never
+   before, or the picture would say the alert preceded the reading. */
+@keyframes ms-plate-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+.ms-plate-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ms-plate-pop 0.42s var(--ease-out-soft) 0.85s both;
+}
+
+/* And then somebody is told. Last, because it is the consequence. */
+@keyframes ms-plate-arc {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.ms-plate-arc { animation: ms-plate-arc 0.5s var(--ease-out-soft) 1.15s both; }
+
+/* The retries, which do not survive. Drawn, then gone — the visual form of
+   "exactly one, however many times it tries". */
+@keyframes ms-plate-fade {
+  0% { opacity: 0; }
+  35% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.ms-plate-fade { animation: ms-plate-fade 1.9s var(--ease-out-soft) 0.5s both; }
+
+/* At rest the plates are simply finished pictures. A reader who never hovers
+   has still seen the whole thing. */
+.ms-rested:not(:hover):not(:focus-within) .ms-plate-draw { stroke-dashoffset: 0; }
+.ms-rested:not(:hover):not(:focus-within) .ms-plate-pop,
+.ms-rested:not(:hover):not(:focus-within) .ms-plate-arc { opacity: 1; transform: none; }
+.ms-rested:not(:hover):not(:focus-within) .ms-plate-fade { opacity: 0; }
 
 /* ---- the finished frames ---------------------------------------------- */
 

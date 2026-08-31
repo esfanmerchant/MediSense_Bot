@@ -401,12 +401,10 @@ function AdminActions({
             <Icon name="admin_panel_settings" className="text-[16px]" />
             {tr("Administration", "Intezam")}
           </p>
-          {invoice.status !== "PAID" && (
-            <Button disabled={busy} loading={busy} onClick={() => void run("pay")}>
-              <Icon name="payments" className="text-[20px]" />
-              {tr("Record payment", "Adaigi darj karein")}
-            </Button>
-          )}
+          {/* Accepting a payment happens in one place: the "Payments to
+              confirm" queue at the top of this page. It used to be offered
+              here as well, and the two did different things — the queue
+              credited the doctor and emailed the patient, this did neither. */}
           {invoice.status !== "PAID" && (
             <Button variant="secondary" onClick={() => setPending("void")}>
               {tr("Cancel invoice", "Invoice mansookh karein")}

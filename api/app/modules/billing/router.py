@@ -251,18 +251,36 @@ async def record_payment(
     db: DbSession,
     _: RequireInvoiceManage,
 ) -> dict[str, Any]:
-    """Record that this invoice has been paid.
+    """Record money taken at the billing desk.
 
-    There is no payment gateway in scope; this records a payment taken
-    elsewhere. Calling it twice is not two payments — the second call returns
-    the already-paid invoice rather than failing, because a retried request
-    must not look like a second transaction.
+    Not the route a patient's online payment takes — that goes through the
+    review queue, which is the one place a submitted payment is accepted. This
+    is for cash or a transfer handled in person.
+
+    **It settles the invoice the same way the queue does**, through
+    ``service.settle``. The two used to differ: the queue credited the treating
+    doctor and emailed the patient, this marked the invoice paid and did
+    neither — so whether a doctor got paid depended on which button somebody
+    pressed, which is not a difference anybody notices until a doctor asks where
+    their money is.
+
+    Calling it twice is not two payments — the second call returns the
+    already-paid invoice rather than failing, because a retried request must not
+    look like a second transaction.
     """
     invoice = await load_visible(db, auth, invoice_id)
     already_paid = invoice.status == InvoiceStatus.PAID
 
+    # Read before `mark_paid`, which zeroes it: a settled invoice owes nothing.
+    collected = service.amount_due(invoice) or invoice.total_amount
+
     service.mark_paid(invoice)
     await db.flush()
+
+    if not already_paid:
+        await service.settle(
+            db, invoice, currency=invoice.currency, amount=collected
+        )
 
     if not already_paid:
         await record_audit(

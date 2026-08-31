@@ -32,6 +32,7 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from "@/lib/api";
+import { DATE_BOUNDS } from "@/lib/dates";
 import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
@@ -115,6 +116,9 @@ export default function AdminAppointments() {
               <Input
                 id="day"
                 type="date"
+                // Without these a browser accepts a six-digit year.
+                min={DATE_BOUNDS.min}
+                max={DATE_BOUNDS.max}
                 value={day}
                 onChange={(event) => setDay(event.target.value)}
               />

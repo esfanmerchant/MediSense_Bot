@@ -25,7 +25,7 @@ import { Segmented } from "@/components/forms";
 import { Button, Field, Input, Loading, cx } from "@/components/ui";
 import { ApiError, auth, type DeviceClass } from "@/lib/api";
 import { useTr } from "@/lib/lang";
-import { homePathFor, useSession, useStoredDeviceClass } from "@/lib/session";
+import { homePathFor, useSession } from "@/lib/session";
 
 /** Which words this visit gets. Never sent anywhere — see the note above. */
 type Audience = "PATIENT" | "DOCTOR" | "ADMIN";
@@ -37,84 +37,6 @@ type Audience = "PATIENT" | "DOCTOR" | "ADMIN";
  * worth a glance at both options — a `<select>` hides the one not chosen, and
  * the shared-terminal case is exactly the one people forget to pick.
  */
-function DeviceChoice({
-  value,
-  onChange,
-}: {
-  value: DeviceClass;
-  onChange: (next: DeviceClass) => void;
-}) {
-  const tr = useTr();
-  const options: { value: DeviceClass; icon: string; title: string; hint: string }[] = [
-    {
-      value: "PERSONAL",
-      icon: "smartphone",
-      title: tr("My own device", "Mera apna device"),
-      hint: tr("Stays signed in for 15 min of inactivity", "15 minute ki khamoshi tak signed in"),
-    },
-    {
-      value: "SHARED_TERMINAL",
-      icon: "desktop_windows",
-      title: tr("A shared hospital terminal", "Hospital ka mushtarka computer"),
-      hint: tr("Signs out after 2 min of inactivity", "2 minute ki khamoshi ke baad sign out"),
-    },
-  ];
-
-  return (
-    <fieldset>
-      <legend className="mb-2.5 block text-[15px] font-semibold text-strong">
-        {tr("Where are you signing in from?", "Aap kahan se login kar rahe hain?")}
-      </legend>
-      <div className="grid gap-2">
-        {options.map((option) => {
-          const active = option.value === value;
-          return (
-            <label
-              key={option.value}
-              className={cx(
-                "relative flex cursor-pointer items-start gap-3 rounded-xl p-3 transition-[border-color,background-color,box-shadow] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary",
-                active
-                  ? "border-[1.5px] border-primary bg-primary-soft shadow-sm"
-                  : "border-[1.5px] border-line-strong bg-card hover:border-faint",
-              )}
-            >
-              <input
-                type="radio"
-                name="deviceClass"
-                value={option.value}
-                checked={active}
-                onChange={() => onChange(option.value)}
-                className="sr-only"
-              />
-              <span
-                aria-hidden
-                className={cx(
-                  "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
-                  active ? "bg-gradient-brand text-white shadow-sm" : "bg-sunken text-muted",
-                )}
-              >
-                <Icon name={option.icon} filled={active} className="text-[20px]" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-strong">{option.title}</span>
-                <span className="block text-[12.5px] leading-snug text-muted">{option.hint}</span>
-              </span>
-              {active && (
-                <span
-                  aria-hidden
-                  className="pop-scale absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-primary text-white shadow-sm ring-2 ring-card"
-                >
-                  <Icon name="check" className="text-[13px]" />
-                </span>
-              )}
-            </label>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
-}
-
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
@@ -128,11 +50,23 @@ function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
 
-  // The remembered choice comes from an external store, so it needs no effect;
+  // Everybody signs in on the personal window.
+  //
+  // There used to be a choice here between "my own device" (fifteen minutes of
+  // idle) and "a shared hospital terminal" (two). It was the wrong question to
+  // put in front of somebody who is just trying to sign in, and picking the
+  // second — or having picked it once, because the answer was *remembered in
+  // localStorage* — meant being signed out after two minutes of reading a
+  // record without touching the mouse. That is what "it keeps logging me out"
+  // was.
+  //
+  // Signing in writes PERSONAL over whatever was remembered, so anybody who
+  // once chose the terminal is back on the fifteen-minute window from their
+  // next sign-in. The class the *server* honours is fixed when the session
+  // opens, so an existing terminal session keeps its two minutes until then —
+  // one more sign-out, and no more after that.
   // an explicit pick in the form overrides it.
-  const remembered = useStoredDeviceClass();
-  const [chosen, setChosen] = useState<DeviceClass | null>(null);
-  const deviceClass = chosen ?? remembered;
+  const deviceClass: DeviceClass = "PERSONAL";
 
   const reason = params.get("reason");
   const reasons: Record<string, string> = {
@@ -365,7 +299,6 @@ function LoginForm() {
           </p>
         </div>
 
-        <DeviceChoice value={deviceClass} onChange={setChosen} />
 
         <Button type="submit" size="lg" className="btn-shine w-full" loading={submitting}>
           {submitting ? tr("Signing in…", "Login ho raha hai…") : tr("Sign in", "Login karein")}

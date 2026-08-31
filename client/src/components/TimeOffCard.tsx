@@ -23,6 +23,7 @@ import {
   SkeletonRows,
 } from "@/components/ui";
 import { ApiError, doctors } from "@/lib/api";
+import { DATETIME_BOUNDS } from "@/lib/dates";
 import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
@@ -138,6 +139,8 @@ export function TimeOffCard() {
                   <Input
                     id="time-off-from"
                     type="datetime-local"
+                    min={DATETIME_BOUNDS.min}
+                    max={DATETIME_BOUNDS.max}
                     value={from}
                     onChange={(event) => setFrom(event.target.value)}
                   />
@@ -146,6 +149,8 @@ export function TimeOffCard() {
                   <Input
                     id="time-off-to"
                     type="datetime-local"
+                    min={DATETIME_BOUNDS.min}
+                    max={DATETIME_BOUNDS.max}
                     value={to}
                     onChange={(event) => setTo(event.target.value)}
                   />

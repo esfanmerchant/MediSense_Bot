@@ -136,7 +136,12 @@ export function PayInvoice({
   }, [open, invoice.id]);
 
   const tooBig = file !== null && file.size > MAX_PROOF_MB * 1024 * 1024;
-  const ready = wallet !== null && reference.trim().length >= 3 && file !== null && !tooBig;
+  // A wallet's transaction reference is digits. Refusing letters here catches
+  // the commonest mistake — pasting the wrong field off the receipt — at the
+  // moment it is made, rather than at the review queue days later.
+  const referenceIsNumeric = /^\d+$/.test(reference.trim());
+  const ready =
+    wallet !== null && reference.trim().length >= 3 && referenceIsNumeric && file !== null && !tooBig;
 
   async function submit() {
     if (!ready || wallet === null || file === null) return;
@@ -295,15 +300,25 @@ export function PayInvoice({
               label={tr("Transaction ID", "Transaction ID")}
               htmlFor="payment-reference"
               hint={tr(
-                "From your banking app's receipt.",
-                "Apni banking app ki receipt se.",
+                "Digits only, from your banking app's receipt.",
+                "Sirf number, apni banking app ki receipt se.",
               )}
+              error={
+                reference.trim() && !referenceIsNumeric
+                  ? tr("Numbers only.", "Sirf number likhein.")
+                  : undefined
+              }
             >
               <Input
                 id="payment-reference"
-                maxLength={120}
+                inputMode="numeric"
+                maxLength={40}
+                className="tabular-nums"
                 value={reference}
-                onChange={(event) => setReference(event.target.value)}
+                // Stripped as it is typed rather than refused afterwards: a
+                // pasted reference often carries a stray space or dash, and
+                // rejecting the paste is a worse experience than cleaning it.
+                onChange={(event) => setReference(event.target.value.replace(/\D/g, ""))}
               />
             </Field>
 

@@ -30,18 +30,16 @@ from app.core.config import settings
 from app.core.errors import bad_request, not_found
 from app.core.logging import logger
 from app.db.base import utcnow
-from app.db.enums import AuditAction, NotificationType, PaymentStatus
-from app.db.models import Appointment, Doctor, Invoice, Patient, Payment, User
+from app.db.enums import AuditAction, PaymentStatus
+from app.db.models import Invoice, Patient, Payment, User
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
-from app.modules.billing import earnings, service
+from app.modules.billing import service
 
 # The one definition of who may see a patient's billing. Imported rather
 # than restated, so this cannot drift from the invoice list's rule.
 from app.modules.billing.router import scope_for as billing_scope
-from app.modules.notifications.service import notify
-from app.services import email as email_service
-from app.services import email_templates, storage
+from app.services import storage
 
 router = APIRouter(prefix="/payments", tags=["billing"])
 
@@ -170,8 +168,7 @@ async def confirm_payment(
     service.mark_paid(invoice)
     await db.flush()
 
-    await _credit_the_doctor(db, invoice)
-    await _tell_the_patient(db, invoice, payment, reason=None)
+    await service.settle(db, invoice, currency=payment.currency, amount=payment.amount)
 
     await record_audit(
         db,
@@ -198,137 +195,6 @@ async def confirm_payment(
     )
 
     return ok(service.serialize_payment(payment))
-
-
-async def _tell_the_patient(
-    db: DbSession, invoice: Invoice, payment: Payment, *, reason: str | None
-) -> None:
-    """Say whether the money was found, either way.
-
-    The refusal matters more than the confirmation: the patient believes they
-    have paid, the bill is about to reappear as due, and without a reason they
-    have no idea whether to re-upload, transfer again, or come in.
-    """
-    row = (
-        await db.execute(
-            select(Patient.user_id, User.name, User.email)
-            .join(User, User.id == Patient.user_id)
-            .where(Patient.id == invoice.patient_id)
-        )
-    ).first()
-    if row is None:
-        return
-    user_id, name, address = row
-
-    message = (
-        email_templates.payment_rejected(
-            name=name,
-            invoice_number=invoice.invoice_number,
-            currency=payment.currency,
-            amount=str(payment.amount),
-            reason=reason,
-        )
-        if reason is not None
-        else email_templates.payment_confirmed(
-            name=name,
-            invoice_number=invoice.invoice_number,
-            currency=payment.currency,
-            amount=str(payment.amount),
-        )
-    )
-
-    await notify(
-        db,
-        user_id=user_id,
-        notification_type=NotificationType.INVOICE_ISSUED,
-        title=(
-            "Payment could not be confirmed" if reason else "Payment received"
-        ),
-        body=(
-            f"Invoice {invoice.invoice_number} is still unpaid."
-            if reason
-            else f"Invoice {invoice.invoice_number} is now paid."
-        ),
-        link="/patient/billing",
-        email=False,
-    )
-    await email_service.send(
-        to=address,
-        subject=message.subject,
-        text_body=message.text,
-        html_body=message.html,
-    )
-
-
-async def _credit_the_doctor(db: DbSession, invoice: Invoice) -> None:
-    """Move the doctor's share of a settled bill into their balance.
-
-    Silent when there is no doctor to credit — a bill can exist without an
-    appointment behind it, and a payment that arrived is not something to refuse
-    over a missing link. The money stays with the hospital and the ledger simply
-    has no entry, which is visible rather than wrong.
-
-    The email is sent after the ledger entry and only if one was made: a doctor
-    told twice that the same consultation was paid would reasonably believe they
-    had been paid twice.
-    """
-    if invoice.appointment_id is None:
-        return
-
-    row = (
-        await db.execute(
-            select(Appointment.doctor_id, User.name, User.email, Patient.id)
-            .join(Doctor, Doctor.id == Appointment.doctor_id)
-            .join(User, User.id == Doctor.user_id)
-            .join(Patient, Patient.id == Appointment.patient_id)
-            .where(Appointment.id == invoice.appointment_id)
-        )
-    ).first()
-    if row is None:
-        return
-
-    doctor_id, doctor_name, doctor_email, _ = row
-
-    patient_name = (
-        await db.execute(
-            select(User.name)
-            .join(Patient, Patient.user_id == User.id)
-            .where(Patient.id == invoice.patient_id)
-        )
-    ).scalar_one_or_none() or "a patient"
-
-    entry = await earnings.credit_for_invoice(
-        db, invoice=invoice, doctor_id=doctor_id, patient_name=patient_name
-    )
-    if entry is None:
-        # Already credited. A repeated confirmation is not a second payday.
-        return
-
-    await notify(
-        db,
-        user_id=(
-            await db.execute(select(Doctor.user_id).where(Doctor.id == doctor_id))
-        ).scalar_one_or_none(),
-        notification_type=NotificationType.INVOICE_ISSUED,
-        title="Payment added to your account",
-        body=f"{entry.currency} {entry.amount} from {patient_name}'s consultation.",
-        link="/doctor/earnings",
-        email=False,
-    )
-
-    message = email_templates.doctor_earning_credited(
-        name=doctor_name,
-        patient_name=patient_name,
-        currency=entry.currency,
-        amount=str(entry.amount),
-        invoice_number=invoice.invoice_number,
-    )
-    await email_service.send(
-        to=doctor_email,
-        subject=message.subject,
-        text_body=message.text,
-        html_body=message.html,
-    )
 
 
 @router.post("/{payment_id}/reject")
@@ -362,7 +228,10 @@ async def reject_payment(
         # The invoice was never marked paid, so it is still outstanding and the
         # patient's billing page shows it as due again on its own — no state to
         # put back, only somebody to tell.
-        await _tell_the_patient(db, invoice, payment, reason=payload.reason)
+        await service.payment_refused(
+            db, invoice, currency=payment.currency, amount=payment.amount,
+            reason=payload.reason,
+        )
 
     await record_audit(
         db,

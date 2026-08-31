@@ -57,6 +57,7 @@ from app.db.models import (
     Payment,
     User,
 )
+from app.modules.billing import earnings
 from app.modules.notifications.service import notify
 from app.services import email as email_service
 from app.services import email_templates
@@ -546,3 +547,166 @@ def serialize(invoice: Invoice, *, awaiting_review: bool = False) -> dict[str, A
         "amendsInvoiceId": invoice.amends_invoice_id,
         "createdAt": invoice.created_at.isoformat() + "Z",
     }
+
+
+async def _tell_the_patient(
+    db: AsyncSession,
+    invoice: Invoice,
+    *,
+    currency: str,
+    amount: Decimal,
+    reason: str | None,
+) -> None:
+    """Say whether the money was found, either way.
+
+    The refusal matters more than the confirmation: the patient believes they
+    have paid, the bill is about to reappear as due, and without a reason they
+    have no idea whether to re-upload, transfer again, or come in.
+    """
+    row = (
+        await db.execute(
+            select(Patient.user_id, User.name, User.email)
+            .join(User, User.id == Patient.user_id)
+            .where(Patient.id == invoice.patient_id)
+        )
+    ).first()
+    if row is None:
+        return
+    user_id, name, address = row
+
+    message = (
+        email_templates.payment_rejected(
+            name=name,
+            invoice_number=invoice.invoice_number,
+            currency=currency,
+            amount=str(amount),
+            reason=reason,
+        )
+        if reason is not None
+        else email_templates.payment_confirmed(
+            name=name,
+            invoice_number=invoice.invoice_number,
+            currency=currency,
+            amount=str(amount),
+        )
+    )
+
+    await notify(
+        db,
+        user_id=user_id,
+        notification_type=NotificationType.INVOICE_ISSUED,
+        title=(
+            "Payment could not be confirmed" if reason else "Payment received"
+        ),
+        body=(
+            f"Invoice {invoice.invoice_number} is still unpaid."
+            if reason
+            else f"Invoice {invoice.invoice_number} is now paid."
+        ),
+        link="/patient/billing",
+        email=False,
+    )
+    await email_service.send(
+        to=address,
+        subject=message.subject,
+        text_body=message.text,
+        html_body=message.html,
+    )
+
+
+async def _credit_the_doctor(db: AsyncSession, invoice: Invoice) -> None:
+    """Move the doctor's share of a settled bill into their balance.
+
+    Silent when there is no doctor to credit — a bill can exist without an
+    appointment behind it, and a payment that arrived is not something to refuse
+    over a missing link. The money stays with the hospital and the ledger simply
+    has no entry, which is visible rather than wrong.
+
+    The email is sent after the ledger entry and only if one was made: a doctor
+    told twice that the same consultation was paid would reasonably believe they
+    had been paid twice.
+    """
+    if invoice.appointment_id is None:
+        return
+
+    row = (
+        await db.execute(
+            select(Appointment.doctor_id, User.name, User.email, Patient.id)
+            .join(Doctor, Doctor.id == Appointment.doctor_id)
+            .join(User, User.id == Doctor.user_id)
+            .join(Patient, Patient.id == Appointment.patient_id)
+            .where(Appointment.id == invoice.appointment_id)
+        )
+    ).first()
+    if row is None:
+        return
+
+    doctor_id, doctor_name, doctor_email, _ = row
+
+    patient_name = (
+        await db.execute(
+            select(User.name)
+            .join(Patient, Patient.user_id == User.id)
+            .where(Patient.id == invoice.patient_id)
+        )
+    ).scalar_one_or_none() or "a patient"
+
+    entry = await earnings.credit_for_invoice(
+        db, invoice=invoice, doctor_id=doctor_id, patient_name=patient_name
+    )
+    if entry is None:
+        # Already credited. A repeated confirmation is not a second payday.
+        return
+
+    await notify(
+        db,
+        user_id=(
+            await db.execute(select(Doctor.user_id).where(Doctor.id == doctor_id))
+        ).scalar_one_or_none(),
+        notification_type=NotificationType.INVOICE_ISSUED,
+        title="Payment added to your account",
+        body=f"{entry.currency} {entry.amount} from {patient_name}'s consultation.",
+        link="/doctor/earnings",
+        email=False,
+    )
+
+    message = email_templates.doctor_earning_credited(
+        name=doctor_name,
+        patient_name=patient_name,
+        currency=entry.currency,
+        amount=str(entry.amount),
+        invoice_number=invoice.invoice_number,
+    )
+    await email_service.send(
+        to=doctor_email,
+        subject=message.subject,
+        text_body=message.text,
+        html_body=message.html,
+    )
+
+
+async def settle(
+    db: AsyncSession, invoice: Invoice, *, currency: str, amount: Decimal
+) -> None:
+    """Everything that happens when a bill is actually paid.
+
+    One function because there is more than one way in — a payment confirmed
+    from the review queue, and a payment recorded at the desk — and the two used
+    to do different things. The queue credited the treating doctor and emailed
+    the patient; the desk marked the invoice paid and did neither, which meant a
+    doctor silently went unpaid depending on which button somebody pressed. That
+    is not a difference anybody would notice until a doctor asked where their
+    money was.
+
+    The caller marks the invoice paid first, because only it knows whether that
+    is even allowed.
+    """
+    await _credit_the_doctor(db, invoice)
+    await _tell_the_patient(db, invoice, currency=currency, amount=amount, reason=None)
+
+
+async def payment_refused(
+    db: AsyncSession, invoice: Invoice, *, currency: str, amount: Decimal, reason: str
+) -> None:
+    """Tell the patient their payment could not be confirmed, and why."""
+    await _tell_the_patient(db, invoice, currency=currency, amount=amount, reason=reason)

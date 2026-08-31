@@ -521,6 +521,8 @@ export const dashboard = {
   admin: () =>
     apiRequest<{
       counts: DashboardCounts;
+      /** The headline figure, split by whose money it is. See `revenue`. */
+      revenue: RevenueTotals & { currency: string; owedToDoctors: string };
       recentSecurityEvents: Array<{
         id: string;
         action: string;

@@ -178,7 +178,28 @@ export default function AdminDashboard() {
             <div className="stagger grid grid-cols-2 gap-4 lg:grid-cols-4">
               <StatTile label={tr("Patients", "Mareez")} value={data.counts.patients ?? 0} icon={<Icon name="personal_injury" />} />
               <StatTile label={tr("Doctors", "Doctors")} value={data.counts.doctors ?? 0} icon={<Icon name="stethoscope" />} />
-              <StatTile label={tr("Departments", "Departments")} value={data.counts.departments ?? 0} icon={<Icon name="local_hospital" />} />
+              {/* Revenue rather than a department count. A count of departments
+                  is a setting, not a state: it does not change day to day, asks
+                  nothing of anybody, and has a page of its own. Money handled
+                  is the figure an administrator actually opens this page for —
+                  and `hint` keeps it honest, because most of that total was
+                  never the platform's. */}
+              <StatTile
+                label={tr("Handled all time", "Ab tak kul raqam")}
+                value={`${data.revenue.currency} ${new Intl.NumberFormat("en-PK", {
+                  maximumFractionDigits: 0,
+                }).format(Number(data.revenue.handled) || 0)}`}
+                hint={tr(
+                  `${data.revenue.currency} ${new Intl.NumberFormat("en-PK", {
+                    maximumFractionDigits: 0,
+                  }).format(Number(data.revenue.earned) || 0)} earned by MediSense`,
+                  `MediSense ki kamai ${data.revenue.currency} ${new Intl.NumberFormat("en-PK", {
+                    maximumFractionDigits: 0,
+                  }).format(Number(data.revenue.earned) || 0)}`,
+                )}
+                href="/admin/revenue"
+                icon={<Icon name="monitoring" />}
+              />
               <StatTile
                 label={tr("Suspended accounts", "Muattal accounts")}
                 value={data.counts.suspendedAccounts ?? 0}

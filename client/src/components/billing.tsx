@@ -393,13 +393,15 @@ function AdminActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const run = async (action: "pay" | "void" | "credit") => {
+  // No "pay" here. Accepting a payment happens in the confirmation queue and
+  // nowhere else; this branch outlived the button that called it, and a dead
+  // path to the one endpoint we deliberately stopped offering is a trap for
+  // whoever wires up the next control.
+  const run = async (action: "void" | "credit") => {
     setBusy(true);
     setError(null);
     try {
-      if (action === "pay") {
-        onChanged(await invoicesApi.pay(invoice.id));
-      } else if (action === "void") {
+      if (action === "void") {
         onChanged(await invoicesApi.void(invoice.id, reason.trim()));
       } else {
         const result = await invoicesApi.creditNote(invoice.id, reason.trim());

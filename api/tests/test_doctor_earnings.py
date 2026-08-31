@@ -81,7 +81,7 @@ class TestTheSplit:
 class TestTheWithdrawalFloor:
     def test_the_minimum_is_a_thousand(self) -> None:
         # The number itself, because it is the requirement.
-        assert earnings.MINIMUM_WITHDRAWAL == Decimal("1000.00")
+        assert Decimal("1000.00") == earnings.MINIMUM_WITHDRAWAL
 
     def test_it_is_a_floor_and_not_a_fee(self) -> None:
         # Nothing is deducted at the boundary: a doctor with exactly the

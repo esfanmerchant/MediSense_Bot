@@ -2071,3 +2071,60 @@ export const withdrawalReview = {
       body: { reason },
     }),
 };
+
+
+// ---------------------------------------------------------------------------
+// What the platform has taken
+// ---------------------------------------------------------------------------
+
+export type RevenueGrain = "day" | "week" | "month";
+
+/** Money over a period, split by whose it actually is. */
+export interface RevenueTotals {
+  /** Everything that came through. Most of it was never the platform's. */
+  handled: string;
+  /** Consultation fees — the doctors' share. */
+  toDoctors: string;
+  platformFee: string;
+  /** Collected for the state. Held, not earned — never folded into `earned`. */
+  tax: string;
+  lateFees: string;
+  /** The platform's own income: its fee plus late charges. */
+  earned: string;
+  invoices: number;
+}
+
+export interface RevenueSummary {
+  currency: string;
+  allTime: RevenueTotals;
+  thisMonth: RevenueTotals;
+  /** Credited to doctors and not yet withdrawn. A debt, not an asset. */
+  owedToDoctors: string;
+}
+
+export interface RevenuePoint {
+  period: string;
+  handled: string;
+  platformFee: string;
+  tax: string;
+  toDoctors: string;
+  invoices: number;
+}
+
+export const revenue = {
+  summary: () => apiRequest<RevenueSummary>("/invoices/revenue/summary"),
+
+  /**
+   * One point per period, oldest first.
+   *
+   * Periods with no income are absent rather than zero-filled: a gap is honest,
+   * and an invented zero is indistinguishable from a real quiet day.
+   */
+  series: (grain: RevenueGrain) =>
+    apiRequest<{
+      grain: RevenueGrain;
+      currency: string;
+      points: RevenuePoint[];
+      bySpeciality: Array<{ label: string; amount: string; invoices: number }>;
+    }>("/invoices/revenue/series", { query: { grain } }),
+};

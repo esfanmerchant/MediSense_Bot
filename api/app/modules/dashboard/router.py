@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip
 from app.api.responses import ok
+from app.core.config import settings
 from app.core.errors import forbidden
 from app.db.base import utcnow
 from app.db.enums import (
@@ -46,6 +47,7 @@ from app.db.models import (
 from app.modules.appointments.service import ACTIVE_STATUSES
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
+from app.modules.billing import revenue
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -334,6 +336,14 @@ async def admin_dashboard(request: Request, auth: CurrentAuth, db: DbSession) ->
                         AuditLog.timestamp >= week_ago,
                     ),
                 ),
+            },
+            # The headline the administrator's page leads with, and the link
+            # into the breakdown. Kept here rather than fetched separately so
+            # the dashboard is one request, as it already was.
+            "revenue": {
+                "currency": settings.INVOICE_CURRENCY,
+                **revenue.serialize(await revenue.totals(db)),
+                "owedToDoctors": str(await revenue.owed_to_doctors(db)),
             },
             "recentSecurityEvents": [
                 {

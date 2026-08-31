@@ -40,7 +40,7 @@ from app.db.enums import (
 from app.db.models import Invoice, Patient, Payment, User
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
-from app.modules.billing import service
+from app.modules.billing import revenue, service
 from app.modules.notifications.service import notify
 from app.services import email as email_service
 from app.services import email_templates, storage
@@ -671,3 +671,56 @@ async def invoice_payments(
         .all()
     )
     return ok([service.serialize_payment(row) for row in rows])
+
+
+# ---------------------------------------------------------------------------
+# What the platform has taken
+# ---------------------------------------------------------------------------
+
+
+@router.get("/revenue/summary")
+async def revenue_summary(
+    auth: CurrentAuth, db: DbSession, _: RequireInvoiceManage
+) -> dict[str, Any]:
+    """All-time money, this month's, and what is owed out.
+
+    Three figures rather than one, because "total revenue" is the question that
+    flatters: most of what came through was never the platform's. See
+    `revenue.py` for the split and why tax is reported beside the fee rather
+    than inside it.
+    """
+    month_start = utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    all_time = await revenue.totals(db)
+    this_month = await revenue.totals(db, since=month_start)
+    owed = await revenue.owed_to_doctors(db)
+
+    return ok(
+        {
+            "currency": settings.INVOICE_CURRENCY,
+            "allTime": revenue.serialize(all_time),
+            "thisMonth": revenue.serialize(this_month),
+            # A debt, not an asset: money already credited to doctors that the
+            # platform is holding and has not yet paid out.
+            "owedToDoctors": str(owed),
+        }
+    )
+
+
+@router.get("/revenue/series")
+async def revenue_series(
+    auth: CurrentAuth,
+    db: DbSession,
+    _: RequireInvoiceManage,
+    grain: Annotated[str, Query(pattern="^(day|week|month)$")] = "month",
+) -> dict[str, Any]:
+    """One point per day, week or month, for a chart."""
+    points = await revenue.series(db, grain)  # type: ignore[arg-type]
+    return ok(
+        {
+            "grain": grain,
+            "currency": settings.INVOICE_CURRENCY,
+            "points": points,
+            "bySpeciality": await revenue.top_specialities(db),
+        }
+    )

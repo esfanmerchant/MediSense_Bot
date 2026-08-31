@@ -9,15 +9,22 @@
  * status and a doctor's balance, and the transfer itself — the thing anyone
  * reconciling against a bank statement actually looks for — had no page.
  *
- * So each row carries both ends and the split. **From** the patient, by name
- * and by the account their own screenshot says the money left. **To** the
- * account they were told to pay into — the one snapshotted on the payment, not
- * whatever the screenshot claims about its destination and not whatever the
- * settings say today. That distinction is why this column exists in this form:
- * it used to print the screenshot's claim, which is how an account belonging to
- * nobody at this hospital came to be displayed as where the money went. The
- * claim still travels with the row, and where the two disagree it appears as a
- * flag instead of quietly standing in for the answer.
+ * So each row carries both ends and the split. **From** the patient, their
+ * invoice, and the account their screenshot says the money left. **To** the
+ * service and the account that same screenshot says it went to — including a
+ * service this system has no name for, since a patient may pay from JazzCash or
+ * a bank app while `method` only knows the two options they were offered.
+ *
+ * Both ends are read off the image, and the page never pretends otherwise: an
+ * account the model could not make out prints "not read" rather than nothing,
+ * because a column that goes quiet on failure looks exactly like one where no
+ * account was involved.
+ *
+ * None of it is *asserted*. Whether the money reached the account this patient
+ * was actually given is a separate question — checked against the account
+ * snapshotted on the payment, and answered by the flag in the status column, so
+ * a wrong destination stays visible as a wrong destination instead of being
+ * silently corrected into looking right.
  *
  * And what the money is made of, taken from the invoice as it was issued rather
  * than recomputed from today's rates: the consultation fee belongs to the
@@ -55,6 +62,28 @@ function money(amount: string, currency: string) {
 }
 
 /**
+ * An account number read off a screenshot, or an honest admission that it was
+ * not.
+ *
+ * The blank matters. Every number in the two columns either side of this comes
+ * from a model reading an image, and a column that renders nothing when the
+ * reading failed looks identical to one where no account was involved. Saying
+ * "not read" costs a line and stops a reviewer inferring something that was
+ * never established.
+ */
+function Account({ value }: { value: string | null }) {
+  const tr = useTr();
+  if (!value) {
+    return (
+      <span className="mt-0.5 block text-xs italic text-faint">
+        {tr("account not read", "account nahi parha gaya")}
+      </span>
+    );
+  }
+  return <span className="mt-0.5 block select-all font-mono text-xs text-muted">{value}</span>;
+}
+
+/**
  * One transfer.
  *
  * Laid out as a statement line rather than a card of controls: nothing here is
@@ -74,27 +103,21 @@ function Row({ payment }: { payment: LedgerPayment }) {
       <td className="whitespace-nowrap text-muted">
         {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString() : "—"}
       </td>
-      {/* From: the person, and the account their screenshot says it left. */}
+      {/* From: who, which bill, and the account their screenshot says it left. */}
       <td>
         <span className="font-semibold text-strong">{payment.payerName}</span>
-        <span className="mt-0.5 block font-mono text-xs text-muted">
-          {payment.payerAccount ? `${payment.method} ${payment.payerAccount}` : payment.method}
-        </span>
         <span className="mt-0.5 block text-xs text-faint">{payment.invoiceNumber}</span>
+        <Account value={payment.payerAccount} />
       </td>
-      {/* To: the account this patient was told to pay into. Not what the
-          screenshot claims — that is a claim, and where the two disagree it
-          appears as a flag in the status column rather than being shown here as
-          though it were the answer. This column used to show the claim, which
-          is how an account belonging to nobody at the hospital came to be
-          displayed as the destination. */}
+      {/* To: the service and the account that same screenshot says it went to.
+          Both read off the image, which is why `Account` prints "not read"
+          rather than a blank when the model could not make one out — a column
+          that goes quiet on failure reads as "no account was involved".
+          Whether that destination is the account this patient was actually
+          given is a different question, answered by the flag below. */}
       <td>
-        <span className="text-strong">{payment.method}</span>
-        {payment.payeeAccount && (
-          <span className="mt-0.5 block font-mono text-xs text-muted">
-            {payment.payeeAccount}
-          </span>
-        )}
+        <span className="text-strong">{payment.receiptWallet ?? payment.method}</span>
+        <Account value={payment.receiptReceiverAccount} />
       </td>
       <td className="select-all font-mono text-sm">{payment.reference ?? "—"}</td>
       <td className="text-right font-semibold tabular-nums text-strong">
@@ -200,6 +223,19 @@ export default function TransactionsPage() {
               />
             ) : (
               <div className="overflow-x-auto">
+                {/* Said once, above the table, rather than repeated in every
+                    cell. Both account columns are transcriptions of an image,
+                    and a reviewer reading this page as a bank statement would
+                    otherwise take them for facts the system had established. */}
+                <p className="mb-3 flex items-start gap-2 text-xs text-muted">
+                  <Icon name="document_scanner" className="mt-px shrink-0 text-[15px]" />
+                  <span>
+                    {tr(
+                      "The account numbers under From and To are read from the uploaded screenshot, not verified. A transfer that reached the wrong account is flagged in Status.",
+                      "From aur To ke account numbers upload ki gayi screenshot se parhe gaye hain, tasdeeq shuda nahi. Galat account mein gaya transfer Status mein nishan-zad hota hai.",
+                    )}
+                  </span>
+                </p>
                 <table className="table-modern min-w-[56rem]">
                   <caption className="sr-only">
                     {tr("Payment transactions", "Adaigi ke transactions")}

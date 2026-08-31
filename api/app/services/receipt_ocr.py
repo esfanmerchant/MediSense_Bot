@@ -81,6 +81,14 @@ RECEIPT_SCHEMA: dict[str, Any] = {
             "nullable": True,
             "description": "The account or mobile number the money went to.",
         },
+        "wallet": {
+            "type": "string",
+            "nullable": True,
+            "description": (
+                "The service the transfer was made on, as printed on the "
+                "screenshot: EasyPaisa, NayaPay, JazzCash, a bank name."
+            ),
+        },
         "isReceipt": {
             "type": "boolean",
             "description": "False if this image is not a payment receipt at all.",
@@ -129,6 +137,11 @@ class Receipt:
     sender_account: str | None = None
     receiver: str | None = None
     receiver_account: str | None = None
+    #: The service the receipt belongs to, as printed on it. Free text on
+    #: purpose: a patient may transfer from JazzCash or a bank, neither of which
+    #: this system's own wallet list has a name for, and "the screenshot says
+    #: JazzCash" is worth more to a reviewer than a blank.
+    wallet: str | None = None
     is_receipt: bool | None = None
 
     @property
@@ -143,6 +156,7 @@ class Receipt:
                 self.sender_account,
                 self.receiver,
                 self.receiver_account,
+                self.wallet,
             )
         )
 
@@ -321,6 +335,9 @@ async def read(content: bytes, mime_type: str) -> Receipt:
         else None,
         receiver_account=(str(payload.get("receiverAccount")).strip()[:120] or None)
         if payload.get("receiverAccount")
+        else None,
+        wallet=(str(payload.get("wallet")).strip()[:60] or None)
+        if payload.get("wallet")
         else None,
         is_receipt=bool(payload.get("isReceipt")) if "isReceipt" in payload else None,
     )

@@ -1596,6 +1596,14 @@ export interface ReceiptReading {
   receiver: string | null;
   /** The account the screenshot says it went to — a claim, not the answer. */
   receiverAccount: string | null;
+  /**
+   * The service the receipt says it belongs to, as printed on it.
+   *
+   * Free text, and not the same thing as `PaymentClaim.method`: that is the
+   * option the patient picked from a list of two, and a receipt can be from
+   * JazzCash or a bank app, which the list has no name for.
+   */
+  wallet: string | null;
   /** False means read and judged not to be a receipt; null means not read. */
   looksLikeAReceipt: boolean | null;
   readAt: string;
@@ -1627,6 +1635,10 @@ export interface LedgerPayment extends PaymentClaim {
    * than quietly replacing the answer.
    */
   payerAccount: string | null;
+  /** The account the screenshot says the money went to. */
+  receiptReceiverAccount: string | null;
+  /** The service the screenshot says it belongs to, as printed on it. */
+  receiptWallet: string | null;
   /** The consultation fee — the doctor's share of this bill. */
   doctorShare: string;
   platformFee: string;

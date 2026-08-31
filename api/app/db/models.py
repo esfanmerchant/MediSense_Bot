@@ -715,6 +715,10 @@ class Payment(Base):
     receipt_receiver_account: Mapped[str | None] = mapped_column(
         "receiptReceiverAccount", String(120)
     )
+    #: The service the receipt says it belongs to, as printed. Free text: a
+    #: patient may pay from JazzCash or a bank app, and `method` — which is the
+    #: option they picked from a list of two — cannot name either.
+    receipt_wallet: Mapped[str | None] = mapped_column("receiptWallet", String(60))
     #: NULL is "not read"; False is "read, and this is not a receipt". Different
     #: answers, and the reviewer wants the second one.
     receipt_looks_valid: Mapped[bool | None] = mapped_column("receiptLooksValid", Boolean)

@@ -127,6 +127,7 @@ def _payment(**overrides: object) -> Payment:
         receipt_paid_at=datetime(2026, 9, 1, 11, 0),
         receipt_sender_account="03001234567",
         receipt_receiver_account="03443003108",
+        receipt_wallet="EasyPaisa",
         receipt_looks_valid=True,
     )
     for key, value in overrides.items():
@@ -204,6 +205,7 @@ class TestConcerns:
             "senderAccount",
             "receiver",
             "receiverAccount",
+            "wallet",
             "looksLikeAReceipt",
             "readAt",
             "concerns",
@@ -368,3 +370,20 @@ class TestRefusingASubmission:
         reading = service.receipt_reading(_payment(receipt_reference="987654321"))
         assert "REFERENCE_MISMATCH" in reading["concerns"]
         assert receipt_ocr.reference_conflict("123456789", "987654321")
+
+
+class TestTheServiceOnTheReceipt:
+    def test_the_reading_carries_what_the_screenshot_calls_itself(self) -> None:
+        """Not what the patient picked from a list of two.
+
+        `method` records the option they were offered; a receipt can be from
+        JazzCash or a bank app, which that list has no name for, and the ledger
+        printing EASYPAISA over a JazzCash screenshot would be a confident
+        answer to a question nobody asked it.
+        """
+        reading = service.receipt_reading(_payment(receipt_wallet="JazzCash"))
+        assert reading["wallet"] == "JazzCash"
+
+    def test_a_service_nobody_could_read_is_absent_rather_than_guessed(self) -> None:
+        reading = service.receipt_reading(_payment(receipt_wallet=None))
+        assert reading["wallet"] is None

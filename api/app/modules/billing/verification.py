@@ -221,16 +221,19 @@ async def payment_ledger(
                 **service.serialize_payment(payment),
                 "invoiceId": invoice.id,
                 "invoiceNumber": invoice.invoice_number,
-                # From, and to — both as accounts, not just as a name.
+                # Both ends, read off the screenshot.
                 #
-                # "To" is the account the patient was *told* to pay into, taken
-                # from the payment rather than from today's settings. What the
-                # screenshot claims about the destination is a separate thing
-                # and travels inside `receipt`, where a mismatch between the two
-                # shows up as a flag rather than quietly replacing the answer.
+                # This is a record of what the patient submitted: which account
+                # they say they sent from, and which account and service they
+                # say they sent to. Neither is asserted to be true — that is
+                # what the flags beside them are for, and `payeeAccount` is
+                # still carried so the destination can be checked against the
+                # account this patient was actually given.
                 "payerName": patient_name,
                 "payerAccount": payment.receipt_sender_account,
                 "payeeAccount": payment.payee_account,
+                "receiptReceiverAccount": payment.receipt_receiver_account,
+                "receiptWallet": payment.receipt_wallet,
                 # What the money is made of, as the invoice recorded it.
                 "doctorShare": str(invoice.amount),
                 "platformFee": str(invoice.platform_fee),

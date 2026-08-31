@@ -571,6 +571,7 @@ def receipt_reading(
         "senderAccount": payment.receipt_sender_account,
         "receiver": payment.receipt_receiver,
         "receiverAccount": payment.receipt_receiver_account,
+        "wallet": payment.receipt_wallet,
         "looksLikeAReceipt": payment.receipt_looks_valid,
         "readAt": payment.receipt_read_at.isoformat() + "Z",
         "concerns": concerns,

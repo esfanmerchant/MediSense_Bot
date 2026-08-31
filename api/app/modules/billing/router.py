@@ -648,6 +648,7 @@ async def submit_payment_proof(
         payment.receipt_sender_account = receipt.sender_account
         payment.receipt_receiver = receipt.receiver
         payment.receipt_receiver_account = receipt.receiver_account
+        payment.receipt_wallet = receipt.wallet
         payment.receipt_looks_valid = receipt.is_receipt
         payment.receipt_read_at = datetime.now(UTC).replace(tzinfo=None)
 

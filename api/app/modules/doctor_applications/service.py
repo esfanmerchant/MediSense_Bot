@@ -719,3 +719,51 @@ def serialize(
             "status": str(applicant.status),
         }
     return body
+
+
+async def forward_enquiry(
+    db: AsyncSession,
+    application: DoctorApplication,
+    applicant: User,
+    message: str,
+) -> None:
+    """Put an applicant's message in front of every administrator.
+
+    In-app and by email, like the submission notice: somebody waiting on a
+    decision is waiting on a *person*, and a message nobody is told about is a
+    message nobody answers.
+    """
+    admins = (
+        (
+            await db.execute(
+                select(User).where(User.role == Role.ADMIN, User.status == UserStatus.ACTIVE)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    mail = email_templates.applicant_enquiry(
+        name=applicant.name,
+        registration_number=application.registration_number,
+        email=applicant.email,
+        message=message,
+    )
+
+    for admin in admins:
+        await notifications.notify(
+            db,
+            user_id=admin.id,
+            notification_type=NotificationType.DOCTOR_APPLICATION,
+            title="A doctor applicant has written in",
+            body=f"{applicant.name} sent a message about their application.",
+            link="/admin/doctor-requests",
+            # Sent directly below; queuing one too would deliver it twice.
+            email=False,
+        )
+        await email_service.send(
+            to=admin.email,
+            subject=mail.subject,
+            text_body=mail.text,
+            html_body=mail.html,
+        )

@@ -82,8 +82,33 @@ export function formatDay(isoDate: string): string {
 export function isUpcoming(appointment: Appointment): boolean {
   return (
     new Date(appointment.startTime).getTime() > Date.now() &&
-    !["CANCELLED", "COMPLETED", "NO_SHOW"].includes(appointment.status)
+    !["REQUESTED", "CANCELLED", "COMPLETED", "NO_SHOW"].includes(appointment.status)
   );
+}
+
+/**
+ * Asked for, not yet accepted.
+ *
+ * A request used to sit under "Upcoming" beside confirmed visits, which reads
+ * as a promise the clinic has not made: the patient would travel for something
+ * the doctor had never agreed to. It is real and it must stay visible, so it
+ * gets its own group rather than being hidden — but "upcoming" it is not.
+ */
+export function isAwaitingConfirmation(appointment: Appointment): boolean {
+  return appointment.status === "REQUESTED";
+}
+
+/**
+ * Whether the patient can still move or drop this appointment themselves.
+ *
+ * Check-in hands the visit to the clinic: the patient is in the waiting room
+ * and the doctor's list is built around them, so rescheduling from a phone at
+ * that point is not a thing the system should offer. The API agrees — it allows
+ * a reschedule only from REQUESTED or CONFIRMED — and this keeps the buttons
+ * from promising what the server would refuse.
+ */
+export function patientCanChange(appointment: Appointment): boolean {
+  return appointment.status === "REQUESTED" || appointment.status === "CONFIRMED";
 }
 
 /**

@@ -16,7 +16,7 @@ import { Icon } from "@/components/Icon";
 import { Button, EmptyState, cx } from "@/components/ui";
 import { notifications, type Notification, type Role } from "@/lib/api";
 import { useTr } from "@/lib/lang";
-import { useAsync } from "@/lib/useAsync";
+import { useAsync, QUEUE_REFRESH_MS } from "@/lib/useAsync";
 
 /** Every role that receives appointment notifications has its own list page. */
 const APPOINTMENTS_PATH: Partial<Record<Role, string>> = {
@@ -55,7 +55,9 @@ export function NotificationBell({ role }: { role: Role }) {
   // this out of the cascading-render pattern React 19 warns about. A 401 is
   // swallowed there and handled globally by SessionProvider — the bell is
   // peripheral and must never take a page down with it.
-  const { data, error, reload } = useAsync(() => notifications.list({ limit: 15 }), []);
+  const { data, error, reload } = useAsync(() => notifications.list({ limit: 15 }), [], {
+    refreshMs: QUEUE_REFRESH_MS,
+  });
   const items: Notification[] = data?.data ?? [];
   const unread = data?.meta.unread ?? 0;
 

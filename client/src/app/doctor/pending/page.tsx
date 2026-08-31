@@ -14,10 +14,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/Icon";
 import { EcgLine } from "@/components/brand/EcgLine";
+import { ContactAdminDialog } from "@/components/doctorApplication/ContactAdminDialog";
 import { Button, ErrorState, Loading, Unauthorized, cx } from "@/components/ui";
 import { doctorApplication } from "@/lib/api";
 import { useTr } from "@/lib/lang";
@@ -30,39 +31,6 @@ import {
   StatusChip,
   formatDateTime,
 } from "@/components/doctorApplication/shared";
-
-/**
- * Who to write to when the wait needs a human.
- *
- * The application contract carries no contact address, so this is
- * configuration rather than data: set `NEXT_PUBLIC_SUPPORT_EMAIL` in
- * `client/.env.local` — Next reads that file, not the API's `.env` — to the
- * hospital's own inbox.
- */
-const SUPPORT_EMAIL =
-  process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "medisensebot@gmail.com";
-
-/**
- * A mail that already says who is writing and about which application.
- *
- * The page asks the applicant to quote their registration number, so the link
- * quotes it for them — a person chasing a stalled application should not have
- * to go and look it up, and an administrator should not have to ask.
- */
-function contactHref(name: string, registrationNumber: string | null | undefined): string {
-  const subject = registrationNumber
-    ? `Doctor application — ${name} (${registrationNumber})`
-    : `Doctor application — ${name}`;
-  const body = [
-    `Name: ${name}`,
-    registrationNumber ? `Registration number: ${registrationNumber}` : null,
-    "",
-    "",
-  ]
-    .filter((line) => line !== null)
-    .join("\n");
-  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
 
 export default function DoctorPendingPage() {
   const tr = useTr();
@@ -97,6 +65,7 @@ export default function DoctorPendingPage() {
 }
 
 function Status({ name }: { name: string }) {
+  const [writing, setWriting] = useState(false);
   const tr = useTr();
   const router = useRouter();
   const { signOut } = useSession();
@@ -138,6 +107,13 @@ function Status({ name }: { name: string }) {
 
   return (
     <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-8">
+      {/* Mounted once here rather than beside each button: both the rejected
+          and the under-review branch open the same dialog. */}
+      <ContactAdminDialog
+        open={writing}
+        onClose={() => setWriting(false)}
+        registrationNumber={data.registrationNumber ?? null}
+      />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="mono-caps text-[0.68rem] text-accent">
@@ -187,13 +163,10 @@ function Status({ name }: { name: string }) {
               <Icon name="restart_alt" className="text-[20px]" />
               {tr("Apply again", "Dobara apply karein")}
             </Link>
-            <a
-              href={contactHref(displayName, data.registrationNumber)}
-              className="btn-outline inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            >
+            <Button variant="secondary" onClick={() => setWriting(true)}>
               <Icon name="mail" className="text-[20px]" />
               {tr("Contact an administrator", "Admin se raabta karein")}
-            </a>
+            </Button>
           </div>
         </section>
       ) : (
@@ -305,13 +278,10 @@ function Status({ name }: { name: string }) {
             {data.registrationNumber && (
               <p className="mt-3 font-mono text-sm text-strong">{data.registrationNumber}</p>
             )}
-            <a
-              href={contactHref(displayName, data.registrationNumber)}
-              className="btn-outline mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            >
+            <Button variant="secondary" className="mt-4" onClick={() => setWriting(true)}>
               <Icon name="mail" className="text-[20px]" />
               {tr("Contact admin", "Admin se raabta")}
-            </a>
+            </Button>
           </div>
         </div>
       )}

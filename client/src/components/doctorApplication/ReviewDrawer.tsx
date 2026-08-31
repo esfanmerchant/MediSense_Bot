@@ -630,10 +630,15 @@ export function ReviewDrawer({
         open={confirming === "reject"}
         onClose={() => setConfirming(null)}
         icon="cancel"
-        title={tr("Reject this application?", "Yeh darkhwast na-manzoor karein?")}
+        /* Not "Reject this application?" — asking again after the reviewer has
+           already pressed Reject is a step that decides nothing. What this panel
+           is for is the reason, which is required, is emailed to the applicant,
+           and is the only part a person still has to supply. So it is titled as
+           the task it is, and the button below sends it. */
+        title={tr("Reason for rejecting", "Na-manzoori ki wajah")}
         description={tr(
-          "The reason is shown to the applicant, and they can apply again.",
-          "Wajah applicant ko dikhayi jati hai, aur woh dobara apply kar sakte hain.",
+          "The applicant is emailed this, and they can apply again.",
+          "Yeh applicant ko email ki jati hai, aur woh dobara apply kar sakte hain.",
         )}
         footer={
           <>
@@ -641,8 +646,8 @@ export function ReviewDrawer({
               {tr("Cancel", "Rehne dein")}
             </Button>
             <Button variant="danger" loading={working} onClick={() => void decide("reject")}>
-              <Icon name="cancel" className="text-[20px]" />
-              {tr("Reject", "Na-manzoor karein")}
+              <Icon name="send" className="text-[20px]" />
+              {tr("Send rejection", "Na-manzoori bhejein")}
             </Button>
           </>
         }

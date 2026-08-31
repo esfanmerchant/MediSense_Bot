@@ -36,6 +36,7 @@ import {
   type DoctorApplication,
 } from "@/lib/api";
 import { useTr } from "@/lib/lang";
+import { QUEUE_REFRESH_MS } from "@/lib/useAsync";
 
 import { ReviewDrawer } from "@/components/doctorApplication/ReviewDrawer";
 import {
@@ -117,6 +118,48 @@ export default function DoctorRequestsPage() {
     };
   }, [tab, nonce]);
 
+  /**
+   * The queue keeps itself current, which is why there is no Refresh button.
+   *
+   * This deliberately does not bump the nonce. The nonce is part of the request
+   * key, and the key is what makes "loading" derivable — bumping it every half
+   * minute would blink the whole table back to a skeleton under a reviewer who
+   * is reading a row. Instead the rows are replaced in place, and only when the
+   * answer on hand still belongs to the tab that was asked about.
+   */
+  useEffect(() => {
+    const ask = async () => {
+      if (document.hidden) return;
+      try {
+        const result = await doctorRequests.list({ status: TAB_STATUS[tab], limit: 100 });
+        setAnswer((current) =>
+          current === null || !current.key.startsWith(`${tab}:`)
+            ? current
+            : {
+                ...current,
+                rows: result.data,
+                pending: result.meta.pending ?? null,
+                error: null,
+              },
+        );
+      } catch {
+        // Silent on purpose: what is already on screen is still the best answer
+        // we have, and a failed background poll is not news.
+      }
+    };
+
+    const timer = window.setInterval(() => void ask(), QUEUE_REFRESH_MS);
+    const onVisibilityChange = () => {
+      if (!document.hidden) void ask();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [tab]);
+
   const onDecided = useCallback((result: DoctorApplication) => {
     setAnswer((current) =>
       current === null
@@ -183,12 +226,6 @@ export default function DoctorRequestsPage() {
             "Check each applicant's registration and documents before their account opens.",
             "Account kholne se pehle har applicant ki registration aur documents check karein.",
           )}
-          actions={
-            <Button variant="secondary" onClick={() => setNonce((value) => value + 1)}>
-              <Icon name="refresh" className="text-[20px]" />
-              {tr("Refresh", "Taza karein")}
-            </Button>
-          }
         />
 
         <Segmented

@@ -35,7 +35,7 @@ import {
   type AppointmentStatus,
 } from "@/lib/api";
 import { useTr } from "@/lib/lang";
-import { useAsync } from "@/lib/useAsync";
+import { useAsync, PAGE_REFRESH_MS } from "@/lib/useAsync";
 
 /** Mirrors the server's ALLOWED_TRANSITIONS for the actions a doctor may take. */
 const NEXT_STEP: Partial<Record<AppointmentStatus, { to: AppointmentStatus; label: string }>> = {
@@ -150,7 +150,9 @@ export default function DoctorAppointments() {
   const reduce = useReducedMotion();
   const [refresh, setRefresh] = useState(0);
   const reloadAll = useCallback(() => setRefresh((n) => n + 1), []);
-  const list = useAsync(() => appointments.list({ limit: 100 }), [refresh]);
+  const list = useAsync(() => appointments.list({ limit: 100 }), [refresh], {
+    refreshMs: PAGE_REFRESH_MS,
+  });
 
   // The consultation most recently completed here, surfaced as a success card
   // until dismissed. The list itself is reloaded from the server as before.
@@ -170,13 +172,16 @@ export default function DoctorAppointments() {
   const awaiting = useMemo(() => rows.filter((a) => a.status === "REQUESTED"), [rows]);
 
   const { upcoming, finished } = useMemo(() => {
-    const onToday = new Set(today.map((a) => a.id));
-    const rest = rows.filter((a) => !onToday.has(a.id));
+    // Requests have their own panel above, and now that isUpcoming excludes
+    // them they would otherwise fall through to "finished" — a request the
+    // doctor has not answered yet, filed under things that are over.
+    const shownElsewhere = new Set([...today, ...awaiting].map((a) => a.id));
+    const rest = rows.filter((a) => !shownElsewhere.has(a.id));
     return {
       upcoming: rest.filter(isUpcoming),
       finished: rest.filter((a) => !isUpcoming(a)),
     };
-  }, [rows, today]);
+  }, [rows, today, awaiting]);
 
   return (
     <AppShell role="DOCTOR">

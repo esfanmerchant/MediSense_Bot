@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
@@ -231,3 +232,33 @@ async def download_document(
             "mimeType": document.mime_type,
         }
     )
+
+
+class EnquiryRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    #: Long enough to say something, short enough not to be a document. An
+    #: applicant with more than this to say needs a conversation, not a form.
+    message: Annotated[str, Field(min_length=10, max_length=2000)]
+
+
+@router.post("/contact", status_code=202)
+async def contact_administrators(
+    payload: EnquiryRequest, auth: CurrentAuth, db: DbSession, _: RequireApplicant
+) -> dict[str, Any]:
+    """Send a message to the administrators reviewing this application.
+
+    Replaces a ``mailto:`` link, and the reason is that a link is not a feature:
+    it depends on the person having a mail client configured, it does nothing at
+    all on most phones and on webmail, and whatever they eventually send arrives
+    without the registration number the reviewer needs to find them by.
+
+    The name, address and registration number are read from the applicant's own
+    record rather than taken from the request. A form that lets the sender state
+    who they are is a form that can be used to write to an administrator as
+    somebody else.
+    """
+    user = await _self(db, auth)
+    application = await service.load_or_create(db, user)
+    await service.forward_enquiry(db, application, user, payload.message)
+    return ok({"sent": True})

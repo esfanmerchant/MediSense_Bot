@@ -195,10 +195,18 @@ class TestSealedSecrets:
             unseal_secret("$".join((version, nonce, flipped, tag)))
 
     def test_a_tampered_tag_is_refused(self) -> None:
+        # The guard matters, and its absence is why this test used to fail
+        # roughly once in sixty-four runs: substituting a fixed "A" for the
+        # first character changes nothing when the character is already an "A",
+        # so the tag was passed back untouched and the seal opened correctly.
+        # A flaky security test is worse than none — it teaches people to re-run
+        # until it passes.
         sealed = seal_secret("JBSWY3DPEHPK3PXP")
         version, nonce, ciphertext, tag = sealed.split("$")
+        flipped = ("A" if tag[0] != "A" else "B") + tag[1:]
+        assert flipped != tag
         with pytest.raises(SealError):
-            unseal_secret("$".join((version, nonce, ciphertext, "A" + tag[1:])))
+            unseal_secret("$".join((version, nonce, ciphertext, flipped)))
 
     @pytest.mark.parametrize("value", ["", "plaintext", "v1$only$three", "v2$a$b$c"])
     def test_a_value_that_is_not_sealed_is_refused(self, value: str) -> None:

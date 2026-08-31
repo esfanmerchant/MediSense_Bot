@@ -544,3 +544,42 @@ def invoice_overdue(
             + _button("Pay now", url),
         ),
     )
+
+
+def applicant_enquiry(
+    *, name: str, registration_number: str | None, email: str, message: str
+) -> Email:
+    """To administrators, when somebody waiting on a decision writes in.
+
+    The registration number goes in the subject, because that is what a reviewer
+    searches their inbox for — and it is the one thing an applicant reliably
+    leaves out when composing their own mail.
+
+    The applicant's address is stated in the body rather than set as the sender.
+    Forging a From: header is how mail gets rejected by every modern provider,
+    and an administrator replying needs the address somewhere they can copy it.
+    """
+    heading = "A doctor applicant has written in"
+    subject = (
+        f"Doctor application — {name} ({registration_number})"
+        if registration_number
+        else f"Doctor application — {name}"
+    )
+    details = [f"From: {name} <{email}>"]
+    if registration_number:
+        details.append(f"Registration number: {registration_number}")
+
+    return Email(
+        subject=subject,
+        text="\n\n".join([heading, "\n".join(details), message, _SIGNOFF]),
+        html=_shell(
+            heading,
+            _paragraph("<br>".join(_escape(line) for line in details))
+            # Quoted rather than run into a paragraph, so a reviewer sees exactly
+            # what was written and nothing this system added around it.
+            + '<blockquote style="margin:0 0 14px;padding:12px 16px;background:#f8fafc;'
+            f'border-left:3px solid {GRADIENT_FALLBACK};border-radius:6px;font-size:15px;'
+            f'line-height:1.6;color:{_INK};white-space:pre-wrap">{_escape(message)}</blockquote>'
+            + _button("Open the queue", portal_url("/admin/doctor-requests")),
+        ),
+    )

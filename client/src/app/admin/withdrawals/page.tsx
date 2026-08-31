@@ -32,7 +32,7 @@ import {
 } from "@/components/ui";
 import { ApiError, withdrawalReview, type PendingWithdrawal } from "@/lib/api";
 import { useTr } from "@/lib/lang";
-import { useAsync } from "@/lib/useAsync";
+import { useAsync, QUEUE_REFRESH_MS } from "@/lib/useAsync";
 
 /** A value the administrator will copy into their banking app. */
 function Detail({ label, value }: { label: string; value: string }) {
@@ -216,7 +216,9 @@ export default function AdminWithdrawals() {
   const tr = useTr();
   const [refresh, setRefresh] = useState(0);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
-  const queue = useAsync(() => withdrawalReview.pending({ limit: 50 }), [refresh]);
+  const queue = useAsync(() => withdrawalReview.pending({ limit: 50 }), [refresh], {
+    refreshMs: QUEUE_REFRESH_MS,
+  });
 
   const rows = queue.data?.data ?? [];
 

@@ -34,7 +34,7 @@ import {
 } from "@/lib/api";
 import { DATE_BOUNDS } from "@/lib/dates";
 import { useTr } from "@/lib/lang";
-import { useAsync } from "@/lib/useAsync";
+import { useAsync, PAGE_REFRESH_MS } from "@/lib/useAsync";
 
 const FILTERS: Array<{
   label: string;
@@ -68,6 +68,7 @@ export default function AdminAppointments() {
         limit: 100,
       }),
     [active, day, refresh],
+    { refreshMs: PAGE_REFRESH_MS },
   );
 
   return (

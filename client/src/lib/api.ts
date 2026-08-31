@@ -1969,6 +1969,20 @@ export interface DoctorApplication extends StoredApplicationDraft {
 }
 
 export const doctorApplication = {
+  /**
+   * Writes to the administrators reviewing this application.
+   *
+   * Replaces a `mailto:` link, which depends on a configured mail client, does
+   * nothing on most phones and on webmail, and arrives without the registration
+   * number a reviewer needs. The sender's identity is read server-side from
+   * their own record, never sent from here.
+   */
+  contact: (message: string) =>
+    apiRequest<{ sent: boolean }>("/doctor/application/contact", {
+      method: "POST",
+      body: { message },
+    }),
+
   /** The signed-in doctor's own application, created on first read. */
   mine: () => apiRequest<DoctorApplication>("/doctor/application"),
 

@@ -21,7 +21,9 @@ import {
   AppointmentList,
   AppointmentRow,
   formatDay,
+  isAwaitingConfirmation,
   isUpcoming,
+  patientCanChange,
 } from "@/components/appointments";
 import {
   Avatar,
@@ -44,7 +46,7 @@ import {
   type AvailabilityDay,
 } from "@/lib/api";
 import { useTr } from "@/lib/lang";
-import { useAsync } from "@/lib/useAsync";
+import { useAsync, PAGE_REFRESH_MS } from "@/lib/useAsync";
 
 type Mode = { kind: "idle" } | { kind: "book" } | { kind: "move"; appointment: Appointment };
 
@@ -58,15 +60,19 @@ export default function PatientAppointments() {
   const [refresh, setRefresh] = useState(0);
   const reloadAll = useCallback(() => setRefresh((n) => n + 1), []);
 
-  const list = useAsync(() => appointments.list({ limit: 50 }), [refresh]);
+  const list = useAsync(() => appointments.list({ limit: 50 }), [refresh], {
+    refreshMs: PAGE_REFRESH_MS,
+  });
 
-  const upcoming = useMemo(
-    () => (list.data?.data ?? []).filter(isUpcoming),
-    [list.data],
-  );
+  const rows = useMemo(() => list.data?.data ?? [], [list.data]);
+  const awaiting = useMemo(() => rows.filter(isAwaitingConfirmation), [rows]);
+  const upcoming = useMemo(() => rows.filter(isUpcoming), [rows]);
+  // Three groups now, so "past" has to say what it is rather than being
+  // everything left over — otherwise a request the doctor has not answered yet
+  // would land under visits that are already behind the patient.
   const past = useMemo(
-    () => (list.data?.data ?? []).filter((a) => !isUpcoming(a)),
-    [list.data],
+    () => rows.filter((a) => !isUpcoming(a) && !isAwaitingConfirmation(a)),
+    [rows],
   );
 
   // The success card takes a bow and leaves on its own.
@@ -172,10 +178,41 @@ export default function PatientAppointments() {
 
         {list.data && mode.kind === "idle" && (
           <div className="stagger mt-6 space-y-6">
+            {awaiting.length > 0 && (
+              <Card
+                icon="hourglass_top"
+                title={tr("Awaiting confirmation", "Tasdeeq ka intezar")}
+                description={tr(
+                  "Asked for. The doctor's clinic still has to accept these.",
+                  "Darkhwast di ja chuki hai. Doctor ke clinic ne abhi qubool karni hai.",
+                )}
+              >
+                <AppointmentList
+                  appointments={awaiting}
+                  emptyTitle=""
+                  emptyDescription=""
+                >
+                  {(appointment) => (
+                    <UpcomingRow
+                      appointment={appointment}
+                      onMove={() => {
+                        setCelebration(null);
+                        setMode({ kind: "move", appointment });
+                      }}
+                      onChanged={reloadAll}
+                    />
+                  )}
+                </AppointmentList>
+              </Card>
+            )}
+
             <Card
               icon="event_upcoming"
               title={tr("Upcoming", "Aane wali")}
-              description={tr("Visits you still need to attend.", "Jin visits par aap ne abhi jana hai.")}
+              description={tr(
+                "Confirmed by the clinic. These are the ones to turn up for.",
+                "Clinic ne tasdeeq kar di hai. Inhi par jana hai.",
+              )}
             >
               <AppointmentList
                 appointments={upcoming}
@@ -295,7 +332,7 @@ function UpcomingRow({
                 {tr("Keep it", "Rehne dein")}
               </Button>
             </>
-          ) : (
+          ) : patientCanChange(appointment) ? (
             <>
               <Button variant="secondary" onClick={onMove}>
                 <Icon name="edit_calendar" className="text-[20px]" />
@@ -305,6 +342,14 @@ function UpcomingRow({
                 {tr("Cancel", "Cancel karein")}
               </Button>
             </>
+          ) : (
+            // Checked in and onward, the visit belongs to the clinic. Offering
+            // buttons the server would refuse only teaches people that the
+            // portal's buttons are decorative.
+            <span className="flex items-center gap-1.5 text-sm font-medium text-muted">
+              <Icon name="how_to_reg" className="text-[18px] text-primary" />
+              {tr("With the clinic now.", "Ab clinic ke paas hai.")}
+            </span>
           )
         }
       />

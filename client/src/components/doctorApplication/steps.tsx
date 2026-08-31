@@ -30,6 +30,7 @@ import type {
   QualificationEntry,
   StoredApplicationDraft,
 } from "@/lib/api";
+import { formatCnic, formatPkPhone } from "@/lib/pkFormat";
 import { useTr } from "@/lib/lang";
 
 import {
@@ -481,26 +482,28 @@ export function StepIdentity({ form, patch }: StepProps) {
             id="application-phone"
             type="tel"
             autoComplete="tel"
-            maxLength={32}
+            maxLength={20}
             placeholder="+92 300 1234567"
             value={form.phone}
-            onChange={(event) => patch({ phone: event.target.value })}
+            // Punctuated as it is typed, so nobody has to know which of the
+            // three ways of writing a Pakistani number this form wanted.
+            onChange={(event) => patch({ phone: formatPkPhone(event.target.value) })}
           />
         </Field>
 
         <Field
           label={tr("National ID (CNIC)", "Shanakhti card (CNIC)")}
           htmlFor="application-national-id"
-          hint={tr("13 digits, with or without dashes.", "13 ka adad, dashes ke saath ya baghair.")}
+          hint={tr("13 digits. Dashes are added for you.", "13 adad. Dashes khud lag jaate hain.")}
         >
           <Input
             id="application-national-id"
             inputMode="numeric"
-            maxLength={20}
+            maxLength={15}
             placeholder="42101-1234567-1"
             className="font-mono"
             value={form.nationalId}
-            onChange={(event) => patch({ nationalId: event.target.value })}
+            onChange={(event) => patch({ nationalId: formatCnic(event.target.value) })}
           />
         </Field>
 

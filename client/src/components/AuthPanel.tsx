@@ -101,7 +101,17 @@ export function AuthPanel({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <main id="main" className="auth-shell grid min-h-screen lg:grid-cols-[46fr_54fr]">
+    // `overflow-x-clip` rather than `hidden`: the brand panel's decorative
+    // artwork is a path whose geometry runs ten pixels past the phone's edge,
+    // and while the panel already clips its own painting, the width still
+    // reached the document and gave every auth page a sideways scroll. `clip`
+    // stops that without creating a scroll container, which `hidden` would —
+    // and a scroll container here would break the sticky header on the form
+    // side.
+    <main
+      id="main"
+      className="auth-shell grid min-h-screen overflow-x-clip lg:grid-cols-[46fr_54fr]"
+    >
       <AuthFieldStyles />
 
       {/* --- brand panel ---------------------------------------------------- */}

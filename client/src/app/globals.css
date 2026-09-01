@@ -388,6 +388,31 @@ h3 {
   -webkit-font-feature-settings: "liga";
   -webkit-font-smoothing: antialiased;
   user-select: none;
+
+  /* An icon occupies exactly one em, whatever happens to the font.
+     ---------------------------------------------------------------
+     Without this, an icon is however wide the text inside it is — and the text
+     inside it is a *word*. `<Icon name="arrow_forward" />` renders the literal
+     characters "arrow_forward" until the Material Symbols font arrives, and
+     `display=block` only holds that back for about three seconds before the
+     browser gives up and paints the fallback. On a slow connection, or when
+     Google is unreachable, or on the third second of a cold load, every button
+     in the application stretches around a word and every border goes with it:
+     measured at 390px wide, one 18px icon was 115 pixels across and the page
+     scrolled sideways.
+
+     A one-em box with the overflow clipped makes that impossible rather than
+     unlikely. Material Symbols glyphs are drawn on a one-em square, so the real
+     icon fits exactly and nothing about the loaded state changes; only the
+     failure changes, from a broken layout to a blank square that fills in a
+     moment later. */
+  width: 1em;
+  height: 1em;
+  overflow: hidden;
+  /* The glyph is centred in its em box; without this the clipped fallback text
+     would sit on the baseline and push the line height around. */
+  text-align: center;
+  vertical-align: middle;
 }
 .msym-fill {
   font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;

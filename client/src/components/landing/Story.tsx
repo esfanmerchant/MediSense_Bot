@@ -34,7 +34,7 @@ import { motion, useMotionValueEvent, useScroll, useSpring, useTransform } from 
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "@/components/Icon";
-import { StoryStage } from "@/components/landing/StoryStage";
+import { ACT_WINDOWS, StoryStage } from "@/components/landing/StoryStage";
 import { useTr } from "@/lib/lang";
 
 interface Act {
@@ -117,14 +117,6 @@ const ACTS: Act[] = [
   },
 ];
 
-/** Where each act fades in, holds, and leaves. */
-const WINDOWS: [number, number, number, number][] = [
-  [0.0, 0.02, 0.14, 0.185],
-  [0.2, 0.235, 0.33, 0.375],
-  [0.39, 0.425, 0.55, 0.595],
-  [0.61, 0.645, 0.75, 0.795],
-  [0.81, 0.845, 1.0, 1.0],
-];
 
 /**
  * The ground, act by act. One blue, lit four ways.
@@ -363,7 +355,7 @@ export function Story({
         <div className="relative mx-auto grid h-full max-w-7xl content-center gap-6 px-6 lg:grid-cols-2 lg:items-center lg:gap-12">
           <div className="relative order-2 h-[19rem] lg:order-1 lg:h-[26rem]">
             {ACTS.map((item, i) => (
-              <Frame key={item.numeral} act={item} range={WINDOWS[i]} progress={progress}>
+              <Frame key={item.numeral} act={item} range={ACT_WINDOWS[i]} progress={progress}>
               {i === ACTS.length - 1 && (
                 <div className="pointer-events-auto mt-7 flex flex-wrap justify-center gap-3 lg:justify-start">
                   <Link

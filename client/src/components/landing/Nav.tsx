@@ -92,7 +92,7 @@ export function Nav({
           )}
           <Link
             href={primaryHref}
-            className="btn-gradient btn-shine group inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="btn-gradient btn-shine group inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             {primaryLabel}
             <Icon

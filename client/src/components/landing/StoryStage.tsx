@@ -30,18 +30,30 @@ import { motion, useTransform, type MotionValue } from "framer-motion";
 import { Icon } from "@/components/Icon";
 import { useTr } from "@/lib/lang";
 
-/** Where each act begins and ends along the whole track. */
-export const ACT_SPAN = 1 / 5;
+/**
+ * When each act owns the screen — the one source for both halves of the story.
+ *
+ * The words and the picture were timed separately and drifted: act three's
+ * cards were still fading out while act four's panels were fading in, in the
+ * same part of the screen, so a reader got two acts stacked on top of one
+ * another and could read neither. The gaps between these windows — act one ends
+ * at .185, act two opens at .2 — are what guarantee only one thing is ever on
+ * screen.
+ */
+export const ACT_WINDOWS: [number, number, number, number][] = [
+  // Act one starts below zero on purpose: every layer maps its window to
+  // [0, 1, 1, 0], so a window opening at 0 is invisible at the top of the page,
+  // which is exactly where act one has to be legible.
+  [-0.06, -0.02, 0.145, 0.185],
+  [0.2, 0.235, 0.33, 0.375],
+  [0.39, 0.425, 0.55, 0.595],
+  [0.61, 0.645, 0.75, 0.795],
+  [0.81, 0.845, 1.0, 1.0],
+];
 
-/** Fades a layer in over the first fifth of its act and out over the last. */
-function useActOpacity(progress: MotionValue<number>, act: number, hold = 0) {
-  const start = act * ACT_SPAN;
-  const end = start + ACT_SPAN;
-  return useTransform(
-    progress,
-    [start - 0.02, start + 0.045, end - 0.05 + hold, end - 0.005 + hold],
-    [0, 1, 1, 0],
-  );
+/** The fade an act's layer follows, from its own window. */
+function useActOpacity(progress: MotionValue<number>, act: number) {
+  return useTransform(progress, ACT_WINDOWS[act], [0, 1, 1, 0]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -58,8 +70,15 @@ function useActOpacity(progress: MotionValue<number>, act: number, hold = 0) {
  */
 function EcgLine({ progress }: { progress: MotionValue<number> }) {
   const LENGTH = 1180;
-  const drawn = useTransform(progress, [0.02, 0.34], [LENGTH, 0]);
-  const opacity = useTransform(progress, [0.0, 0.05, 0.52, 0.62], [0, 1, 1, 0.16]);
+  const drawn = useTransform(progress, [0.2, 0.36], [LENGTH, 0]);
+  // It arrives in act two, not act one — act one's whole sentence is "a single
+  // heartbeat", and a heartbeat beside a finished waveform is not single — and
+  // it stays through act three, because the mark is that line folding up.
+  const opacity = useTransform(
+    progress,
+    [0.2, 0.235, ACT_WINDOWS[2][2], ACT_WINDOWS[2][3]],
+    [0, 1, 1, 0],
+  );
 
   return (
     <motion.svg
@@ -91,8 +110,10 @@ function EcgLine({ progress }: { progress: MotionValue<number> }) {
 
 /** The single point of light the whole story starts from. */
 function Heartbeat({ progress }: { progress: MotionValue<number> }) {
-  const opacity = useTransform(progress, [0, 0.02, 0.12, 0.17], [1, 1, 1, 0]);
-  const x = useTransform(progress, [0, 0.17], ["0%", "38%"]);
+  const opacity = useTransform(progress, ACT_WINDOWS[0], [1, 1, 1, 0]);
+  // It slides left as the trace takes over, so the line reads as having been
+  // drawn *by* it rather than as a second object arriving.
+  const x = useTransform(progress, [0.08, 0.185], [0, -150]);
 
   return (
     <motion.div
@@ -103,9 +124,9 @@ function Heartbeat({ progress }: { progress: MotionValue<number> }) {
       {/* Two rings on a two-second cycle, which is sixty a minute. The only
           thing on this page that runs on a clock rather than on the scroll —
           because a pulse that stops when you stop scrolling is not a pulse. */}
-      <span className="story-ring absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#14C4C1]" />
-      <span className="story-ring story-ring-late absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#14C4C1]" />
-      <span className="story-beat block h-4 w-4 rounded-full bg-[#14C4C1] shadow-[0_0_28px_8px_rgba(20,196,193,0.45)]" />
+      <span className="story-ring absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#14C4C1]" />
+      <span className="story-ring story-ring-late absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#14C4C1]" />
+      <span className="story-beat block h-7 w-7 rounded-full bg-[#14C4C1] shadow-[0_0_54px_16px_rgba(20,196,193,0.5)]" />
     </motion.div>
   );
 }
@@ -196,8 +217,8 @@ function Voice({ progress }: { progress: MotionValue<number> }) {
 
 /** The logo's rounded cross, with the pulse running through it. */
 function Mark({ progress }: { progress: MotionValue<number> }) {
-  const opacity = useTransform(progress, [0.36, 0.44, 0.62, 0.68], [0, 1, 1, 0]);
-  const scale = useTransform(progress, [0.36, 0.46], [0.72, 1]);
+  const opacity = useActOpacity(progress, 2);
+  const scale = useTransform(progress, [0.39, 0.46], [0.72, 1]);
 
   return (
     <motion.svg
@@ -248,7 +269,7 @@ const DOCKING: {
     detail: "CBC · 12 values",
     from: [-330, -150],
     at: [-118, -92],
-    window: [0.4, 0.47],
+    window: [0.43, 0.49],
   },
   {
     icon: "prescriptions",
@@ -256,7 +277,7 @@ const DOCKING: {
     detail: "Amlodipine 5 mg",
     from: [340, -20],
     at: [122, -14],
-    window: [0.45, 0.52],
+    window: [0.46, 0.52],
   },
   {
     icon: "monitor_heart",
@@ -264,7 +285,7 @@ const DOCKING: {
     detail: "SpO₂ 98% · HR 78",
     from: [-320, 170],
     at: [-114, 92],
-    window: [0.5, 0.57],
+    window: [0.49, 0.55],
   },
 ];
 
@@ -304,7 +325,7 @@ function DockCard({
  * rather than drift.
  */
 function Docking({ progress }: { progress: MotionValue<number> }) {
-  const opacity = useTransform(progress, [0.38, 0.46, 0.62, 0.68], [0, 1, 1, 0]);
+  const opacity = useActOpacity(progress, 2);
 
   return (
     <motion.div className="absolute inset-0" style={{ opacity }} aria-hidden>
@@ -366,7 +387,7 @@ function PortalCard({
   portal: (typeof PORTALS)[number];
 }) {
   const tr = useTr();
-  const x = useTransform(progress, [0.6, 0.68], [portal.offset * -60, 0]);
+  const x = useTransform(progress, [0.61, 0.68], [portal.offset * -60, 0]);
 
   return (
     <motion.div
@@ -390,7 +411,7 @@ function PortalCard({
 
 /** The same record, opened three ways. */
 function Portals({ progress }: { progress: MotionValue<number> }) {
-  const opacity = useTransform(progress, [0.6, 0.67, 0.79, 0.84], [0, 1, 1, 0]);
+  const opacity = useActOpacity(progress, 3);
 
   return (
     <motion.div
@@ -419,8 +440,8 @@ function Portals({ progress }: { progress: MotionValue<number> }) {
  * and still beating, which is the patient the story started with.
  */
 function City({ progress }: { progress: MotionValue<number> }) {
-  const opacity = useTransform(progress, [0.79, 0.86, 1], [0, 1, 1]);
-  const scale = useTransform(progress, [0.79, 0.94], [1.35, 1]);
+  const opacity = useActOpacity(progress, 4);
+  const scale = useTransform(progress, [0.81, 0.94], [1.35, 1]);
   const cells = Array.from({ length: 88 }, (_, i) => i);
 
   return (

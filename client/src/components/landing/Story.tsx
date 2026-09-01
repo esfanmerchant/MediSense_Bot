@@ -232,11 +232,18 @@ export function Story({
     restDelta: 0.0001,
   });
 
-  // The sky is a background swap rather than an interpolation: four states,
+  // The sky is a background swap rather than an interpolation: five states,
   // cross-faded by CSS, which is one property to animate instead of three.
+  //
+  // Clamped at *both* ends, which the first version was not. A spring does not
+  // stop at its target — it overshoots and settles — so `progress` reaches
+  // slightly below zero at the top of the section and slightly above one at the
+  // bottom. Flooring -0.004 gives -1, and `ACTS[-1]` is undefined, which is a
+  // crash on the first pixel of upward scroll rather than a wrong colour.
   const [act, setAct] = useState(0);
   useMotionValueEvent(progress, "change", (value) => {
-    setAct(Math.min(ACTS.length - 1, Math.floor(value * ACTS.length)));
+    const index = Math.floor(value * ACTS.length);
+    setAct(Math.max(0, Math.min(ACTS.length - 1, index)));
   });
 
   const hintOpacity = useTransform(progress, [0, 0.03, 0.07], [1, 1, 0]);

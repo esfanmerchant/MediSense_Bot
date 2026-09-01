@@ -1063,7 +1063,7 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
               {/* Search. A button dressed as a field: there is nothing to type
                   into until the palette is open, and a field that silently
                   discards the first keystroke is worse than a button. */}
-              <div className="hidden shrink-0 md:block md:w-[min(20rem,30vw)]">
+              <div className="hidden min-w-0 shrink md:block md:w-[min(20rem,26vw)]">
                 <button
                   type="button"
                   onClick={() => setPaletteOpen(true)}
@@ -1078,7 +1078,15 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
                 </button>
               </div>
 
-              <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2">
+              {/* `shrink-0`, and never `flex-1`. Two flexible siblings around a
+                  fixed centre looks symmetrical and is not: this side holds
+                  buttons that do not shrink, so giving it `flex-1 min-w-0` let
+                  it size below its own contents, and the contents then spilled
+                  leftwards across the search field. The breadcrumb on the other
+                  side is the thing that should give way — it truncates, and a
+                  shortened path is a smaller loss than two controls on top of
+                  each other. */}
+              <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   aria-label={searchLabel}

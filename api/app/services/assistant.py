@@ -199,34 +199,75 @@ emergency; it is time-limited and reviewed afterwards.
 not use this platform."""
 
 
-#: Where the buttons are.
+#: How to use the portal — what every screen is for, and where each action is.
 #:
-#: The assistant knew what the platform does and could not tell anyone where
-#: to do it — asked "where do I pay my bill", it explained the payment policy
-#: and left the person exactly where they started. These are the sidebar
-#: entries of the patient's portal, named as they appear on screen, so
-#: directions can be given in the words the person is looking at rather than a
-#: route the model guessed. Keep this in step with the navigation in AppShell:
-#: a confident wrong direction is worse than "I am not sure".
-NAVIGATION_BRIEF = """WHERE THINGS ARE IN THE PATIENT'S PORTAL (use these names \
-when telling someone where to go; the menu is on the left, and on a phone it \
-opens from the menu button at the top):
-- Dashboard — the first page, with what is coming up and anything outstanding.
-- Appointments — book a visit with "Book an appointment", and see booked \
-ones. Requests the clinic has not accepted yet sit under "Awaiting \
-confirmation"; accepted ones under "Upcoming", where "Reschedule" and \
-"Cancel" are. Both disappear once the patient has checked in at the clinic.
-- Health assistant — this conversation.
-- Medical records — consultations, prescriptions, and what the patient has \
-told this assistant about their symptoms.
-- Documents — where to upload a lab report or a prescription photo.
-- Vitals — blood pressure, sugar, weight and the rest, entered by the patient.
-- Billing — every invoice. Opening one shows the breakdown, "Print", and "Pay \
-now", which shows the account to transfer to and where to enter the \
-transaction ID and upload the screenshot.
-- Settings — name, photo, contact details, password and two-factor.
-If asked for something that is not in this list, say it is not in the portal \
-rather than inventing a page."""
+#: The assistant knew what the platform does and could not tell anyone where to
+#: do it. Asked "where do I pay my bill" it explained the payment policy and
+#: left the person exactly where they started.
+#:
+#: This is deliberately written as *instructions*, not as a site map. "Billing"
+#: tells somebody nothing; "open the bill, press Pay now, and the account to
+#: transfer to is on the next screen" is the answer they actually asked for.
+#: Names are the words on screen, so a person can match what they read here
+#: against what they are looking at.
+#:
+#: Only the patient portal. `AI_CHAT` is held by the patient role and no other,
+#: so a doctor or an administrator never reaches this prompt, and describing
+#: their screens here would only give the model somewhere to wander.
+#:
+#: Keep it in step with AppShell and the pages themselves: a confident wrong
+#: direction wastes more of someone's time than "I am not sure" ever does.
+NAVIGATION_BRIEF = """HOW TO USE THE PORTAL (these are the words on screen; the \
+menu is on the left, and on a phone it opens from the button at the top left. \
+Pages with several parts show a row of section names under the title — tap one \
+to jump to it):
+
+- Dashboard — the first page. Shortcuts, what is coming up, unpaid bills, \
+current medicines, and the latest report explained in plain words.
+
+- Appointments — "Book an appointment" starts it: choose a doctor (filter by \
+city and speciality), then a day, then a free time, then confirm. A new \
+booking sits under "Awaiting confirmation" until the clinic accepts it; \
+accepted ones move to "Upcoming", where "Reschedule" and "Cancel" are. Both \
+of those disappear once you have checked in at the clinic — after that the \
+visit belongs to the clinic. Finished and cancelled visits are under "Past".
+
+- Health assistant — this conversation. The microphone button records instead \
+of typing. The attach button sends a photo of a report or a prescription to \
+be read. Symptoms described here are shown back for correction before they \
+are saved, and saving them is a separate press — nothing is recorded from \
+the conversation on its own.
+
+- Medical records — four parts: current medicines, consultation notes doctors \
+have written, what you told this assistant (each line says whether a doctor \
+has read it yet), and medicines no longer being taken.
+
+- Documents — upload a lab report, a prescription photo or a scan, and see \
+everything uploaded before. Links to open a document expire shortly after \
+opening.
+
+- Vitals — record a reading (blood pressure, sugar, weight, temperature, \
+oxygen, pulse) and see the readings so far. "Alert thresholds" shows the \
+limits that decide when a reading raises an alert.
+
+- Billing — every invoice. Open one to see the breakdown and "Print". "Pay \
+now" shows the hospital account to transfer to; make the transfer in your own \
+banking app, then type the transaction ID exactly as it appears on your \
+receipt and upload the screenshot. If the ID does not match the screenshot \
+the submission is refused, so check it against the receipt. After submitting, \
+the bill shows "Awaiting approval" until a person at the hospital confirms \
+the money arrived.
+
+- Settings — Profile (name, photo, phone, address), Security (password, \
+two-factor sign-in, and where you are signed in), Notifications (what you are \
+emailed about), Appearance (theme, text size, less motion, whether pages \
+refresh themselves, and the language).
+
+Also everywhere: the bell at the top right is notifications; the search box \
+at the top (Ctrl+K) jumps to any page.
+
+If somebody asks for something that is not in this list, say the portal does \
+not have it rather than inventing a page or a button."""
 
 
 def build_context(

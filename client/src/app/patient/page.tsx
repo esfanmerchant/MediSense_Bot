@@ -17,6 +17,11 @@ import { CircuitNodes } from "@/components/brand/CircuitNodes";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
+import {
   Avatar,
   Badge,
   Button,
@@ -495,6 +500,37 @@ export default function PatientDashboard() {
     ? { startTime: data.upcomingAppointments[0].startTime, doctor: data.upcomingAppointments[0].doctor.name }
     : null;
 
+  // Only the sections that are actually on screen. Offering "Latest report" to
+  // somebody with no reports would be a button that scrolls to nothing, which
+  // teaches people the row is decorative.
+  const sections: SectionSpec[] = [
+    { id: "welcome", label: tr("Overview", "Khulasa"), icon: "waving_hand" },
+    { id: "quick-actions", label: tr("Quick actions", "Foran kaam"), icon: "bolt" },
+    ...(data
+      ? [
+          {
+            id: "at-a-glance",
+            label: tr("At a glance", "Ek nazar"),
+            icon: "grid_view",
+          },
+          { id: "snapshot", label: tr("Health snapshot", "Sehat"), icon: "monitor_heart" },
+          { id: "latest-report", label: tr("Latest report", "Nayi report"), icon: "description" },
+          {
+            id: "appointments",
+            label: tr("Appointments", "Appointments"),
+            icon: "event_upcoming",
+            count: data.upcomingAppointments.length,
+          },
+          {
+            id: "medication",
+            label: tr("Medicines", "Dawaiyan"),
+            icon: "pill",
+            count: data.activePrescriptions.length,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <AppShell role="PATIENT">
       <div id="main" className="space-y-6">
@@ -507,9 +543,15 @@ export default function PatientDashboard() {
           )}
         />
 
-        {user && <Welcome name={user.name} next={next} />}
+        {/* What is on this page. Without it a phone shows the welcome card and
+            nothing else — six more sections exist and nothing says so. */}
+        <PageSectionNav mode="jump" label={tr("Sections", "Hissay")} sections={sections} />
 
-        <div className="stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Section id="welcome">
+          {user && <Welcome name={user.name} next={next} />}
+        </Section>
+
+        <Section id="quick-actions" className="stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <QuickAction
             href="/patient/appointments"
             icon="calendar_add_on"
@@ -536,7 +578,7 @@ export default function PatientDashboard() {
             title={tr("See your vitals", "Apne vitals dekhein")}
             description={tr("Readings from your care team", "Care team ki readings")}
           />
-        </div>
+        </Section>
 
         {loading && (
           <>
@@ -551,7 +593,10 @@ export default function PatientDashboard() {
 
         {data && (
           <>
-            <div className="stagger grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Section
+              id="at-a-glance"
+              className="stagger grid grid-cols-2 gap-4 lg:grid-cols-4"
+            >
               <StatTile
                 label={tr("Upcoming appointments", "Aane wali appointments")}
                 value={data.counts.upcomingAppointments ?? 0}
@@ -577,12 +622,17 @@ export default function PatientDashboard() {
                 icon={<Icon name="receipt_long" />}
                 href="/patient/billing"
               />
-            </div>
+            </Section>
 
-            {user?.patientId && <HealthSnapshot patientId={user.patientId} />}
-            {user?.patientId && <ExplainLatestReport patientId={user.patientId} />}
+            <Section id="snapshot">
+              {user?.patientId && <HealthSnapshot patientId={user.patientId} />}
+            </Section>
+            <Section id="latest-report">
+              {user?.patientId && <ExplainLatestReport patientId={user.patientId} />}
+            </Section>
 
             <div className="grid gap-6 lg:grid-cols-2">
+              <Section id="appointments">
               <Card
                 icon="event_upcoming"
                 variant={data.upcomingAppointments.length > 0 ? "featured" : "default"}
@@ -638,7 +688,9 @@ export default function PatientDashboard() {
                   </div>
                 )}
               </Card>
+              </Section>
 
+              <Section id="medication">
               <Card
                 icon="pill"
                 title={tr("Current medication", "Maujooda dawa")}
@@ -656,6 +708,7 @@ export default function PatientDashboard() {
                   <MedicationChecklist prescriptions={data.activePrescriptions} />
                 )}
               </Card>
+              </Section>
             </div>
           </>
         )}

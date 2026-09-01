@@ -17,11 +17,22 @@
  */
 
 import { AppShell } from "@/components/AppShell";
+import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
 import { PageHeader } from "@/components/PageHeader";
 import { TimeOffCard } from "@/components/TimeOffCard";
 import { WeeklySchedule } from "@/components/availability/WeeklySchedule";
 import { PracticeLocationCard } from "@/components/doctors/PracticeLocationCard";
 import { useTr } from "@/lib/lang";
+
+const SECTIONS: SectionSpec[] = [
+  { id: "hours", label: "Weekly hours", icon: "schedule" },
+  { id: "location", label: "Where you practise", icon: "location_on" },
+  { id: "time-off", label: "Time off", icon: "event_busy" },
+];
 
 export default function DoctorAvailabilityPage() {
   const tr = useTr();
@@ -38,11 +49,19 @@ export default function DoctorAvailabilityPage() {
           )}
         />
 
-        <WeeklySchedule />
+        <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
+
+        <Section id="hours">
+          <WeeklySchedule />
+        </Section>
         {/* Hours decide whether slots exist; a city decides whether anybody
             browsing the directory ever sees them. Both belong here. */}
-        <PracticeLocationCard />
-        <TimeOffCard />
+        <Section id="location">
+          <PracticeLocationCard />
+        </Section>
+        <Section id="time-off">
+          <TimeOffCard />
+        </Section>
       </div>
     </AppShell>
   );

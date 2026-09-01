@@ -17,6 +17,11 @@ import { useParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { DocumentsCard } from "@/components/DocumentsCard";
 import { Icon } from "@/components/Icon";
+import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
 import { PrescriptionRow, RecordTimeline } from "@/components/records";
 import { RecordVitals, ThresholdsPanel, VitalsTable } from "@/components/vitals";
 import {
@@ -138,6 +143,24 @@ export default function PatientChart() {
 
   // The API refuses a chart the caller has no care relationship with, so a 403
   // here is the expected answer for an unrelated patient rather than a bug.
+  const openSymptoms = (reported.data?.data ?? []).filter((row) => !row.promotedAt).length;
+
+  const sections: SectionSpec[] = [
+    {
+      id: "reported",
+      label: "Reported",
+      icon: "record_voice_over",
+      count: openSymptoms || undefined,
+      badge: openSymptoms > 0 ? "warning" : undefined,
+    },
+    { id: "note", label: "Write a note", icon: "edit_note" },
+    { id: "medication", label: "Medication", icon: "pill", count: active.length },
+    { id: "prescribe", label: "Prescribe", icon: "prescriptions" },
+    { id: "vitals", label: "Vitals", icon: "monitor_heart" },
+    { id: "documents", label: "Documents", icon: "folder_open" },
+    { id: "history", label: "History", icon: "history", count: rows.length },
+  ];
+
   const denied =
     profile.error?.status === 403 || history.error?.status === 403;
 
@@ -235,6 +258,17 @@ export default function PatientChart() {
               )}
             </header>
 
+            {/* Eight sections. On a phone this page showed one of them and
+                said nothing about the rest — and it is the page a clinician is
+                most likely to open on a phone.
+
+                Jump rather than tabs, deliberately: ticking a reported symptom
+                fills the note form directly below it, and putting those two
+                behind different tabs would break the one workflow this page was
+                built around. */}
+            <PageSectionNav mode="jump" label="Sections" sections={sections} />
+
+            <Section id="reported">
             <ReportedSymptomsCard
               rows={reported.data?.data ?? []}
               onUse={(picked) => {
@@ -249,9 +283,13 @@ export default function PatientChart() {
                 setNoteSymptoms(noteSymptoms ? `${noteSymptoms}\n${text}` : text);
               }}
             />
+            </Section>
 
+            <Section id="note">
             <NewRecordForm patientId={patientId} draft={draft} onSaved={reloadAll} />
+            </Section>
 
+            <Section id="medication">
             <Card
               title="Current medication"
               description="Check this before prescribing."
@@ -282,15 +320,21 @@ export default function PatientChart() {
                 </MedicationList>
               )}
             </Card>
+            </Section>
 
+            <Section id="prescribe">
             <NewPrescriptionForm patientId={patientId} onSaved={reloadAll} />
+            </Section>
 
             {/* Observations sit with the chart because that is where a doctor
                 reads a trend — beside the history that explains it. */}
+            <Section id="vitals">
             <RecordVitals patientId={patientId} onRecorded={reloadAll} />
             <VitalsTable key={`vitals-${refresh}`} patientId={patientId} snapshot />
             <ThresholdsPanel patientId={patientId} />
+            </Section>
 
+            <Section id="documents">
             <DocumentsCard
               patientId={patientId}
               title="Documents"
@@ -302,7 +346,9 @@ export default function PatientChart() {
               // offered here and not on the patient's own documents page.
               canConfirmOcr
             />
+            </Section>
 
+            <Section id="history">
             <Card title="History" description="Most recent first." icon="history">
               {history.error && !denied ? (
                 <ErrorState message={history.error.message} onRetry={history.reload} />
@@ -319,6 +365,7 @@ export default function PatientChart() {
                 />
               )}
             </Card>
+            </Section>
           </div>
         )}
       </div>

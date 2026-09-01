@@ -9,11 +9,21 @@
  */
 
 import { AppShell } from "@/components/AppShell";
+import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, SkeletonRows } from "@/components/ui";
 import { ThresholdsPanel, VitalsTable } from "@/components/vitals";
 import { useTr } from "@/lib/lang";
 import { useSession } from "@/lib/session";
+
+const SECTIONS: SectionSpec[] = [
+  { id: "readings", label: "Readings", icon: "monitor_heart" },
+  { id: "thresholds", label: "Alert thresholds", icon: "tune" },
+];
 
 export default function PatientVitals() {
   const { user, loading } = useSession();
@@ -49,10 +59,15 @@ export default function PatientVitals() {
 
         {user?.patientId && (
           <div className="mt-6 space-y-6">
+            <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
             {/* The snapshot — gauges and a trend — sits above the table, fed
                 from the same fetch, so the two never disagree. */}
-            <VitalsTable patientId={user.patientId} snapshot />
-            <ThresholdsPanel patientId={user.patientId} />
+            <Section id="readings">
+              <VitalsTable patientId={user.patientId} snapshot />
+            </Section>
+            <Section id="thresholds">
+              <ThresholdsPanel patientId={user.patientId} />
+            </Section>
           </div>
         )}
       </div>

@@ -20,6 +20,11 @@ import { useCallback, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
 import { WithdrawDialog } from "@/components/WithdrawDialog";
 import { useToast } from "@/components/overlays";
 import {
@@ -146,6 +151,12 @@ function RequestRow({ withdrawal }: { withdrawal: Withdrawal }) {
   );
 }
 
+const SECTIONS: SectionSpec[] = [
+  { id: "balance", label: "Balance", icon: "account_balance_wallet" },
+  { id: "withdrawals", label: "Withdrawals", icon: "payments" },
+  { id: "statement", label: "Statement", icon: "receipt_long" },
+];
+
 export default function DoctorEarnings() {
   const tr = useTr();
   const toast = useToast();
@@ -173,6 +184,9 @@ export default function DoctorEarnings() {
 
         {summary && (
           <>
+            <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
+
+            <Section id="balance">
             <Card>
               <div className="flex flex-wrap items-end justify-between gap-5">
                 <div>
@@ -209,6 +223,9 @@ export default function DoctorEarnings() {
               </div>
             </Card>
 
+            </Section>
+
+            <Section id="withdrawals">
             {summary.withdrawals.length > 0 && (
               <Card icon="account_balance" title={tr("Your withdrawals", "Aap ki withdrawals")}>
                 <ul className="space-y-3">
@@ -219,6 +236,9 @@ export default function DoctorEarnings() {
               </Card>
             )}
 
+            </Section>
+
+            <Section id="statement">
             <Card
               icon="receipt_long"
               title={tr("Statement", "Statement")}
@@ -263,6 +283,7 @@ export default function DoctorEarnings() {
                 reload();
               }}
             />
+            </Section>
           </>
         )}
       </div>

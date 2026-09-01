@@ -1150,3 +1150,32 @@ select:focus ~ .select-chevron {
 .print-only {
   display: none;
 }
+
+/* ---------------------------------------------------------------------------
+   In-page section navigation
+
+   Two sticky bars can be above a section: the shell's header, and the section
+   row itself. Both publish their height at runtime — the header's is not a
+   constant, because the inactivity warning lives inside it and comes and goes.
+   Anything that scrolls a heading into view has to clear both, or the heading
+   somebody just asked for arrives underneath the thing they clicked.
+   --------------------------------------------------------------------------- */
+html {
+  scroll-padding-top: calc(var(--topbar-h, 64px) + var(--section-nav-h, 0px) + 16px);
+}
+
+.scroll-section {
+  scroll-margin-top: calc(var(--topbar-h, 64px) + var(--section-nav-h, 0px) + 16px);
+}
+
+/* The section row scrolls sideways on a phone. The scrollbar is suppressed
+   because the edge fades already say the row continues, and a horizontal
+   scrollbar under a 36px control is most of a 36px control. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

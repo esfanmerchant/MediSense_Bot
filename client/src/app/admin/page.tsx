@@ -14,6 +14,11 @@ import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
+import {
   Badge,
   Card,
   EmptyState,
@@ -36,6 +41,13 @@ const ACTION_LABELS: Record<string, [string, string]> = {
   USER_STATUS_CHANGED: ["Account status changed", "Account status badla"],
   SESSION_EXPIRED: ["Session ended", "Session khatam"],
 };
+
+const SECTIONS: SectionSpec[] = [
+  { id: "overview", label: "Overview", icon: "dashboard" },
+  { id: "shortcuts", label: "Shortcuts", icon: "bolt" },
+  { id: "totals", label: "Totals", icon: "monitoring" },
+  { id: "security", label: "Security events", icon: "policy" },
+];
 
 export default function AdminDashboard() {
   // This dashboard carries the recent security events, and the API audits the
@@ -61,7 +73,9 @@ export default function AdminDashboard() {
           )}
         />
 
-        <section className="hero-navy relative overflow-hidden rounded-3xl p-6 text-white shadow-float sm:p-8">
+        <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
+
+        <section id="overview" className="scroll-section hero-navy relative overflow-hidden rounded-3xl p-6 text-white shadow-float sm:p-8">
           <svg
             aria-hidden
             viewBox="0 0 640 60"
@@ -110,7 +124,7 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        <div className="stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Section id="shortcuts" className="stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <QuickAction
             href="/admin/appointments"
             icon="calendar_month"
@@ -138,7 +152,7 @@ export default function AdminDashboard() {
             title={tr("Audit trail", "Audit trail")}
             description={tr("Who saw what, and when", "Kis ne kya dekha, aur kab")}
           />
-        </div>
+        </Section>
 
         {loading && (
           <>
@@ -180,7 +194,7 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            <div className="stagger grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Section id="totals" className="stagger grid grid-cols-2 gap-4 lg:grid-cols-4">
               <StatTile label={tr("Patients", "Mareez")} value={data.counts.patients ?? 0} icon={<Icon name="personal_injury" />} />
               <StatTile label={tr("Doctors", "Doctors")} value={data.counts.doctors ?? 0} icon={<Icon name="stethoscope" />} />
               {/* Revenue rather than a department count. A count of departments
@@ -238,8 +252,9 @@ export default function AdminDashboard() {
                 icon={<Icon name="lock" />}
                 href="/admin/audit"
               />
-            </div>
+            </Section>
 
+            <Section id="security">
             <Card
               icon="security"
               title={tr("Recent security events", "Haaliya security waqiat")}
@@ -295,6 +310,7 @@ export default function AdminDashboard() {
                 </div>
               )}
             </Card>
+            </Section>
           </>
         )}
       </div>

@@ -833,6 +833,29 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
   // the page resize under them once it finishes.
   useReadingPreferences();
   const [railOpen, setRailOpen] = useState(false);
+
+  /**
+   * Publish the sticky header's height so other sticky things can sit under it.
+   *
+   * Measured rather than declared: `h-16` is only the header, and the stack
+   * above also holds a warning that comes and goes. A ResizeObserver is the
+   * only honest source for "how tall is it right now".
+   */
+  const topbar = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = topbar.current;
+    if (!node) return;
+    const publish = () => {
+      document.documentElement.style.setProperty(
+        "--topbar-h",
+        `${Math.round(node.getBoundingClientRect().height)}px`,
+      );
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   const [collapsed, setCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -1008,8 +1031,16 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* One sticky stack: the warning, the bar, and the time left. They
-              share a top edge, so nothing ever slides underneath anything. */}
-          <div className="sticky top-0 z-40">
+              share a top edge, so nothing ever slides underneath anything.
+
+              Its height is published as `--topbar-h` because anything else that
+              wants to stick below it has to know how tall it is *now* — and it
+              is not a constant. The inactivity warning appears and disappears
+              inside this stack, so a section bar pinned to a hard-coded 64px
+              would slide under the header the moment somebody's session got
+              short, which is exactly when they are least able to spare the
+              confusion. */}
+          <div ref={topbar} className="sticky top-0 z-40">
             <InactivityWarning />
 
             <header className="glass flex h-16 items-center gap-3 rounded-none border-x-0 border-t-0 border-b border-line/80 px-4 !shadow-none sm:px-6">

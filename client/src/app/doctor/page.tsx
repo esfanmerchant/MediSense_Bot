@@ -14,6 +14,11 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
 import { AvailabilityNotice } from "@/components/availability/AvailabilityNotice";
 import {
   Avatar,
@@ -100,6 +105,13 @@ function greeting(tr: (en: string, ur: string) => string): string {
   return tr("Good evening", "Shaam bakhair");
 }
 
+const SECTIONS: SectionSpec[] = [
+  { id: "shortcuts", label: "Shortcuts", icon: "bolt" },
+  { id: "today", label: "Today", icon: "today" },
+  { id: "alerts", label: "Vital alerts", icon: "e911_emergency", badge: "critical" },
+  { id: "clinic", label: "Clinic list", icon: "list_alt" },
+];
+
 export default function DoctorDashboard() {
   const { data, error, loading, reload } = useAsync(() => dashboard.doctor());
   const { user } = useSession();
@@ -182,9 +194,11 @@ export default function DoctorDashboard() {
         )}
 
         {/* Why nobody is booking, when that is the answer. Silent otherwise. */}
+        <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
+
         <AvailabilityNotice />
 
-        <div className="stagger grid gap-3 sm:grid-cols-3">
+        <Section id="shortcuts" className="stagger grid gap-3 sm:grid-cols-3">
           <QuickAction
             href="/doctor/patients"
             icon="group"
@@ -205,7 +219,7 @@ export default function DoctorDashboard() {
             title={tr("Alerts", "Alerts")}
             description={tr("Threshold breaches to acknowledge", "Had paar readings jo acknowledge karni hain")}
           />
-        </div>
+        </Section>
 
         {loading && (
           <>
@@ -218,7 +232,7 @@ export default function DoctorDashboard() {
 
         {data && (
           <>
-            <div className="stagger grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Section id="today" className="stagger grid grid-cols-2 gap-4 lg:grid-cols-4">
               <StatTile
                 label={tr("Assigned patients", "Mere mareez")}
                 value={data.counts.assignedPatients ?? 0}
@@ -245,8 +259,9 @@ export default function DoctorDashboard() {
                 hint={tr("Consultations not yet completed", "Consultations jo abhi mukammal nahi")}
                 icon={<Icon name="stethoscope" />}
               />
-            </div>
+            </Section>
 
+            <Section id="alerts">
             <Card
               icon="monitor_heart"
               title={tr("Vital alerts", "Vital alerts")}
@@ -301,7 +316,9 @@ export default function DoctorDashboard() {
                 </ul>
               )}
             </Card>
+            </Section>
 
+            <Section id="clinic">
             <Card
               icon="calendar_clock"
               title={tr("Clinic list", "Clinic list")}
@@ -359,6 +376,7 @@ export default function DoctorDashboard() {
                 </ul>
               )}
             </Card>
+            </Section>
           </>
         )}
       </div>

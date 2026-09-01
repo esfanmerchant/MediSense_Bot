@@ -37,38 +37,36 @@ const mono = JetBrains_Mono({
 });
 
 /**
- * Material Symbols is *not* loaded through `next/font`, and it is *not* allowed
- * to block the first paint.
+ * Material Symbols is *not* loaded through `next/font`, and it *is* allowed to
+ * block the first paint.
  *
  * It cannot go through `next/font`: this Next version's bundled Google Fonts
  * list covers text faces only and has no icon fonts in it at all — there is no
  * `Material_Symbols_Outlined` export to import. The stylesheet link below is
  * the supported route.
  *
- * What that link used to cost was the whole of the first paint. A stylesheet in
- * the head is render-blocking, so every page waited on a round trip to
- * fonts.googleapis.com and then another to fonts.gstatic.com before it drew
- * anything — on a landing page whose first screen contains four icons, that is
- * a second of blank white bought for very little.
+ * It was briefly loaded as `media="print"` and promoted by an inline script,
+ * which is the standard way to take a stylesheet off the critical path and
+ * which broke the entire interface. React hoists and reorders `<link>` and
+ * `<script>` out of the markup they were written in, so the script could run
+ * before the link existed, find nothing, and leave the sheet print-only for
+ * good. The failure mode is not subtle: with no icon font, every `<Icon>`
+ * renders its ligature — the literal words "monitor_heart", "arrow_forward" —
+ * at whatever size its parent sets, and every button, chip and border in the
+ * application stretches around a word. A page that is four hundred
+ * milliseconds slower is worth a great deal less than a page that is legible,
+ * so it blocks, and it blocks on purpose.
  *
- * `media="print"` is the fix: the browser fetches the sheet at a low priority
- * and does not wait for it, and the inline script below promotes it to `all`
- * once it has arrived. Nothing else changes, including `display=block`, which
- * is still right for an icon font — `swap` flashes the raw ligature name
- * ("monitor_heart") before the glyph arrives, and a word where an icon should
- * be reads as a bug.
+ * `preconnect` below and `preload` here are the parts of that idea that are
+ * safe: they start the two round trips as early as the browser can, without
+ * making the result conditional on a script running in the right order.
+ *
+ * `display=block` rather than `swap`, for the same reason: `swap` shows the raw
+ * ligature name until the glyph arrives, and a word where an icon should be
+ * reads as a bug.
  */
 const ICON_FONT =
   "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block";
-
-/**
- * Promotes the icon sheet once it has loaded.
- *
- * Guarded on `sheet` as well as the load event, because a sheet already in the
- * cache can finish before this script runs and the event would never fire —
- * which would leave the icons permanently print-only.
- */
-const PROMOTE_ICON_FONT = `(function(){var l=document.getElementById('msym-css');if(!l)return;var go=function(){l.media='all'};if(l.sheet)go();else l.addEventListener('load',go,{once:true})})()`;
 
 export const metadata: Metadata = {
   title: "MediSense — Smart Healthcare Management",
@@ -112,15 +110,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        { }
         <link rel="preload" as="style" href={ICON_FONT} />
         { }
-        <link id="msym-css" rel="stylesheet" href={ICON_FONT} media="print" />
-        <script dangerouslySetInnerHTML={{ __html: PROMOTE_ICON_FONT }} />
-        <noscript>
-          { }
-          <link rel="stylesheet" href={ICON_FONT} />
-        </noscript>
+        <link rel="stylesheet" href={ICON_FONT} />
       </head>
       <body className="text-strong antialiased">
         <ServiceWorker />

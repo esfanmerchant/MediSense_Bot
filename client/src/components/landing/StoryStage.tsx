@@ -176,7 +176,7 @@ function Voice({ progress }: { progress: MotionValue<number> }) {
           <motion.span
             key={i}
             className="w-[4px] rounded-full bg-gradient-to-b from-[#14C4C1] to-[#1462C4]"
-            style={{ height: h * 2, scaleY: flatten }}
+            style={{ height: h * 1.5, scaleY: flatten }}
           />
         ))}
       </div>
@@ -202,7 +202,7 @@ function Mark({ progress }: { progress: MotionValue<number> }) {
   return (
     <motion.svg
       viewBox="0 0 200 200"
-      className="absolute left-1/2 top-1/2 h-52 w-52 -translate-x-1/2 -translate-y-1/2"
+      className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 sm:h-48 sm:w-48"
       style={{ opacity, scale }}
       aria-hidden
     >
@@ -246,24 +246,24 @@ const DOCKING: {
     icon: "lab_panel",
     label: ["Lab report · read", "Lab report · parh li"],
     detail: "CBC · 12 values",
-    from: [-260, -170],
-    at: [-165, -105],
+    from: [-330, -150],
+    at: [-118, -92],
     window: [0.4, 0.47],
   },
   {
     icon: "prescriptions",
     label: ["Prescription", "Nuskha"],
     detail: "Amlodipine 5 mg",
-    from: [280, -30],
-    at: [170, -18],
+    from: [340, -20],
+    at: [122, -14],
     window: [0.45, 0.52],
   },
   {
     icon: "monitor_heart",
     label: ["Vitals", "Vitals"],
     detail: "SpO₂ 98% · HR 78",
-    from: [-250, 190],
-    at: [-160, 108],
+    from: [-320, 170],
+    at: [-114, 92],
     window: [0.5, 0.57],
   },
 ];
@@ -283,7 +283,7 @@ function DockCard({
 
   return (
     <motion.div
-      className="absolute left-1/2 top-1/2 w-44 rounded-xl border border-white/15 bg-[#0A1733]/85 p-3 backdrop-blur-sm"
+      className="absolute left-1/2 top-1/2 w-36 -translate-x-1/2 -translate-y-1/2 rounded-lg border border-white/15 bg-[#0A1733]/85 p-2.5 backdrop-blur-sm"
       style={{ x, y, opacity }}
     >
       <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#5EC8E6]">
@@ -370,7 +370,7 @@ function PortalCard({
 
   return (
     <motion.div
-      className="w-40 shrink-0 rounded-xl border border-[#14C4C1]/35 bg-[#071129]/90 p-3 sm:w-48"
+      className="w-[7.5rem] shrink-0 rounded-lg border border-[#14C4C1]/35 bg-[#071129]/90 p-2.5 sm:w-36"
       style={{ rotateY: portal.tilt, x }}
     >
       <p className="mono-caps text-[10px] text-[#5EC8E6]">{tr(...portal.title)}</p>
@@ -398,7 +398,7 @@ function Portals({ progress }: { progress: MotionValue<number> }) {
       style={{ opacity }}
       aria-hidden
     >
-      <div className="flex items-center gap-4" style={{ perspective: "1200px" }}>
+      <div className="flex items-center gap-2.5" style={{ perspective: "1000px" }}>
         {PORTALS.map((portal) => (
           <PortalCard key={portal.title[0]} progress={progress} portal={portal} />
         ))}
@@ -429,7 +429,7 @@ function City({ progress }: { progress: MotionValue<number> }) {
       style={{ opacity, scale }}
       aria-hidden
     >
-      <div className="grid w-full max-w-2xl grid-cols-11 gap-x-5 gap-y-4">
+      <div className="grid w-full max-w-md grid-cols-11 gap-x-3 gap-y-2.5">
         {cells.map((i) => {
           const home = i === 38;
           return (
@@ -459,7 +459,7 @@ function City({ progress }: { progress: MotionValue<number> }) {
 export function StoryStage({ progress }: { progress: MotionValue<number> }) {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="relative mx-auto h-full w-full max-w-3xl">
+      <div className="relative mx-auto h-full w-full max-w-xl">
         <EcgLine progress={progress} />
         <Heartbeat progress={progress} />
         <Voice progress={progress} />

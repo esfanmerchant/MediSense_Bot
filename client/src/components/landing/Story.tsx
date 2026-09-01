@@ -173,14 +173,14 @@ function Frame({
       <p className="mono-caps mt-4 text-[11px] text-[#5EC8E6]">
         {act.clock} · {tr(...act.when)}
       </p>
-      <p className="font-display mt-4 text-4xl font-black leading-[1.06] tracking-tight text-white sm:text-6xl lg:text-7xl">
+      <p className="font-display mt-4 text-[2rem] font-black leading-[1.08] tracking-tight text-white sm:text-5xl">
         {tr(...act.lead)}{" "}
         {/* The light ramp, not the brand one: `text-gradient-brand` runs deep
             blue and all but disappears on this navy. globals.css keeps
             `text-gradient-medical` for exactly this — a coloured ground. */}
         <span className="text-gradient-medical">{tr(...act.accent)}</span>
       </p>
-      <p className="mt-6 max-w-lg text-base leading-relaxed text-[#AFC9E8] sm:text-lg">
+      <p className="mt-4 max-w-md text-[0.95rem] leading-relaxed text-[#AFC9E8] sm:text-base">
         {tr(...act.body)}
       </p>
       {children}
@@ -348,12 +348,17 @@ export function Story({
             over whatever the scene happened to be doing — and the compromise
             that makes is a picture too dim to read and text too dark to skim.
             Side by side, both get to be themselves. */}
-        <div className="relative mx-auto grid h-full max-w-7xl items-center gap-8 px-6 lg:grid-cols-2 lg:gap-12">
-          <div className="relative order-2 min-h-[18rem] lg:order-1 lg:min-h-0">
+        {/* Both columns carry an explicit height, and they have to. Their only
+            children are absolutely positioned — five frames stacked in the same
+            place, one visible at a time — and a box whose every child is out of
+            flow collapses to nothing. When it did, all five headlines centred
+            on a zero-height line and printed on top of each other. */}
+        <div className="relative mx-auto grid h-full max-w-7xl content-center gap-6 px-6 lg:grid-cols-2 lg:items-center lg:gap-12">
+          <div className="relative order-2 h-[19rem] lg:order-1 lg:h-[26rem]">
             {ACTS.map((item, i) => (
               <Frame key={item.numeral} act={item} range={WINDOWS[i]} progress={progress}>
               {i === ACTS.length - 1 && (
-                <div className="pointer-events-auto mt-8 flex flex-wrap justify-center gap-3">
+                <div className="pointer-events-auto mt-7 flex flex-wrap justify-center gap-3 lg:justify-start">
                   <Link
                     href={primaryHref}
                     className="bg-gradient-brand inline-flex min-h-12 items-center gap-2 rounded-xl px-6 font-bold text-white"
@@ -373,7 +378,7 @@ export function Story({
             ))}
           </div>
 
-          <div className="relative order-1 h-[22rem] lg:order-2 lg:h-[32rem]">
+          <div className="relative order-1 h-[15rem] lg:order-2 lg:h-[26rem]">
             <StoryStage progress={progress} />
           </div>
         </div>

@@ -25,7 +25,6 @@ import { HowItWorks } from "@/components/landing/HowItWorks";
 import { Nav } from "@/components/landing/Nav";
 import { Portals } from "@/components/landing/Portals";
 import { SecurityStrip } from "@/components/landing/SecurityStrip";
-import { StatsBand } from "@/components/landing/StatsBand";
 import { LandingStyles } from "@/components/landing/parts";
 import { useTr } from "@/lib/lang";
 import { homePathFor, useSession } from "@/lib/session";
@@ -60,7 +59,6 @@ export default function Home() {
             in the morning is on a doctor's screen by half past ten. The old
             hero is gone rather than pushed down — two openings is no opening. */}
         <Story primaryHref={primaryHref} primaryLabel={heroLabel} />
-        <StatsBand />
         <Portals />
         <Bento />
         <HowItWorks />

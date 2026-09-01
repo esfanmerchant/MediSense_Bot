@@ -1179,3 +1179,50 @@ html {
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   The landing story's heartbeat
+
+   The one thing on that page that runs on a clock rather than on the scroll.
+   A pulse that stops when you stop scrolling is not a pulse — it is a slider —
+   and act one's whole sentence is that something is alive.
+
+   Sixty a minute, which is a two-second cycle. The rings leave on a stagger so
+   the beat has a shape rather than a flash.
+   --------------------------------------------------------------------------- */
+@keyframes story-beat {
+  0%, 62%, 100% { transform: scale(1); }
+  8% { transform: scale(1.22); }
+  20% { transform: scale(1); }
+  30% { transform: scale(1.1); }
+}
+
+@keyframes story-ring {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.65; }
+  70%, 100% { transform: translate(-50%, -50%) scale(3.4); opacity: 0; }
+}
+
+.story-beat {
+  animation: story-beat 2s ease-in-out infinite;
+}
+
+.story-ring {
+  animation: story-ring 2s ease-out infinite;
+}
+
+.story-ring-late {
+  animation-delay: 0.35s;
+}
+
+/* Somebody who has asked for less motion gets a still, lit point rather than a
+   beating one — the shape survives, the movement does not. */
+@media (prefers-reduced-motion: reduce) {
+  .story-beat,
+  .story-ring {
+    animation: none;
+  }
+  .story-ring {
+    opacity: 0.25;
+    transform: translate(-50%, -50%) scale(2);
+  }
+}

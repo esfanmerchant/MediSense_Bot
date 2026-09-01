@@ -29,19 +29,13 @@
  * who cannot take one is owed the argument, not an apology for it.
  */
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { motion, useMotionValueEvent, useScroll, useSpring, useTransform } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "@/components/Icon";
+import { StoryStage } from "@/components/landing/StoryStage";
 import { useTr } from "@/lib/lang";
-
-/** Never bundled into a portal route, and never rendered on the server. */
-const StoryScene = dynamic(
-  () => import("@/components/landing/StoryScene").then((m) => m.StoryScene),
-  { ssr: false },
-);
 
 interface Act {
   numeral: string;
@@ -170,9 +164,9 @@ function Frame({
   return (
     <motion.div
       style={{ opacity, y }}
-      className="absolute inset-x-0 mx-auto max-w-3xl px-6 text-center"
+      className="absolute inset-x-0 top-1/2 mx-auto max-w-xl -translate-y-1/2 text-center lg:mx-0 lg:text-left"
     >
-      <span className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-[#AFC9E8]">
+      <span className="inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-[#AFC9E8]">
         <span className="h-1.5 w-1.5 rounded-full bg-[#14C4C1]" />
         {tr(...act.chip)}
       </span>
@@ -186,7 +180,7 @@ function Frame({
             `text-gradient-medical` for exactly this — a coloured ground. */}
         <span className="text-gradient-medical">{tr(...act.accent)}</span>
       </p>
-      <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-[#AFC9E8] sm:text-lg">
+      <p className="mt-6 max-w-lg text-base leading-relaxed text-[#AFC9E8] sm:text-lg">
         {tr(...act.body)}
       </p>
       {children}
@@ -236,16 +230,6 @@ export function Story({
     damping: 26,
     mass: 0.45,
     restDelta: 0.0001,
-  });
-
-  /**
-   * The scene reads this every frame. A ref rather than state on purpose: a
-   * component that re-rendered on every scroll frame would drop frames on the
-   * phone this was built to impress.
-   */
-  const scenePosition = useRef(0);
-  useMotionValueEvent(progress, "change", (value) => {
-    scenePosition.current = value;
   });
 
   // The sky is a background swap rather than an interpolation: four states,
@@ -311,7 +295,6 @@ export function Story({
           />
         ))}
 
-        <StoryScene progress={scenePosition} />
 
         {/* Readability, not decoration: the words sit over a moving field, and
             a headline that is legible only on some frames is not legible. */}
@@ -360,9 +343,15 @@ export function Story({
           <span className="font-display text-base text-[#5EC8E6]">{ACTS[act].numeral}</span>
         </div>
 
-        <div className="absolute inset-0 grid place-items-center">
-          {ACTS.map((item, i) => (
-            <Frame key={item.numeral} act={item} range={WINDOWS[i]} progress={progress}>
+        {/* Two columns, so nothing is read through anything. The words used to
+            sit on top of the picture, which meant every frame had to be legible
+            over whatever the scene happened to be doing — and the compromise
+            that makes is a picture too dim to read and text too dark to skim.
+            Side by side, both get to be themselves. */}
+        <div className="relative mx-auto grid h-full max-w-7xl items-center gap-8 px-6 lg:grid-cols-2 lg:gap-12">
+          <div className="relative order-2 min-h-[18rem] lg:order-1 lg:min-h-0">
+            {ACTS.map((item, i) => (
+              <Frame key={item.numeral} act={item} range={WINDOWS[i]} progress={progress}>
               {i === ACTS.length - 1 && (
                 <div className="pointer-events-auto mt-8 flex flex-wrap justify-center gap-3">
                   <Link
@@ -380,8 +369,13 @@ export function Story({
                   </Link>
                 </div>
               )}
-            </Frame>
-          ))}
+              </Frame>
+            ))}
+          </div>
+
+          <div className="relative order-1 h-[22rem] lg:order-2 lg:h-[32rem]">
+            <StoryStage progress={progress} />
+          </div>
         </div>
 
         <motion.div

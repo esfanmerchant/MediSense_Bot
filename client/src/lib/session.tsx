@@ -294,7 +294,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       stayAlive,
       refreshUser,
     }),
-    [user, session, loading, secondsRemaining, signIn, adoptSession, signOut, stayAlive, refreshUser],
+    // `effectiveRemaining`, not `secondsRemaining`: the memo reads the first
+    // and the second is only one of the three things it is derived from. The
+    // missing one was `idleLimit`, so a policy that turned the idle timeout on
+    // or off mid-session would flip this value between a number and null
+    // without the memo noticing — the countdown would keep showing a figure
+    // that no longer applied. Both are primitives, so this memoises exactly as
+    // well as the old list did.
+    [user, session, loading, effectiveRemaining, signIn, adoptSession, signOut, stayAlive, refreshUser],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

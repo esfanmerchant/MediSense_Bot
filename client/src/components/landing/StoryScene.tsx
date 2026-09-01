@@ -1,195 +1,136 @@
 "use client";
 
 /**
- * Four shapes, one object. Scroll is the only clock.
+ * Five shapes, one field of particles. Scroll is the only clock.
  *
- * The first version of this scene was a cloud of points, and a cloud of points
- * is not a concept — it is confetti with a colour scheme. At every moment of a
- * story like this the reader should be able to say *what they are looking at*
- * without reading the caption, so this is built out of **line segments** and
- * every act is a silhouette somebody recognises on sight:
+ *   I    a point        — one heartbeat, alone in the dark
+ *   II   a trace        — it stretches into an ECG, and an echo answers it
+ *   III  the mark       — the trace folds into the MediSense cross: a record
+ *   IV   three panels   — the mark opens into patient, doctor and administrator
+ *   V    a field        — one mark becomes a clinic on every block of a city
  *
- *   I    a waveform     — vertical bars, a voice being spoken
- *   II   a document     — the bars lie down into ruled lines on a sheet
- *   III  two panels     — the sheet divides, and a beam carries it across
- *   IV   a network      — the panels open into a lattice of linked clinics
+ * The same particles throughout. Nothing is added between acts and nothing is
+ * thrown away, because that is the argument: a spoken symptom and the record a
+ * doctor reads are one piece of information, not a copy of one. A scene that
+ * dissolved between five different objects would be arguing the opposite.
  *
- * It is the *same* six hundred segments in all four. Nothing is added and
- * nothing is thrown away, because that is the claim the page is making: a
- * spoken symptom and the record a doctor reads are one piece of information,
- * not a copy of one. A scene that dissolved between four different objects
- * would be arguing the opposite.
+ * **The morph runs on the GPU, and it staggers.** Every particle carries both
+ * its current shape and its next one as attributes; a single uniform says how
+ * far between them the scroll has travelled, and each particle offsets that by
+ * its own seed. So the field *streams* from one shape into the next instead of
+ * every point setting off at once — which is the whole difference between a
+ * transformation and a cross-fade. Doing this on the CPU would cap the count at
+ * a few thousand; on the GPU twenty-four thousand costs one uniform write.
  *
- * **Metal, not glow.** The palette is one blue — #00194D — lit rather than
- * coloured. A specular band travels across the object every few seconds and
- * brightens whatever it crosses, which is the whole of the metallic read: a
- * surface that is dark until light lands on it. Colours are recomputed per
- * segment per frame, which sounds expensive and is roughly two thousand float
- * writes — less than the cost of one shadow.
+ * **Metal, not neon.** One blue — #00194D — lit rather than coloured. A
+ * specular band travels across the field and brightens whatever it crosses,
+ * which is the whole of the metallic read: a surface that is dark until light
+ * lands on it.
  *
  * **Raw three.js, deliberately.** This project already has one hand-written
  * WebGL surface carrying the failure handling a clinical product needs — no
- * context, reduced motion, hidden tab, disposal, capped pixel ratio. Adding a
- * renderer framework to copy an idiom would mean two integrations and two
- * copies of that discipline for one page.
+ * context, reduced motion, hidden tab, disposal, capped pixel ratio. Six
+ * rendering and scroll libraries to express the same behaviour would mean two
+ * integrations, two copies of that discipline, and something close to a
+ * megabyte for one page.
  *
  * **React never re-renders for the scroll.** Progress arrives through a ref the
- * loop reads, and the loop damps it further. That damping is the whole
- * difference between camera work and scrubbing.
+ * loop reads, and the loop damps it further. That damping is the difference
+ * between camera work and scrubbing.
  */
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
-/** Segments in the object. Enough to draw a legible lattice, few enough that
-    recolouring all of them every frame is free. */
-const SEGMENTS = 600;
+import { SHAPES } from "@/components/landing/storyTargets";
 
-/**
- * The metal.
- *
- * Four stops from the ground colour to a near-white highlight. A segment's
- * place on this ramp is not fixed — it is how much light is currently falling
- * on it, so the object reads as one material rather than as a gradient someone
- * painted on.
- */
-const STEEL: [number, number][] = [
-  [0.0, 0x00194d],
-  [0.42, 0x1e5aa8],
-  [0.76, 0x5ec8e6],
-  [1.0, 0xdcefff],
+/** Particles. Halved where the device says it cannot afford them. */
+const FULL = 24_000;
+const LIGHT = 9_000;
+
+/** Where the camera stands for each act, and what it looks at. */
+const CAMERA: { position: [number, number, number]; target: [number, number, number] }[] = [
+  { position: [0, 0, 3.4], target: [0, 0, 0] },
+  { position: [0, 0, 5.2], target: [0, 0, 0] },
+  { position: [0, 0.12, 3.9], target: [0, 0, 0] },
+  { position: [0, 0.2, 4.6], target: [0, 0, 0] },
+  { position: [0, 4.6, 10.5], target: [0, 0, -1.6] },
 ];
 
-const stopA = new THREE.Color();
-const stopB = new THREE.Color();
-
-function steelAt(t: number, target: THREE.Color) {
-  const clamped = Math.min(1, Math.max(0, t));
-  for (let i = 1; i < STEEL.length; i++) {
-    const [t1, c1] = STEEL[i];
-    if (clamped <= t1 || i === STEEL.length - 1) {
-      const [t0, c0] = STEEL[i - 1];
-      const local = t1 === t0 ? 0 : (clamped - t0) / (t1 - t0);
-      stopA.setHex(c0, THREE.SRGBColorSpace);
-      stopB.setHex(c1, THREE.SRGBColorSpace);
-      return target.copy(stopA).lerp(stopB, local);
-    }
-  }
-  return target.setHex(0x1e5aa8, THREE.SRGBColorSpace);
-}
-
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp01 = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-function smoothstep(min: number, max: number, t: number) {
-  const x = clamp01((t - min) / (max - min));
+function smoothstep(t: number) {
+  const x = clamp01(t);
   return x * x * (3 - 2 * x);
 }
 
-/** Deterministic, so every visit composes the same picture. */
-function rand(seed: number) {
-  const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
-  return x - Math.floor(x);
-}
+const VERTEX = /* glsl */ `
+  attribute vec3 aFrom;
+  attribute vec3 aTo;
+  attribute float aSeed;
 
-/**
- * The four arrangements, built once.
- *
- * Layout is `[act][segment][endpoint][xyz]`, flattened. A segment keeps its
- * index through all four acts, so the bar on the left of the waveform is the
- * rule on the left of the sheet and the link on the left of the network. Give
- * each act its own random assignment and the object boils between states
- * instead of moving through them.
- */
-function buildTargets(): Float32Array {
-  const stride = SEGMENTS * 6;
-  const targets = new Float32Array(4 * stride);
+  uniform float uMix;
+  uniform float uPulse;
+  uniform float uSize;
+  uniform float uSweep;
+  uniform float uScale;
 
-  const put = (
-    act: number,
-    i: number,
-    ax: number, ay: number, az: number,
-    bx: number, by: number, bz: number,
-  ) => {
-    const at = act * stride + i * 6;
-    targets[at] = ax; targets[at + 1] = ay; targets[at + 2] = az;
-    targets[at + 3] = bx; targets[at + 4] = by; targets[at + 5] = bz;
-  };
+  varying float vLit;
 
-  for (let i = 0; i < SEGMENTS; i++) {
-    const across = i / (SEGMENTS - 1);
-    const jitter = rand(i);
+  void main() {
+    // Each particle starts a quarter of the way behind the one ahead of it, so
+    // the field streams into its next shape rather than jumping into it.
+    float staggered = clamp((uMix - aSeed * 0.28) / 0.72, 0.0, 1.0);
+    float eased = staggered * staggered * (3.0 - 2.0 * staggered);
 
-    // ---- I. A waveform -----------------------------------------------------
-    // Vertical bars along a centre line, tallest in the middle, with the
-    // roughness of a real utterance rather than a smooth envelope.
-    const x = (across - 0.5) * 5.4;
-    const envelope = Math.cos((across - 0.5) * Math.PI) ** 1.6;
-    const height = envelope * (0.28 + Math.abs(Math.sin(i * 1.7)) * 0.95) * (0.55 + jitter * 0.6);
-    put(0, i, x, -height, 0, x, height, 0);
+    vec3 here = mix(aFrom, aTo, eased) * uScale;
 
-    // ---- II. A document ----------------------------------------------------
-    // The bars lie down. Ruled lines on a sheet, indented like a paragraph,
-    // with a few short ones so it reads as written text and not as a grid.
-    const rules = 26;
-    const line = i % rules;
-    const column = Math.floor(i / rules);
-    const width = 0.42 + rand(i + 900) * 0.42;
-    const left = -1.35 + column * 0.06;
-    const ly = 1.05 - (line / (rules - 1)) * 2.1;
-    put(1, i, left, ly, 0, left + width * 2.2, ly, 0);
+    // The heartbeat, felt only while the field is still one point.
+    here *= 1.0 + uPulse * 0.16;
 
-    // ---- III. Two panels, and the beam between them -------------------------
-    // Every twelfth segment becomes the link. The rest split left and right —
-    // the same sheet, now in two places at once, which is the point of the act.
-    if (i % 12 === 0) {
-      const along = rand(i + 1700);
-      const nextAlong = Math.min(1, along + 0.06);
-      const arc = (a: number) => Math.sin(a * Math.PI) * 0.62;
-      put(
-        2, i,
-        lerp(-1.55, 1.55, along), arc(along), 0,
-        lerp(-1.55, 1.55, nextAlong), arc(nextAlong), 0,
-      );
-    } else {
-      const right = i % 2 === 0;
-      const side = right ? 1.75 : -1.75;
-      put(
-        2, i,
-        side + left * 0.6, ly * 0.62, 0,
-        side + (left + width * 1.5) * 0.6, ly * 0.62, 0,
-      );
-    }
+    vec4 view = modelViewMatrix * vec4(here, 1.0);
+    gl_Position = projectionMatrix * view;
 
-    // ---- IV. A network ------------------------------------------------------
-    // Nine sites on a plane, each a small cluster, joined to the site beside
-    // them. Seen from above and slightly to the side.
-    const site = i % 9;
-    const sx = ((site % 3) - 1) * 3.05;
-    const sz = (Math.floor(site / 3) - 1) * 2.35;
-    const spoke = i % 7 === 0;
-    if (spoke) {
-      // A link between neighbouring sites: the part that makes it a network
-      // rather than nine unrelated diagrams.
-      const to = (site + 1) % 9;
-      const tx = ((to % 3) - 1) * 3.05;
-      const tz = (Math.floor(to / 3) - 1) * 2.35;
-      put(3, i, sx, 0, sz, tx, 0, tz);
-    } else {
-      const angle = rand(i + 2600) * Math.PI * 2;
-      const reach = 0.34 + rand(i + 3300) * 0.62;
-      put(
-        3, i,
-        sx, 0, sz,
-        sx + Math.cos(angle) * reach,
-        (rand(i + 4100) - 0.5) * 0.5,
-        sz + Math.sin(angle) * reach,
-      );
-    }
+    // Light falls off with distance from the travelling band, plus a little
+    // from depth, so the far side of the field sits behind the near side.
+    float band = 1.0 - clamp(abs(here.x - uSweep) / 2.6, 0.0, 1.0);
+    vLit = band * band * 0.9 + clamp(0.5 + here.z * 0.3, 0.0, 1.0) * 0.28 + uPulse * 0.35;
+
+    gl_PointSize = uSize * (1.0 + vLit * 0.7) * (300.0 / -view.z);
+  }
+`;
+
+const FRAGMENT = /* glsl */ `
+  precision mediump float;
+
+  uniform float uOpacity;
+  varying float vLit;
+
+  // The steel: ground, mid, sky, highlight. A particle's place on this ramp is
+  // how much light is on it, not where it sits — so the field reads as one
+  // material rather than as a gradient somebody painted on.
+  vec3 steel(float t) {
+    vec3 ground = vec3(0.000, 0.098, 0.302);
+    vec3 mid    = vec3(0.118, 0.353, 0.659);
+    vec3 sky    = vec3(0.369, 0.784, 0.902);
+    vec3 hot    = vec3(0.863, 0.937, 1.000);
+    if (t < 0.42) return mix(ground, mid, t / 0.42);
+    if (t < 0.76) return mix(mid, sky, (t - 0.42) / 0.34);
+    return mix(sky, hot, clamp((t - 0.76) / 0.24, 0.0, 1.0));
   }
 
-  return targets;
-}
+  void main() {
+    // A round, soft point. Discarding the corners is what stops 24,000 squares
+    // reading as static.
+    vec2 offset = gl_PointCoord - vec2(0.5);
+    float d = dot(offset, offset);
+    if (d > 0.25) discard;
+    float falloff = 1.0 - smoothstep(0.06, 0.25, d);
+
+    gl_FragColor = vec4(steel(0.14 + vLit), falloff * uOpacity);
+  }
+`;
 
 export function StoryScene({
   /** 0 → 1 across the pinned section. Read every frame; never React state. */
@@ -225,10 +166,16 @@ export function StoryScene({
       return;
     }
 
+    // What the machine says it can afford. `deviceMemory` is Chromium-only and
+    // absent elsewhere, which is why its absence is not treated as "low".
+    const cores = navigator.hardwareConcurrency ?? 8;
+    const memory = (navigator as { deviceMemory?: number }).deviceMemory ?? 8;
+    const count = cores < 4 || memory < 4 || window.innerWidth < 1024 ? LIGHT : FULL;
+
     const width = () => host.clientWidth || 1;
     const height = () => host.clientHeight || 1;
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(width(), height(), false);
     renderer.domElement.style.width = "100%";
     renderer.domElement.style.height = "100%";
@@ -236,38 +183,69 @@ export function StoryScene({
     host.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(48, width() / height(), 0.1, 60);
+    const camera = new THREE.PerspectiveCamera(42, width() / height(), 0.1, 80);
 
-    const targets = buildTargets();
-    const stride = SEGMENTS * 6;
-    const positions = new Float32Array(stride);
-    const colors = new Float32Array(stride);
-    positions.set(targets.subarray(0, stride));
+    // All five arrangements, built once. Roughly three megabytes at full count
+    // and a few milliseconds — cheap enough to do up front, which is what keeps
+    // an act boundary from stuttering while it computes the shape it is
+    // already halfway into.
+    const shapes = SHAPES.map((build) => build(count));
+
+    const from = new THREE.BufferAttribute(new Float32Array(shapes[0]), 3);
+    const to = new THREE.BufferAttribute(new Float32Array(shapes[1]), 3);
+    const seeds = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const x = Math.sin(i * 91.7 + 13.1) * 43758.5453;
+      seeds[i] = x - Math.floor(x);
+    }
 
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    // `position` is required by three even though the shader ignores it.
+    geometry.setAttribute("position", from);
+    geometry.setAttribute("aFrom", from);
+    geometry.setAttribute("aTo", to);
+    geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
+    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 30);
 
-    const material = new THREE.LineBasicMaterial({
-      vertexColors: true,
+    const uniforms = {
+      uMix: { value: 0 },
+      uPulse: { value: 0 },
+      uSize: { value: 1.7 },
+      uSweep: { value: -4 },
+      uScale: { value: 1 },
+      uOpacity: { value: 0.9 },
+    };
+
+    const material = new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: VERTEX,
+      fragmentShader: FRAGMENT,
       transparent: true,
-      opacity: 0.95,
-      // Additive, so crossing lines brighten where the object is dense — which
-      // is what gives a lattice of thin lines the weight of a solid surface.
-      blending: THREE.AdditiveBlending,
       depthWrite: false,
+      // Additive, so where the field is dense it brightens — which is what
+      // gives a cloud of points the weight of a lit surface.
+      blending: THREE.AdditiveBlending,
     });
 
-    const lines = new THREE.LineSegments(geometry, material);
-    scene.add(lines);
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
 
-    const position = geometry.getAttribute("position") as THREE.BufferAttribute;
-    const color = geometry.getAttribute("color") as THREE.BufferAttribute;
-    const tint = new THREE.Color();
+    /** Which pair of shapes the attributes currently hold. */
+    let loaded = 0;
+    const swapTo = (pair: number) => {
+      if (pair === loaded) return;
+      (from.array as Float32Array).set(shapes[pair]);
+      (to.array as Float32Array).set(shapes[Math.min(shapes.length - 1, pair + 1)]);
+      from.needsUpdate = true;
+      to.needsUpdate = true;
+      loaded = pair;
+    };
 
     let eased = 0;
-    let camZ = 3.4;
-    let camY = 0;
+    const eye = new THREE.Vector3(...CAMERA[0].position);
+    const look = new THREE.Vector3(...CAMERA[0].target);
+    const wantEye = new THREE.Vector3();
+    const wantLook = new THREE.Vector3();
 
     let frame = 0;
     let running = true;
@@ -281,75 +259,49 @@ export function StoryScene({
       eased += (target - eased) * (1 - Math.exp(-dt * 5.5));
       const t = eased;
 
-      const span = t * 3;
-      const from = Math.min(2, Math.floor(span));
-      const blend = smoothstep(0, 1, span - from);
-      const a0 = from * stride;
-      const a1 = (from + 1) * stride;
+      // Four transitions across five acts.
+      const span = t * (shapes.length - 1);
+      const pair = Math.min(shapes.length - 2, Math.floor(span));
+      swapTo(pair);
+      uniforms.uMix.value = clamp01(span - pair);
 
-      // Only the waveform moves on its own. Once the object is a document it
-      // holds still, because a record that shimmers is a record nobody trusts.
-      const speaking = 1 - smoothstep(0.02, 0.24, t);
-      const phase = now / 190;
+      // Sixty beats a minute, and only while the field is still one point.
+      // A record that throbs is a record nobody trusts.
+      const alive = 1 - smoothstep(t / 0.16);
+      const beat = Math.max(0, Math.sin((now / 1000) * Math.PI)) ** 6;
+      uniforms.uPulse.value = beat * alive;
 
-      // The specular band: where the light is, right now, in object x.
-      const sweep = ((now / 2600) % 1) * 9 - 4.5;
+      uniforms.uSweep.value = ((now / 3400) % 1) * 24 - 12;
+      uniforms.uSize.value = lerp(2.6, 1.25, smoothstep(t * 1.4));
+      uniforms.uOpacity.value = 0.55 + 0.4 * smoothstep(t / 0.12);
 
-      for (let i = 0; i < SEGMENTS; i++) {
-        const at = i * 6;
-        let brightest = 0;
+      // The camera walks the story: close enough to hear one person, far
+      // enough to see the system they are part of.
+      const cam = t * (CAMERA.length - 1);
+      const step = Math.min(CAMERA.length - 2, Math.floor(cam));
+      const between = smoothstep(cam - step);
+      const a = CAMERA[step];
+      const b = CAMERA[step + 1];
+      wantEye.set(
+        lerp(a.position[0], b.position[0], between),
+        lerp(a.position[1], b.position[1], between),
+        lerp(a.position[2], b.position[2], between),
+      );
+      wantLook.set(
+        lerp(a.target[0], b.target[0], between),
+        lerp(a.target[1], b.target[1], between),
+        lerp(a.target[2], b.target[2], between),
+      );
 
-        for (let e = 0; e < 2; e++) {
-          const o = at + e * 3;
-          const x = lerp(targets[a0 + o], targets[a1 + o], blend);
-          let y = lerp(targets[a0 + o + 1], targets[a1 + o + 1], blend);
-          const z = lerp(targets[a0 + o + 2], targets[a1 + o + 2], blend);
-
-          // The bars breathe while the voice is still being spoken.
-          if (speaking > 0.001) {
-            y *= 1 + Math.sin(phase + i * 0.6) * 0.42 * speaking;
-          }
-
-          positions[o] = x;
-          positions[o + 1] = y;
-          positions[o + 2] = z;
-
-          // Light falls off with distance from the band, and a little with
-          // depth, so the far side of the lattice sits behind the near side.
-          const lit = Math.max(0, 1 - Math.abs(x - sweep) / 2.1) ** 2;
-          const depth = clamp01(0.5 + z * 0.35);
-          brightest = Math.max(brightest, lit * 0.85 + depth * 0.22);
-        }
-
-        steelAt(0.16 + brightest, tint);
-        for (let e = 0; e < 2; e++) {
-          const o = at + e * 3;
-          colors[o] = tint.r;
-          colors[o + 1] = tint.g;
-          colors[o + 2] = tint.b;
-        }
-      }
-
-      position.needsUpdate = true;
-      color.needsUpdate = true;
-
-      // The camera walks back through the story: close enough to hear one
-      // person, far enough to see the system they are part of.
-      const wantZ = lerp(3.4, 9.6, smoothstep(0, 1, t));
-      const wantY = lerp(0, 2.7, smoothstep(0.62, 1, t));
       const k = 1 - Math.exp(-dt * 4);
-      camZ += (wantZ - camZ) * k;
-      camY += (wantY - camY) * k;
-      camera.position.set(0, camY, camZ);
-      camera.lookAt(0, lerp(0, -0.7, smoothstep(0.62, 1, t)), 0);
+      eye.lerp(wantEye, k);
+      look.lerp(wantLook, k);
+      camera.position.copy(eye);
+      camera.lookAt(look);
 
-      // Flat while it is a waveform and a sheet — both are things you read
-      // face-on — and turning only once it becomes a network, which is the one
-      // act that has a shape worth walking around.
-      lines.rotation.y = smoothstep(0.6, 1, t) * 0.42 + now / 42000;
-      lines.rotation.x = smoothstep(0.68, 1, t) * 0.22;
-
-      material.opacity = 0.55 + 0.4 * smoothstep(0.02, 0.2, t);
+      // Flat while it is something you read face-on — a trace and a mark are
+      // read square — and turning only once it becomes a place.
+      points.rotation.y = smoothstep((t - 0.62) / 0.38) * 0.3 + now / 60000;
 
       renderer.render(scene, camera);
       if (running) frame = requestAnimationFrame(draw);

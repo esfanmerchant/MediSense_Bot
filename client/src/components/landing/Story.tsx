@@ -45,6 +45,7 @@ const StoryScene = dynamic(
 
 interface Act {
   numeral: string;
+  chip: [string, string];
   clock: string;
   when: [string, string];
   lead: [string, string];
@@ -62,56 +63,73 @@ interface Act {
 const ACTS: Act[] = [
   {
     numeral: "I",
+    chip: ["A new chapter for healthcare", "Sehat ka naya baab"],
     clock: "08:00",
     when: ["Morning", "Subah"],
-    lead: ["It starts with a", "Shuruaat hoti hai ek"],
-    accent: ["spoken symptom.", "boli hui taklif se."],
+    lead: ["It starts with a single", "Shuruaat hoti hai ek"],
+    accent: ["heartbeat.", "dharkan se."],
     body: [
-      "A patient holds the button and describes what is wrong, in their own words. No form, no dropdown, no spelling a symptom they have never had to write down.",
-      "Mareez button daba kar apne alfaz mein batata hai kya taklif hai. Na form, na dropdown, na koi aisa lafz likhna jo us ne kabhi likha hi nahi.",
+      "Every recovery begins quietly — with one symptom, one question, and somebody listening carefully.",
+      "Har shifa khamoshi se shuru hoti hai — ek alamat, ek sawal, aur koi jo dhyan se sunta hai.",
     ],
   },
   {
     numeral: "II",
+    chip: ["Voice symptom intake", "Awaaz se alamat"],
     clock: "08:05",
     when: ["Five minutes later", "Paanch minute baad"],
-    lead: ["MediSense turns it into a", "MediSense usse banata hai ek"],
-    accent: ["structured record.", "record."],
+    lead: ["A pulse that", "Ek nabz jo"],
+    accent: ["learns to listen.", "sunna seekh leti hai."],
     body: [
-      "Their words are kept as their words. The assistant names the department to book — never the illness, because that is a doctor's sentence to write.",
-      "Alfaz un ke apne rehte hain. Assistant department batata hai — bimari nahi, kyunki woh jumla doctor ka hai.",
+      "Speak in Urdu or English. What is said becomes symptoms, severity and duration — with no form to fill in and no word to spell.",
+      "Urdu ya English mein bolein. Jo kaha jaye woh alamat, shiddat aur muddat ban jata hai — na form bharna, na koi lafz likhna.",
     ],
   },
   {
     numeral: "III",
+    chip: ["Reports · Prescriptions · Vitals", "Reports · Nuskhe · Vitals"],
     clock: "10:30",
     when: ["Before the visit", "Visit se pehle"],
-    lead: ["And hands it to the", "Aur pohanchata hai"],
-    accent: ["treating doctor.", "ilaj karne wale doctor tak."],
+    lead: ["And turns it into a", "Aur usse banati hai ek"],
+    accent: ["record.", "record."],
     body: [
-      "The patient carries nothing. Every access is written to a trail that cannot be edited or deleted — so the record travels, and the fact that it travelled is permanent.",
-      "Mareez kuchh nahi le kar jata. Har rasai aisi trail mein likhi jati hai jo na badli ja sakti hai na mitayi — record safar karta hai, aur safar ka nishan hamesha rehta hai.",
+      "Lab reports and handwritten prescriptions are read and structured; live vitals join them. Every access is written to a trail nobody can edit or delete.",
+      "Lab reports aur haath se likhe nuskhe parhe aur tarteeb diye jate hain; live vitals un ke saath aa milte hain. Har rasai aisi trail mein likhi jati hai jo koi badal ya mita nahi sakta.",
     ],
   },
   {
     numeral: "IV",
+    chip: ["Patient · Doctor · Admin", "Mareez · Doctor · Admin"],
+    clock: "11:15",
+    when: ["At the clinic", "Clinic par"],
+    lead: ["One record,", "Ek record,"],
+    accent: ["three views.", "teen nazrein."],
+    body: [
+      "Patients see their care. Doctors see everything before the visit begins. Administrators see the hospital. The same data, entered once.",
+      "Mareez apna ilaj dekhta hai. Doctor visit shuru hone se pehle sab kuchh dekh leta hai. Admin poora hospital. Wahi data, ek hi baar darj.",
+    ],
+  },
+  {
+    numeral: "V",
+    chip: ["Three portals · Fully audit-logged", "Teen portals · Poori audit-log"],
     clock: "21:00",
     when: ["That evening", "Usi shaam"],
-    lead: ["One consultation becomes a", "Ek consultation se banta hai poora"],
-    accent: ["connected system.", "juda hua nizaam."],
+    lead: ["Where every patient", "Jahan har mareez"],
+    accent: ["is seen.", "dekha jata hai."],
     body: [
-      "The invoice was raised the moment the visit was marked complete. The medication reminder arrives at nine. Multiply by every clinic on the platform.",
-      "Visit mukammal hote hi invoice ban gaya tha. Dawa ki yaad-dehani nau baje aa jati hai. Isse platform ke har clinic se zarb dein.",
+      "The invoice was raised the moment the visit was marked complete. The reminder arrives at nine. Multiply that by every clinic on the platform.",
+      "Visit mukammal hote hi invoice ban gaya tha. Yaad-dehani nau baje aa jati hai. Isse platform ke har clinic se zarb dein.",
     ],
   },
 ];
 
 /** Where each act fades in, holds, and leaves. */
 const WINDOWS: [number, number, number, number][] = [
-  [0.0, 0.03, 0.19, 0.24],
-  [0.26, 0.31, 0.44, 0.49],
-  [0.51, 0.56, 0.69, 0.74],
-  [0.76, 0.81, 1.0, 1.0],
+  [0.0, 0.02, 0.14, 0.185],
+  [0.2, 0.235, 0.33, 0.375],
+  [0.39, 0.425, 0.55, 0.595],
+  [0.61, 0.645, 0.75, 0.795],
+  [0.81, 0.845, 1.0, 1.0],
 ];
 
 /**
@@ -127,10 +145,11 @@ const WINDOWS: [number, number, number, number][] = [
  * this keeps working on the machines with no WebGL at all.
  */
 const SKIES = [
-  "radial-gradient(120% 80% at 50% 8%, #062A63 0%, #00194D 46%, #000E2C 100%)",
-  "radial-gradient(120% 80% at 50% 18%, #0A3A80 0%, #00194D 52%, #000E2C 100%)",
-  "radial-gradient(120% 80% at 50% 34%, #1257A8 0%, #06285C 54%, #00133A 100%)",
-  "radial-gradient(120% 90% at 50% 62%, #2F84C4 0%, #0B3E80 46%, #00194D 100%)",
+  "radial-gradient(110% 70% at 50% 50%, #062A63 0%, #00194D 38%, #040B1F 100%)",
+  "radial-gradient(120% 75% at 50% 44%, #083073 0%, #00194D 44%, #040B1F 100%)",
+  "radial-gradient(120% 80% at 50% 38%, #0A3A80 0%, #041F55 50%, #040B1F 100%)",
+  "radial-gradient(125% 85% at 50% 34%, #1257A8 0%, #062A63 48%, #020A1C 100%)",
+  "radial-gradient(140% 95% at 50% 24%, #2F84C4 0%, #0B3E80 40%, #00133A 100%)",
 ];
 
 function Frame({
@@ -153,7 +172,11 @@ function Frame({
       style={{ opacity, y }}
       className="absolute inset-x-0 mx-auto max-w-3xl px-6 text-center"
     >
-      <p className="mono-caps text-[11px] text-[#5EC8E6]">
+      <span className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-[#AFC9E8]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#14C4C1]" />
+        {tr(...act.chip)}
+      </span>
+      <p className="mono-caps mt-4 text-[11px] text-[#5EC8E6]">
         {act.clock} · {tr(...act.when)}
       </p>
       <p className="font-display mt-4 text-4xl font-black leading-[1.06] tracking-tight text-white sm:text-6xl lg:text-7xl">
@@ -248,7 +271,7 @@ export function Story({
             {ACTS.map((item) => (
               <li key={item.numeral} className="border-l-2 border-line pl-5">
                 <p className="mono-caps text-[11px] text-primary">
-                  {item.clock} · {tr(...item.when)}
+                  {item.clock} · {tr(...item.when)} · {tr(...item.chip)}
                 </p>
                 <p className="font-display mt-1.5 text-2xl font-bold leading-tight text-strong">
                   {tr(...item.lead)} <span className="text-gradient-brand">{tr(...item.accent)}</span>
@@ -273,7 +296,7 @@ export function Story({
     <section
       ref={track}
       aria-label={tr("One day, one patient", "Ek din, ek mareez")}
-      className="relative h-[400vh]"
+      className="relative h-[600vh]"
     >
       <div className="sticky top-0 h-screen overflow-hidden">
         {/* The sky. Four states, cross-faded — night at eight in the morning,
@@ -304,6 +327,31 @@ export function Story({
             transition: "opacity 700ms",
           }}
         />
+
+        {/* The rail. Five ticks, filled to where the reader has got to — the
+            one thing on screen that says how long this goes on for, which a
+            pinned scene owes anybody who cannot tell whether scrolling is
+            doing anything. */}
+        <div
+          aria-hidden
+          className="absolute right-5 top-1/2 hidden h-52 w-0.5 -translate-y-1/2 bg-white/10 sm:block"
+        >
+          <motion.span
+            className="absolute inset-x-0 top-0 origin-top bg-gradient-to-b from-[#14C4C1] to-[#1A8FC7]"
+            style={{ height: "100%", scaleY: progress }}
+          />
+          {ACTS.map((item, i) => (
+            <span
+              key={item.numeral}
+              className="absolute -left-[3px] h-2 w-2 rounded-full transition-colors duration-300"
+              style={{
+                top: `${(i / (ACTS.length - 1)) * 100}%`,
+                background: i <= act ? "#14C4C1" : "#2A3E63",
+                boxShadow: i === act ? "0 0 0 4px rgba(20,196,193,0.18)" : undefined,
+              }}
+            />
+          ))}
+        </div>
 
         {/* The act, so a reader always knows how much day is left. */}
         <div className="mono-caps absolute left-6 top-24 flex items-center gap-3 text-[11px] text-white/55 sm:left-10">

@@ -18,9 +18,9 @@
  */
 
 import { Bento } from "@/components/landing/Bento";
+import { DayInTheLife } from "@/components/landing/DayInTheLife";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Footer } from "@/components/landing/Footer";
-import { Hero } from "@/components/landing/Hero";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { Nav } from "@/components/landing/Nav";
 import { Portals } from "@/components/landing/Portals";
@@ -53,7 +53,12 @@ export default function Home() {
       <Nav primaryHref={primaryHref} primaryLabel={navLabel} showSignIn={!loading && !user} />
 
       <main id="main">
-        <Hero primaryHref={primaryHref} primaryLabel={heroLabel} />
+        {/* The page opens as a story rather than a pitch: one patient's day,
+            scrubbed by scroll. A feature grid can list what this product has;
+            only a sequence can show that a symptom spoken at eight in the
+            morning is on a doctor's screen by half past ten. The old hero is
+            gone rather than pushed down — two openings is no opening. */}
+        <DayInTheLife primaryHref={primaryHref} primaryLabel={heroLabel} />
         <StatsBand />
         <Portals />
         <Bento />

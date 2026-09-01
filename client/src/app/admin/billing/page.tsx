@@ -10,11 +10,23 @@
 
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
 import { useTr } from "@/lib/lang";
 import { BillingRates } from "@/components/BillingRates";
 import { PaymentAccount } from "@/components/PaymentAccount";
 import { PaymentQueue } from "@/components/PaymentQueue";
 import { InvoicesPanel } from "@/components/billing";
+
+const SECTIONS: SectionSpec[] = [
+  { id: "to-confirm", label: "To confirm", icon: "fact_check", badge: "warning" },
+  { id: "rates", label: "Rates", icon: "percent" },
+  { id: "wallets", label: "Wallets", icon: "account_balance_wallet" },
+  { id: "invoices", label: "Invoices", icon: "receipt_long" },
+];
 
 export default function AdminBilling() {
   const tr = useTr();
@@ -32,20 +44,35 @@ export default function AdminBilling() {
 
         {/* Payments waiting on somebody come first: it is the only thing on
             this page that is *work*, and the rest is reference. */}
-        <div className="mt-6">
+        <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
+
+        <Section id="to-confirm">
+<div className="mt-6">
           <PaymentQueue />
         </div>
 
         {/* Then the settings that shape what the ledger below will look like. */}
-        <div className="mt-6">
+        
+        </Section>
+
+        <Section id="rates">
+<div className="mt-6">
           <BillingRates />
         </div>
 
-        <div className="mt-6">
+        
+        </Section>
+
+        <Section id="wallets">
+<div className="mt-6">
           <PaymentAccount />
         </div>
 
-        <div className="mt-6">
+        
+        </Section>
+
+        <Section id="invoices">
+<div className="mt-6">
           <InvoicesPanel
             canManage
             title={tr("All invoices", "Tamam invoices")}
@@ -55,6 +82,9 @@ export default function AdminBilling() {
             )}
           />
         </div>
+        </Section>
+
+        
       </div>
     </AppShell>
   );

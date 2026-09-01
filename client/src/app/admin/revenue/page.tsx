@@ -19,6 +19,11 @@ import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
 import { CategoryBars, TimeBars, type Bar } from "@/components/charts";
 import { Card, ErrorState, SkeletonRows, cx } from "@/components/ui";
 import { revenue, type RevenueGrain } from "@/lib/api";
@@ -72,6 +77,12 @@ function periodLabel(iso: string, grain: RevenueGrain): string {
   return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
+const SECTIONS: SectionSpec[] = [
+  { id: "totals", label: "Totals", icon: "payments" },
+  { id: "over-time", label: "Over time", icon: "bar_chart" },
+  { id: "by-speciality", label: "By speciality", icon: "pie_chart" },
+];
+
 export default function AdminRevenue() {
   const tr = useTr();
   const [grain, setGrain] = useState<RevenueGrain>("month");
@@ -112,7 +123,10 @@ export default function AdminRevenue() {
 
         {totals && (
           <>
-            <Card>
+            <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
+
+            <Section id="totals">
+<Card>
               <p className="text-[11px] font-bold uppercase tracking-wider text-faint">
                 {tr("Handled all time", "Ab tak kul raqam")}
               </p>
@@ -161,7 +175,11 @@ export default function AdminRevenue() {
               </div>
             </Card>
 
-            <Card
+            
+            </Section>
+
+            <Section id="over-time">
+<Card
               icon="bar_chart"
               title={tr("Over time", "Waqt ke saath")}
               action={
@@ -207,6 +225,9 @@ export default function AdminRevenue() {
               )}
             </Card>
 
+            </Section>
+
+            <Section id="by-speciality">
             {specialities.length > 0 && (
               <Card icon="pie_chart" title={tr("By speciality", "Speciality ke hisaab se")}>
                 <CategoryBars
@@ -226,6 +247,9 @@ export default function AdminRevenue() {
                 </p>
               </Card>
             )}
+              </Section>
+
+              
           </>
         )}
       </div>

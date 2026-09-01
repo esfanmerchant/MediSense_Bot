@@ -14,6 +14,11 @@ import { useMemo } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
 import { PrescriptionRow, RecordTimeline } from "@/components/records";
 import {
   Card,
@@ -27,6 +32,13 @@ import {
 import { prescriptions as prescriptionsApi, records } from "@/lib/api";
 import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
+
+const SECTIONS: SectionSpec[] = [
+  { id: "active-medication", label: "Current medicines", icon: "pill" },
+  { id: "consultations", label: "Consultations", icon: "clinical_notes" },
+  { id: "reported", label: "What you told us", icon: "record_voice_over" },
+  { id: "past-medication", label: "Past medicines", icon: "history" },
+];
 
 export default function PatientRecords() {
   const tr = useTr();
@@ -90,7 +102,10 @@ export default function PatientRecords() {
               />
             </div>
 
-            <Card
+            <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
+
+            <Section id="active-medication">
+<Card
               icon="pill"
               title={tr("Current medication", "Maujooda dawa")}
               description={tr(
@@ -116,7 +131,11 @@ export default function PatientRecords() {
               )}
             </Card>
 
-            <Card
+            
+            </Section>
+
+            <Section id="consultations">
+<Card
               icon="clinical_notes"
               title={tr("Consultation history", "Consultations ki tareekh")}
               description={tr("Most recent first.", "Sab se naya pehle.")}
@@ -131,7 +150,11 @@ export default function PatientRecords() {
               />
             </Card>
 
-            {told.length > 0 && (
+            
+            </Section>
+
+            <Section id="reported">
+{told.length > 0 && (
               <Card
                 icon="record_voice_over"
                 title={tr("What you told the assistant", "Aap ne assistant ko kya bataya")}
@@ -179,7 +202,11 @@ export default function PatientRecords() {
               </Card>
             )}
 
-            {stopped.length > 0 && (
+            
+            </Section>
+
+            <Section id="past-medication">
+{stopped.length > 0 && (
               <Card
                 icon="history"
                 title={tr("Past medication", "Purani dawa")}
@@ -195,6 +222,9 @@ export default function PatientRecords() {
                 </ul>
               </Card>
             )}
+            </Section>
+
+            
           </div>
         )}
       </div>

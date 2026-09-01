@@ -18,6 +18,11 @@ import { DoctorAbout, type DirectoryDoctor } from "@/components/doctors/DoctorAb
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
+import {
   AppointmentList,
   AppointmentRow,
   formatDay,
@@ -52,6 +57,12 @@ type Mode = { kind: "idle" } | { kind: "book" } | { kind: "move"; appointment: A
 
 /** What just happened, for the success card. */
 type Celebration = "booked" | "moved" | null;
+
+const SECTIONS: SectionSpec[] = [
+  { id: "awaiting", label: "Awaiting confirmation", icon: "hourglass_top" },
+  { id: "upcoming", label: "Upcoming", icon: "event_upcoming" },
+  { id: "past", label: "Past", icon: "history" },
+];
 
 export default function PatientAppointments() {
   const tr = useTr();
@@ -178,7 +189,10 @@ export default function PatientAppointments() {
 
         {list.data && mode.kind === "idle" && (
           <div className="stagger mt-6 space-y-6">
-            {awaiting.length > 0 && (
+            <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
+
+            <Section id="awaiting">
+{awaiting.length > 0 && (
               <Card
                 icon="hourglass_top"
                 title={tr("Awaiting confirmation", "Tasdeeq ka intezar")}
@@ -206,7 +220,11 @@ export default function PatientAppointments() {
               </Card>
             )}
 
-            <Card
+            
+            </Section>
+
+            <Section id="upcoming">
+<Card
               icon="event_upcoming"
               title={tr("Upcoming", "Aane wali")}
               description={tr(
@@ -246,7 +264,11 @@ export default function PatientAppointments() {
               )}
             </Card>
 
-            <Card icon="history" title={tr("Past and cancelled", "Guzri hui aur cancel shuda")}>
+            
+            </Section>
+
+            <Section id="past">
+<Card icon="history" title={tr("Past and cancelled", "Guzri hui aur cancel shuda")}>
               <AppointmentList
                 appointments={past}
                 emptyTitle={tr("Nothing here yet", "Abhi yahan kuchh nahi")}
@@ -260,6 +282,9 @@ export default function PatientAppointments() {
                 )}
               </AppointmentList>
             </Card>
+            </Section>
+
+            
           </div>
         )}
       </div>

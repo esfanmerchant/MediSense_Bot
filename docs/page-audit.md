@@ -7,7 +7,9 @@ the components those children delegate to (`AccountSettings`, `PaymentQueue`,
 `VitalsTable`, and so on), so a page whose blocks live inside a component is
 counted by what a person actually sees rather than by what the page file spells.
 
-**Status: audit only. Nothing implemented yet.**
+**Status: implemented.** Twelve pages carry `PageSectionNav`. Jump mode
+everywhere, including the pages the table proposed tabs for — see
+[Why jump and not tabs](#why-jump-and-not-tabs).
 
 ## How a page qualifies
 
@@ -148,3 +150,54 @@ the measurement, not on the count: if the second section really does start below
 `/admin/appointments` all have the same shape — a control block, then a list —
 and would be better served by making the list's header sticky than by a jump bar
 with two buttons in it.
+
+---
+
+## Why jump and not tabs
+
+The table above proposed tabs for five pages. All twelve shipped as jump, and
+the reason is the same one each time: on this codebase tabs would have moved
+blocks that belong beside each other.
+
+The clearest case is the doctor's patient chart. Ticking a reported symptom
+fills the consultation-note form directly below it — that is the whole point of
+the panel — and putting the two behind different tabs would break the one
+workflow the page was built around. The appointment pages are the same shape:
+"Today", "Awaiting you" and "Upcoming" are read together at the start of a
+shift, not chosen between.
+
+Jump also fails better. A tab that renders nothing looks broken; a jump target
+that is empty is one short section a reader scrolls past. Tabs remain in the
+component for a page that genuinely earns them.
+
+## What shipped
+
+| Portal | Page | Sections in the row |
+|---|---|---|
+| Patient | Dashboard | Overview · Quick actions · At a glance · Health snapshot · Latest report · Appointments · Medicines |
+| Patient | Appointments | Awaiting confirmation · Upcoming · Past |
+| Patient | Records | Current medicines · Consultations · What you told us · Past medicines |
+| Patient | Vitals | Readings · Alert thresholds |
+| Doctor | Today | Shortcuts · Today · Vital alerts · Clinic list |
+| Doctor | Appointments | Today · Awaiting you · Upcoming · Past |
+| Doctor | Patient chart | Reported · Write a note · Medication · Prescribe · Vitals · Documents · History |
+| Doctor | Availability | Weekly hours · Where you practise · Time off |
+| Doctor | Earnings | Balance · Withdrawals · Statement |
+| Admin | Dashboard | Overview · Shortcuts · Totals · Security events |
+| Admin | Billing | To confirm · Rates · Wallets · Invoices |
+| Admin | Revenue | Totals · Over time · By speciality |
+
+Counts and badges are built from loaded data, so a page never offers a button
+that scrolls to nothing.
+
+## Still open
+
+- `/admin/audit` — its two sections live inside `AuditPanel`; the row belongs in
+  that component rather than the page, and the page is one of the four whose
+  reads are audited.
+- The six two-section pages listed above. My recommendation stands: make the
+  list header sticky rather than adding a row that names two things already on
+  screen.
+- The three settings pages and the two `Segmented` pages still use their own
+  controls. They work and they are URL-synced; migrating them is tidying, not a
+  fix.

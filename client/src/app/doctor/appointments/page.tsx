@@ -15,6 +15,11 @@ import { useCallback, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import {
+  PageSectionNav,
+  Section,
+  type Section as SectionSpec,
+} from "@/components/layout/PageSectionNav";
 import { AppointmentList, AppointmentRow, formatWhen, isUpcoming } from "@/components/appointments";
 import {
   Button,
@@ -144,6 +149,13 @@ function StatusStepper({ status }: { status: AppointmentStatus }) {
     </ol>
   );
 }
+
+const SECTIONS: SectionSpec[] = [
+  { id: "today", label: "Today", icon: "today" },
+  { id: "awaiting", label: "Awaiting you", icon: "pending_actions", badge: "warning" },
+  { id: "upcoming", label: "Upcoming", icon: "event_upcoming" },
+  { id: "past", label: "Past", icon: "history" },
+];
 
 export default function DoctorAppointments() {
   const tr = useTr();
@@ -286,7 +298,10 @@ export default function DoctorAppointments() {
               )}
             </AnimatePresence>
 
-            <Card title="Today" description="Everyone you are seeing today." icon="today">
+            <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
+
+            <Section id="today">
+<Card title="Today" description="Everyone you are seeing today." icon="today">
               <AppointmentList
                 appointments={today}
                 emptyTitle="Nothing scheduled today"
@@ -302,7 +317,11 @@ export default function DoctorAppointments() {
               </AppointmentList>
             </Card>
 
-            {awaiting.length > 0 && (
+            
+            </Section>
+
+            <Section id="awaiting">
+{awaiting.length > 0 && (
               <Card
                 title="Awaiting your confirmation"
                 description="These patients have requested a time and are waiting to hear back."
@@ -320,7 +339,11 @@ export default function DoctorAppointments() {
               </Card>
             )}
 
-            <Card title="Upcoming" icon="event_upcoming">
+            
+            </Section>
+
+            <Section id="upcoming">
+<Card title="Upcoming" icon="event_upcoming">
               <AppointmentList appointments={upcoming} emptyTitle="Nothing further booked">
                 {(appointment) => (
                   <ConsultationRow
@@ -332,7 +355,11 @@ export default function DoctorAppointments() {
               </AppointmentList>
             </Card>
 
-            <Card title="Past" icon="history">
+            
+            </Section>
+
+            <Section id="past">
+<Card title="Past" icon="history">
               <AppointmentList appointments={finished} emptyTitle="No past appointments">
                 {(appointment) => (
                   <AppointmentRow
@@ -343,6 +370,9 @@ export default function DoctorAppointments() {
                 )}
               </AppointmentList>
             </Card>
+            </Section>
+
+            
           </div>
         )}
       </div>

@@ -64,11 +64,11 @@ const ACTS: Act[] = [
     numeral: "I",
     clock: "08:00",
     when: ["Morning", "Subah"],
-    lead: ["It starts with one", "Shuruaat hoti hai ek"],
-    accent: ["voice.", "awaaz se."],
+    lead: ["It starts with a", "Shuruaat hoti hai ek"],
+    accent: ["spoken symptom.", "boli hui taklif se."],
     body: [
-      "Hamza holds the button and says what hurts. No form, no dropdown, no spelling a symptom he has never had to write down.",
-      "Hamza button daba kar batata hai kya taklif hai. Na form, na dropdown, na koi aisa lafz likhna jo us ne kabhi likha hi nahi.",
+      "A patient holds the button and describes what is wrong, in their own words. No form, no dropdown, no spelling a symptom they have never had to write down.",
+      "Mareez button daba kar apne alfaz mein batata hai kya taklif hai. Na form, na dropdown, na koi aisa lafz likhna jo us ne kabhi likha hi nahi.",
     ],
   },
   {
@@ -76,10 +76,10 @@ const ACTS: Act[] = [
     clock: "08:05",
     when: ["Five minutes later", "Paanch minute baad"],
     lead: ["MediSense turns it into a", "MediSense usse banata hai ek"],
-    accent: ["record.", "record."],
+    accent: ["structured record.", "record."],
     body: [
-      "His own words, kept as his own words. The assistant names the department to book — never the illness, because that is a doctor's sentence to write.",
-      "Us ke apne alfaz, us ke apne alfaz hi rehte hain. Assistant department batata hai — bimari nahi, kyunki woh jumla doctor ka hai.",
+      "Their words are kept as their words. The assistant names the department to book — never the illness, because that is a doctor's sentence to write.",
+      "Alfaz un ke apne rehte hain. Assistant department batata hai — bimari nahi, kyunki woh jumla doctor ka hai.",
     ],
   },
   {
@@ -87,21 +87,21 @@ const ACTS: Act[] = [
     clock: "10:30",
     when: ["Before the visit", "Visit se pehle"],
     lead: ["And hands it to the", "Aur pohanchata hai"],
-    accent: ["doctor.", "doctor tak."],
+    accent: ["treating doctor.", "ilaj karne wale doctor tak."],
     body: [
-      "Hamza carries nothing. Every access is written to a trail that cannot be edited or deleted — so the record travels, and the fact that it travelled is permanent.",
-      "Hamza kuchh nahi le kar jata. Har rasai aisi trail mein likhi jati hai jo na badli ja sakti hai na mitayi — record safar karta hai, aur safar ka nishan hamesha rehta hai.",
+      "The patient carries nothing. Every access is written to a trail that cannot be edited or deleted — so the record travels, and the fact that it travelled is permanent.",
+      "Mareez kuchh nahi le kar jata. Har rasai aisi trail mein likhi jati hai jo na badli ja sakti hai na mitayi — record safar karta hai, aur safar ka nishan hamesha rehta hai.",
     ],
   },
   {
     numeral: "IV",
     clock: "21:00",
     when: ["That evening", "Usi shaam"],
-    lead: ["One patient becomes a", "Ek mareez se banta hai poora"],
-    accent: ["system.", "nizaam."],
+    lead: ["One consultation becomes a", "Ek consultation se banta hai poora"],
+    accent: ["connected system.", "juda hua nizaam."],
     body: [
-      "The bill was raised the moment the visit was marked complete. The reminder arrives at nine. Multiply by every clinic — that is the platform.",
-      "Visit mukammal hote hi bill ban gaya tha. Yaad-dehani nau baje aa jati hai. Isse har clinic se zarb dein — yahi platform hai.",
+      "The invoice was raised the moment the visit was marked complete. The medication reminder arrives at nine. Multiply by every clinic on the platform.",
+      "Visit mukammal hote hi invoice ban gaya tha. Dawa ki yaad-dehani nau baje aa jati hai. Isse platform ke har clinic se zarb dein.",
     ],
   },
 ];
@@ -115,17 +115,22 @@ const WINDOWS: [number, number, number, number][] = [
 ];
 
 /**
- * The sky, act by act.
+ * The ground, act by act. One blue, lit four ways.
  *
- * Not three.js — a CSS gradient behind a transparent canvas. Fog would cost a
- * pass on the GPU to do something two background-colours already do, and this
- * one keeps working on the machines with no WebGL at all.
+ * #00194D throughout, with a soft light source that rises and widens as the
+ * story opens out — the same trick the object uses. Four *hues* would read as
+ * four scenes; one hue under a moving light reads as one place at four times of
+ * day, which is what this is.
+ *
+ * A CSS gradient behind a transparent canvas rather than three.js fog: fog
+ * costs a pass on the GPU to do what two background colours already do, and
+ * this keeps working on the machines with no WebGL at all.
  */
 const SKIES = [
-  "linear-gradient(170deg, #050B1C 0%, #0A1733 100%)",
-  "linear-gradient(170deg, #0A1733 0%, #123059 100%)",
-  "linear-gradient(170deg, #1B4A79 0%, #3E7BA8 100%)",
-  "linear-gradient(170deg, #BCD9EE 0%, #F6F9FC 100%)",
+  "radial-gradient(120% 80% at 50% 8%, #062A63 0%, #00194D 46%, #000E2C 100%)",
+  "radial-gradient(120% 80% at 50% 18%, #0A3A80 0%, #00194D 52%, #000E2C 100%)",
+  "radial-gradient(120% 80% at 50% 34%, #1257A8 0%, #06285C 54%, #00133A 100%)",
+  "radial-gradient(120% 90% at 50% 62%, #2F84C4 0%, #0B3E80 46%, #00194D 100%)",
 ];
 
 function Frame({
@@ -148,7 +153,7 @@ function Frame({
       style={{ opacity, y }}
       className="absolute inset-x-0 mx-auto max-w-3xl px-6 text-center"
     >
-      <p className="mono-caps text-[11px] text-[#7FB6FF]">
+      <p className="mono-caps text-[11px] text-[#5EC8E6]">
         {act.clock} · {tr(...act.when)}
       </p>
       <p className="font-display mt-4 text-4xl font-black leading-[1.06] tracking-tight text-white sm:text-6xl lg:text-7xl">
@@ -158,7 +163,7 @@ function Frame({
             `text-gradient-medical` for exactly this — a coloured ground. */}
         <span className="text-gradient-medical">{tr(...act.accent)}</span>
       </p>
-      <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-[#B9C8E6] sm:text-lg">
+      <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-[#AFC9E8] sm:text-lg">
         {tr(...act.body)}
       </p>
       {children}
@@ -292,8 +297,10 @@ export function Story({
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse at center, rgba(3,10,26,0.55) 0%, rgba(3,10,26,0) 62%)",
-            opacity: act === 3 ? 0.25 : 1,
+              "radial-gradient(ellipse at center, rgba(0,15,45,0.62) 0%, rgba(0,15,45,0) 64%)",
+            // The last act is the brightest, and a scrim tuned for the dark
+            // ones would sit on it as a smudge.
+            opacity: act === 3 ? 0.45 : 1,
             transition: "opacity 700ms",
           }}
         />
@@ -302,7 +309,7 @@ export function Story({
         <div className="mono-caps absolute left-6 top-24 flex items-center gap-3 text-[11px] text-white/55 sm:left-10">
           <span className="h-px w-6 bg-white/40" />
           <span>{tr("Act", "Hissa")}</span>
-          <span className="font-display text-base text-[#7FB6FF]">{ACTS[act].numeral}</span>
+          <span className="font-display text-base text-[#5EC8E6]">{ACTS[act].numeral}</span>
         </div>
 
         <div className="absolute inset-0 grid place-items-center">
@@ -334,7 +341,7 @@ export function Story({
           className="mono-caps pointer-events-none absolute bottom-9 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2 text-[10px] text-white/55"
         >
           <span>{tr("Scroll to follow the day", "Din dekhne ke liye scroll karein")}</span>
-          <Icon name="keyboard_arrow_down" className="text-[18px] text-[#7FB6FF]" />
+          <Icon name="keyboard_arrow_down" className="text-[18px] text-[#5EC8E6]" />
         </motion.div>
       </div>
     </section>

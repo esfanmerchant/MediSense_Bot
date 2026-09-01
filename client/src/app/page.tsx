@@ -18,7 +18,7 @@
  */
 
 import { Bento } from "@/components/landing/Bento";
-import { DayInTheLife } from "@/components/landing/DayInTheLife";
+import { Story } from "@/components/landing/Story";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Footer } from "@/components/landing/Footer";
 import { HowItWorks } from "@/components/landing/HowItWorks";
@@ -54,11 +54,12 @@ export default function Home() {
 
       <main id="main">
         {/* The page opens as a story rather than a pitch: one patient's day,
-            scrubbed by scroll. A feature grid can list what this product has;
-            only a sequence can show that a symptom spoken at eight in the
-            morning is on a doctor's screen by half past ten. The old hero is
-            gone rather than pushed down — two openings is no opening. */}
-        <DayInTheLife primaryHref={primaryHref} primaryLabel={heroLabel} />
+            in four acts, over a field of points that rearranges itself from a
+            voice into a record into a system. A feature grid can list what this
+            product has; only a sequence can show that a symptom spoken at eight
+            in the morning is on a doctor's screen by half past ten. The old
+            hero is gone rather than pushed down — two openings is no opening. */}
+        <Story primaryHref={primaryHref} primaryLabel={heroLabel} />
         <StatsBand />
         <Portals />
         <Bento />

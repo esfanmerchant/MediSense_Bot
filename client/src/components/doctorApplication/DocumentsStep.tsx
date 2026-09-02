@@ -348,7 +348,7 @@ export function StepDocuments({
           <p className="flex items-center gap-2 px-1 text-sm font-medium text-strong">
             <span
               aria-hidden
-              className="pop-scale grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-white"
+              className="pop-scale grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary text-primary-on"
             >
               <Icon name="check" className="text-[14px]" />
             </span>

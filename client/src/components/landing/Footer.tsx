@@ -58,7 +58,7 @@ export function Footer() {
   ];
 
   return (
-    <footer className="bg-card">
+    <footer className="band-dark">
       <div aria-hidden className="text-line-strong">
         <EcgLine color="currentColor" width={2} height={26} speed={3} />
       </div>

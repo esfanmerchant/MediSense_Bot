@@ -19,7 +19,6 @@ import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/Icon";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { Logo } from "@/components/brand/Logo";
 import { cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
@@ -81,7 +80,6 @@ export function Nav({
           <span className="hidden sm:block">
             <LanguageToggle />
           </span>
-          <ThemeToggle />
           {showSignIn && (
             <Link
               href="/login"

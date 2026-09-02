@@ -1274,3 +1274,122 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .story-scan { animation: none; top: 46%; }
 }
+
+/* ---------------------------------------------------------------------------
+   Landing bands: sections that keep their own light or dark, whatever the
+   site theme is doing.
+
+   The landing page alternates dark and light down its length, and that
+   alternation is the design — it is what stops eight sections of cards reading
+   as one long scroll. So the bands cannot follow the theme toggle; a reader in
+   night mode would get seven dark sections and no rhythm at all.
+
+   Rather than rewriting every component's classes with literal colours, each
+   band redeclares the *tokens*. `@theme inline` means the utilities resolve
+   `--surface-canvas`, `--text-strong` and the rest at use time, and custom
+   properties cascade — so `bg-canvas` and `text-muted` inside a band come out
+   in that band's palette without the component knowing a band exists. Which is
+   the point: the sections stay readable, and the rhythm lives in one place.
+
+   Both blocks are complete rather than partial. A band that redefined only its
+   background would leave the text colour to whatever the page outside it
+   happened to be, which is exactly the unreadable-artifact bug.
+   --------------------------------------------------------------------------- */
+.band-light {
+  --brand-primary: var(--ms-blue-700);
+  --brand-primary-hover: var(--ms-blue-500);
+  --brand-primary-active: var(--ms-blue-900);
+  --brand-primary-soft: #e6eefb;
+  --brand-primary-on: #ffffff;
+  --brand-navy-deep: var(--ms-blue-900);
+  --brand-accent: #0b7f8b;
+  --brand-accent-light: #5eead4;
+  --brand-accent-soft: #dcf6f6;
+  --ms-gradient-soft: linear-gradient(135deg, rgb(11 63 168 / 0.08), rgb(20 196 193 / 0.1));
+
+  --surface-canvas: #ffffff;
+  --surface-card: #f6f9fc;
+  --surface-sunken: #eef4fa;
+  --surface-raised: #e2ecf7;
+  --surface-glass: rgb(255 255 255 / 0.72);
+
+  --text-strong: #0e1b33;
+  --text-muted: #5c6b85;
+  --text-faint: #93a1b8;
+
+  --line: #dce6f2;
+  --line-strong: #c2d1e6;
+
+  --status-stable: #0e9f6e;
+  --status-stable-soft: #e2f7ee;
+  --status-warning: #b45309;
+  --status-warning-soft: #fef3dd;
+  --status-critical: #d13438;
+  --status-critical-soft: #fdeaea;
+  --status-info: #1173a3;
+  --status-info-soft: #e2f0fa;
+
+  --shadow-sm: 0 1px 2px rgb(10 46 122 / 0.06), 0 1px 3px rgb(10 46 122 / 0.08);
+  --shadow-card: 0 1px 2px rgb(10 46 122 / 0.06), 0 8px 24px -8px rgb(10 46 122 / 0.18);
+  --shadow-overlay: 0 2px 6px rgb(10 46 122 / 0.08), 0 16px 40px -12px rgb(10 46 122 / 0.28);
+  --shadow-float: 0 24px 56px -16px rgb(10 46 122 / 0.32);
+  --glow-a: rgb(20 98 196 / 0.12);
+  --glow-b: rgb(20 196 193 / 0.14);
+
+  background: var(--surface-canvas);
+  color: var(--text-strong);
+}
+
+.band-dark {
+  --brand-primary: #6f9dff;
+  --brand-primary-hover: #8fb6ff;
+  --brand-primary-active: var(--ms-blue-700);
+  --brand-primary-soft: #16295c;
+  --brand-primary-on: #061024;
+  --brand-navy-deep: #050d20;
+  --brand-accent: #5eead4;
+  --brand-accent-light: #8ff5e6;
+  --brand-accent-soft: #0d3742;
+  --ms-gradient-soft: linear-gradient(135deg, rgb(111 157 255 / 0.14), rgb(20 196 193 / 0.14));
+
+  --surface-canvas: #061024;
+  --surface-card: #0d1b3a;
+  --surface-sunken: #122349;
+  --surface-raised: #1a2e5c;
+  --surface-glass: rgb(13 27 58 / 0.72);
+
+  --text-strong: #eaf1fb;
+  --text-muted: #9db0cc;
+  --text-faint: #6b7f9e;
+
+  --line: #1b2c52;
+  --line-strong: #2b4272;
+
+  --status-stable: #34d399;
+  --status-stable-soft: #0b2f24;
+  --status-warning: #fbbf24;
+  --status-warning-soft: #3a2a08;
+  --status-critical: #ff8085;
+  --status-critical-soft: #451418;
+  --status-info: #7cc0ea;
+  --status-info-soft: #0c2c44;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+  --shadow-overlay: 0 16px 40px -12px rgb(0 0 0 / 0.7);
+  --shadow-float: 0 24px 56px -16px rgb(0 0 0 / 0.8);
+  --glow-a: rgb(11 63 168 / 0.35);
+  --glow-b: rgb(20 196 193 / 0.16);
+
+  background: var(--surface-canvas);
+  color: var(--text-strong);
+}
+
+/* The brand ramp runs deep blue, which all but disappears on a dark band.
+   Inside one it takes the light ramp instead — the same swap `.dark` makes,
+   applied per band rather than per page. */
+.band-dark .text-gradient-brand {
+  background: linear-gradient(135deg, #8fb6ff 0%, #6ad6e6 55%, #5eead4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}

@@ -356,8 +356,8 @@ export function Stepper({
                 reachable &&
                   "cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                 // Solid, not the ramp: see the note on `checkFill` in ui.tsx.
-                done && "border-transparent bg-primary text-white",
-                active && "border-transparent bg-primary text-white shadow-glow",
+                done && "border-transparent bg-primary text-primary-on",
+                active && "border-transparent bg-primary text-primary-on shadow-glow",
                 !done && !active && "border-line-strong bg-card text-faint",
               )}
             >

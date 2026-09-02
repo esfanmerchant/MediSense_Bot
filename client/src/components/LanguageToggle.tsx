@@ -44,7 +44,11 @@ export function LanguageToggle({ onDark = false }: { onDark?: boolean }) {
               active
                 ? onDark
                   ? "bg-accent-bright text-[#053B38]"
-                  : "bg-primary text-white"
+                  : // `text-primary-on`, not `text-white`. The primary colour is a
+                    // deep blue on a light ground and a pale one on a dark
+                    // ground, so white on it is 12:1 in one theme and 2.6:1 in
+                    // the other — the token exists precisely to follow it.
+                    "bg-primary text-primary-on"
                 : onDark
                   ? "text-white/70 hover:text-white"
                   : "text-muted hover:text-strong",

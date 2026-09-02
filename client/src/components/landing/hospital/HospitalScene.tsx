@@ -67,7 +67,7 @@ const OVERVIEW = aimed([22.5, 18.2, 23.5], [0.2, 0.9, -0.9], 2.2);
  * are both in shot, which is the whole point of having built them.
  */
 function roomShot(room: Room) {
-  return aimed([room.x + 7.4, 8, room.z + 8.6], [room.x - 0.2, 0.55, room.z + 0.1], 2);
+  return aimed([room.x + 6.2, 6.7, room.z + 7.2], [room.x - 0.2, 0.5, room.z + 0.1], 1.85);
 }
 
 export const STOPS = [
@@ -426,9 +426,23 @@ export function HospitalScene({
       const b = STOPS[leg + 1];
       const blend = (from: number, to: number) => from + (to - from) * glide;
 
-      eye.x = damp(eye.x, blend(a.eye[0], b.eye[0]), 5.5, dt);
-      eye.y = damp(eye.y, blend(a.eye[1], b.eye[1]), 5.5, dt);
-      eye.z = damp(eye.z, blend(a.eye[2], b.eye[2]), 5.5, dt);
+      /* The camera lifts as it travels, and sets back down.
+         --------------------------------------------------
+         Sliding straight from one room to the next passes through the walls
+         between them, which is both ugly and a lie about a building whose
+         whole point is that its walls are real. Rising over the move and
+         coming back down reads as a camera being carried rather than a value
+         being interpolated — and it is the single thing that made the scroll
+         feel like a film instead of a slider.
+
+         Zero at both ends, so a stop is still a stop. */
+      const arc = Math.sin(Math.PI * along);
+      const lift = arc * 2.4;
+      const back = arc * 1.5;
+
+      eye.x = damp(eye.x, blend(a.eye[0], b.eye[0]) + back * 0.55, 5.5, dt);
+      eye.y = damp(eye.y, blend(a.eye[1], b.eye[1]) + lift, 5.5, dt);
+      eye.z = damp(eye.z, blend(a.eye[2], b.eye[2]) + back * 0.62, 5.5, dt);
       look.x = damp(look.x, blend(a.look[0], b.look[0]), 5.5, dt);
       look.y = damp(look.y, blend(a.look[1], b.look[1]), 5.5, dt);
       look.z = damp(look.z, blend(a.look[2], b.look[2]), 5.5, dt);
@@ -457,7 +471,7 @@ export function HospitalScene({
       // The active room, and any room under the cursor, lifts off the slab.
       built.rooms.forEach((group, index) => {
         const room = ROOMS[index];
-        const wanted = hovered === room || stop === room.id ? 0.16 : 0;
+        const wanted = stop === room.id ? 0.22 : hovered === room ? 0.16 : 0;
         group.position.y = damp(group.position.y, wanted, 8, dt);
       });
 

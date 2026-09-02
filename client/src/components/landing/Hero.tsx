@@ -234,16 +234,15 @@ export function Hero({
     };
   }, []);
 
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    const root = document.documentElement;
-    const read = () => setDark(root.classList.contains("dark"));
-    read();
-    const observer = new MutationObserver(read);
-    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-
+  /**
+   * The scene is always daylight, and the band around it is always night.
+   *
+   * The landing does not follow the theme toggle any more — it alternates dark
+   * and light down its own length, and that alternation *is* the design. A
+   * hero that flipped with the reader's night setting would break the first
+   * beat of it, and the building's own lawn and shadows were drawn for a
+   * daylight sun.
+   */
   const { scrollYProgress } = useScroll({ target: track, offset: ["start start", "end end"] });
   /**
    * The scroll, smoothed.
@@ -295,7 +294,7 @@ export function Hero({
 
   if (still) {
     return (
-      <section className="border-b border-line bg-canvas">
+      <section className="band-dark border-b border-line">
         <div className="mx-auto max-w-2xl px-6 py-16">
           <p className="mono-caps text-xs text-primary">
             {tr("A hospital that runs itself", "Ek hospital jo khud chalta hai")}
@@ -309,7 +308,7 @@ export function Hero({
               time a room moved. Somebody who cannot have the moving version
               still gets to see the place. */}
           <Image
-            src={dark ? "/hero/hospital-dark.webp" : "/hero/hospital-light.webp"}
+            src="/hero/hospital-light.webp"
             alt={tr(
               "The hospital: reception, records, ward, consultation, pharmacy and administration around a corridor.",
               "Hospital: corridor ke ird-gird reception, records, ward, consultation, pharmacy aur administration.",
@@ -348,7 +347,7 @@ export function Hero({
     <section
       ref={track}
       aria-label={tr("A hospital that runs itself", "Ek hospital jo khud chalta hai")}
-      className="relative h-[820vh]"
+      className="band-dark relative h-[820vh]"
       style={{ background: "radial-gradient(120% 90% at 50% 10%, #0A2A63 0%, #00194D 48%, #040B1F 100%)" }}
     >
       <div className="sticky top-0 h-screen overflow-hidden">
@@ -363,7 +362,7 @@ export function Hero({
           {stillOnly ? (
             <div className="flex h-full items-center justify-end pr-[4vw]">
               <Image
-                src={dark ? "/hero/hospital-dark.webp" : "/hero/hospital-light.webp"}
+                src="/hero/hospital-light.webp"
                 alt={tr(
                   "The hospital: reception, records, ward, consultation, pharmacy and administration around a corridor.",
                   "Hospital: corridor ke ird-gird reception, records, ward, consultation, pharmacy aur administration.",
@@ -382,7 +381,7 @@ export function Hero({
               onAlert={setCritical}
               onRoomClick={(room) => goToStop(room.id)}
               onUnsupported={() => setStillOnly(true)}
-              dark={dark}
+              dark={false}
             />
           )}
         </div>

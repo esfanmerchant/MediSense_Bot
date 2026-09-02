@@ -174,7 +174,7 @@ export function Bento() {
   return (
     <section
       id="kya-karta-hai"
-      className="relative scroll-mt-24 overflow-hidden border-y border-line bg-sunken py-24"
+      className="band-dark relative scroll-mt-24 overflow-hidden border-y border-line py-24"
     >
       {/* The logo's circuit routing as a flat texture, drifting against the
           scroll. It is the one thing that stops the sunken band reading as a

@@ -31,7 +31,7 @@ export function FinalCta({
   const { ref: headRef, className: headMotion } = useStagger<HTMLDivElement>();
 
   return (
-    <section className="relative overflow-hidden py-24">
+    <section className="band-light relative overflow-hidden py-24">
       <Shell>
         <Rise y={34}>
           <div className="relative">

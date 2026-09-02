@@ -202,7 +202,7 @@ export function Portals() {
   ];
 
   return (
-    <section id="portals" className="relative scroll-mt-24 overflow-hidden py-24">
+    <section id="portals" className="band-light relative scroll-mt-24 overflow-hidden py-24">
       {/* One ramp wash behind the grid, so three white cards are not floating
           on nothing. It drifts, which is the whole difference on a light page
           between depth and a gradient somebody applied once. */}

@@ -316,7 +316,7 @@ class TestGrounding:
         context = build_context(
             active_medications=["Amoxicillin 500 mg Three times daily"],
             upcoming_appointments=["12 Sep 2026 at 09:00 with Dr Iyer (Cardiology)"],
-            departments=["Cardiology", "General Medicine"],
+            specialities=["Cardiology", "General Medicine"],
         )
         assert "do not invent" in context.lower()
         assert "Amoxicillin" in context
@@ -325,7 +325,7 @@ class TestGrounding:
     def test_an_empty_record_says_so_rather_than_leaving_a_gap(self) -> None:
         # A blank list invites the model to fill it in.
         context = build_context(
-            active_medications=[], upcoming_appointments=[], departments=[]
+            active_medications=[], upcoming_appointments=[], specialities=[]
         )
         assert "none on record" in context
         assert "none booked" in context

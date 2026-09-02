@@ -114,7 +114,6 @@ const NAV: Record<Role, NavGroup[]> = {
       items: [
         { href: "/admin/appointments", label: ["Appointments", "Appointments"], icon: "calendar_today" },
         { href: "/admin/users", label: ["People", "Log"], icon: "group" },
-        { href: "/admin/departments", label: ["Departments", "Departments"], icon: "domain" },
         { href: "/admin/revenue", label: ["Revenue", "Aamdani"], icon: "monitoring" },
         { href: "/admin/billing", label: ["Billing", "Billing"], icon: "payments" },
         {

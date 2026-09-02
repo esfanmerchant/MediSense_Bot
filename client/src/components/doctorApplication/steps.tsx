@@ -21,7 +21,6 @@ import {
   Field,
   IconButton,
   Input,
-  Select,
   Textarea,
   cx,
 } from "@/components/ui";
@@ -39,7 +38,6 @@ import {
   SummaryField,
   formatQualification,
   normalizeQualification,
-  type DepartmentOption,
 } from "@/components/doctorApplication/shared";
 import type { ApplicationDocument, ApplicationDocumentKind } from "@/lib/api";
 
@@ -90,7 +88,6 @@ export interface FormState {
   address: string;
   registrationNumber: string;
   specialization: string;
-  departmentId: string;
   yearsExperience: string;
   previousHospital: string;
   clinicName: string;
@@ -113,7 +110,6 @@ export function emptyForm(): FormState {
     address: "",
     registrationNumber: "",
     specialization: "",
-    departmentId: "",
     yearsExperience: "",
     previousHospital: "",
     clinicName: "",
@@ -133,7 +129,6 @@ export function formFrom(draft: StoredApplicationDraft): FormState {
     address: draft.address ?? "",
     registrationNumber: draft.registrationNumber ?? "",
     specialization: draft.specialization ?? "",
-    departmentId: draft.departmentId ?? "",
     yearsExperience:
       draft.yearsExperience === null || draft.yearsExperience === undefined
         ? ""
@@ -238,7 +233,6 @@ export function toDraft(form: FormState, now: Date = new Date()): DoctorApplicat
     address: textOrNull(form.address),
     registrationNumber: textOrNull(form.registrationNumber),
     specialization: textOrNull(form.specialization),
-    departmentId: textOrNull(form.departmentId),
     // A row with no title is a row somebody started and abandoned, so it is not
     // sent at all. A year that was left blank is sent as `null`, like every
     // other blank here — the draft has to be storable while it is incomplete.
@@ -531,9 +525,7 @@ export function StepIdentity({ form, patch }: StepProps) {
 export function StepProfessional({
   form,
   patch,
-  departmentList,
-  departmentsLoading,
-}: StepProps & { departmentList: DepartmentOption[]; departmentsLoading: boolean }) {
+}: StepProps) {
   const tr = useTr();
   return (
     <div>
@@ -572,30 +564,6 @@ export function StepProfessional({
             value={form.specialization}
             onChange={(event) => patch({ specialization: event.target.value })}
           />
-        </Field>
-
-        <Field
-          label={tr("Department", "Department")}
-          htmlFor="application-department"
-          hint={
-            departmentsLoading
-              ? tr("Loading departments…", "Departments aa rahe hain…")
-              : tr("An administrator can move you later.", "Admin baad mein badal sakta hai.")
-          }
-        >
-          <Select
-            id="application-department"
-            value={form.departmentId}
-            disabled={departmentsLoading}
-            onChange={(event) => patch({ departmentId: event.target.value })}
-          >
-            <option value="">{tr("Not decided yet", "Abhi tay nahi")}</option>
-            {departmentList.map((department) => (
-              <option key={department.id} value={department.id}>
-                {department.name}
-              </option>
-            ))}
-          </Select>
         </Field>
 
         <Field label={tr("Years of experience", "Tajurbe ke saal")} htmlFor="application-years">
@@ -924,7 +892,6 @@ function SummarySection({
 export function StepReview({
   form,
   documents,
-  departmentName,
   consent,
   onConsentChange,
   onJump,
@@ -934,7 +901,6 @@ export function StepReview({
 }: {
   form: FormState;
   documents: ApplicationDocument[];
-  departmentName: string | null;
   consent: boolean;
   onConsentChange: (next: boolean) => void;
   onJump: (step: number) => void;
@@ -1036,7 +1002,6 @@ export function StepReview({
               label={tr("Specialization", "Specialization")}
               value={form.specialization.trim()}
             />
-            <SummaryField label={tr("Department", "Department")} value={departmentName ?? ""} />
             <SummaryField
               label={tr("Years of experience", "Tajurbe ke saal")}
               value={form.yearsExperience.trim()}

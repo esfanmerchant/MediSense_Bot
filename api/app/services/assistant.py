@@ -19,7 +19,7 @@ occasionally wrong answer — and confidence is the part that does the damage.
 So the assistant is scoped to what is safe to automate:
 
 * explaining things the patient already has — their prescriptions, their
-  appointments, what a department does;
+  appointments, what a speciality treats;
 * pointing at the right kind of care;
 * saying "this needs a person, now".
 
@@ -97,7 +97,7 @@ You are not a clinician and you never present yourself as one.
 
 What you do:
 - Explain things in plain language: what a medication they have been prescribed \
-is generally for, what a department treats, what to expect at an appointment.
+is generally for, what a speciality treats, what to expect at an appointment.
 - Help them decide how urgently to seek care.
 - Tell them clearly when something needs a doctor now.
 
@@ -276,7 +276,7 @@ def build_context(
     patient_facts: list[str] | None = None,
     active_medications: list[str],
     upcoming_appointments: list[str],
-    departments: list[str],
+    specialities: list[str],
     doctors: list[str] | None = None,
 ) -> str:
     """Everything the assistant is allowed to treat as true.
@@ -285,7 +285,7 @@ def build_context(
     is what lets it answer "what is my blood pressure tablet for" without
     guessing which tablet that is. **The doctors** are what let it answer "who
     can I see for my knee in Karachi" with real names instead of invented ones.
-    **The departments** are the specialities that exist here. **The platform
+    **The specialities** are the kinds of doctor a patient can be sent to. **The platform
     brief** is what stops it inventing a policy when asked how billing works, and
     **the navigation brief** is what lets it answer "where do I pay this" with a
     place rather than a second explanation of the policy.
@@ -309,8 +309,8 @@ def build_context(
         + (", ".join(upcoming_appointments) if upcoming_appointments else "none booked")
     )
     parts.append(
-        "Departments at this hospital: "
-        + (", ".join(departments) if departments else "not listed")
+        "Specialities available on the platform: "
+        + (", ".join(specialities) if specialities else "not listed")
     )
 
     if doctors:

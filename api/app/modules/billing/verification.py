@@ -209,8 +209,8 @@ async def payment_ledger(
     reviewers: dict[str, str] = {}
     if reviewer_ids:
         reviewers = {
-            row_id: name
-            for row_id, name in (
+            row.id: row.name
+            for row in (
                 await db.execute(select(User.id, User.name).where(User.id.in_(reviewer_ids)))
             ).all()
         }

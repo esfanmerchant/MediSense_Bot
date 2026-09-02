@@ -16,11 +16,7 @@ import { AppShell } from "@/components/AppShell";
 import { CircuitNodes } from "@/components/brand/CircuitNodes";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
-import {
-  PageSectionNav,
-  Section,
-  type Section as SectionSpec,
-} from "@/components/layout/PageSectionNav";
+import { Section } from "@/components/layout/PageSectionNav";
 import {
   Avatar,
   Badge,
@@ -500,37 +496,6 @@ export default function PatientDashboard() {
     ? { startTime: data.upcomingAppointments[0].startTime, doctor: data.upcomingAppointments[0].doctor.name }
     : null;
 
-  // Only the sections that are actually on screen. Offering "Latest report" to
-  // somebody with no reports would be a button that scrolls to nothing, which
-  // teaches people the row is decorative.
-  const sections: SectionSpec[] = [
-    { id: "welcome", label: tr("Overview", "Khulasa"), icon: "waving_hand" },
-    { id: "quick-actions", label: tr("Quick actions", "Foran kaam"), icon: "bolt" },
-    ...(data
-      ? [
-          {
-            id: "at-a-glance",
-            label: tr("At a glance", "Ek nazar"),
-            icon: "grid_view",
-          },
-          { id: "snapshot", label: tr("Health snapshot", "Sehat"), icon: "monitor_heart" },
-          { id: "latest-report", label: tr("Latest report", "Nayi report"), icon: "description" },
-          {
-            id: "appointments",
-            label: tr("Appointments", "Appointments"),
-            icon: "event_upcoming",
-            count: data.upcomingAppointments.length,
-          },
-          {
-            id: "medication",
-            label: tr("Medicines", "Dawaiyan"),
-            icon: "pill",
-            count: data.activePrescriptions.length,
-          },
-        ]
-      : []),
-  ];
-
   return (
     <AppShell role="PATIENT">
       <div id="main" className="space-y-6">
@@ -543,9 +508,6 @@ export default function PatientDashboard() {
           )}
         />
 
-        {/* What is on this page. Without it a phone shows the welcome card and
-            nothing else — six more sections exist and nothing says so. */}
-        <PageSectionNav mode="jump" label={tr("Sections", "Hissay")} sections={sections} />
 
         <Section id="welcome">
           {user && <Welcome name={user.name} next={next} />}
@@ -563,7 +525,7 @@ export default function PatientDashboard() {
             icon="smart_toy"
             tone="accent"
             title={tr("Ask the assistant", "Assistant se poochein")}
-            description={tr("Prescriptions, reports, departments", "Nuskhe, reports, departments")}
+            description={tr("Prescriptions, reports, history", "Nuskhe, reports, tareekh")}
           />
           <QuickAction
             href="/patient/documents"

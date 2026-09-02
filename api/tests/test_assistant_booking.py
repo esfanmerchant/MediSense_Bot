@@ -84,7 +84,7 @@ class TestWhatTheModelIsTold:
         # Asked "how does billing work", a model with no brief invents a policy
         # that sounds plausible and is wrong.
         context = assistant.build_context(
-            active_medications=[], upcoming_appointments=[], departments=[]
+            active_medications=[], upcoming_appointments=[], specialities=[]
         )
         assert "ABOUT MEDISENSE" in context
         assert "3 days" in context
@@ -95,7 +95,7 @@ class TestWhatTheModelIsTold:
             patient_facts=["Patient's age: 34", "Patient's allergies: penicillin"],
             active_medications=["Metformin 500mg after dinner"],
             upcoming_appointments=[],
-            departments=["Cardiology"],
+            specialities=["Cardiology"],
         )
         assert "Ayesha Khan" in context
         assert "penicillin" in context
@@ -106,13 +106,13 @@ class TestWhatTheModelIsTold:
         context = assistant.build_context(
             active_medications=[],
             upcoming_appointments=[],
-            departments=[],
+            specialities=[],
             doctors=["Rajesh Iyer — Cardiology — Aga Khan, Karachi — PKR 3000"],
         )
         assert "  - Rajesh Iyer — Cardiology" in context
 
     def test_no_doctors_is_stated_rather_than_omitted(self) -> None:
         context = assistant.build_context(
-            active_medications=[], upcoming_appointments=[], departments=[]
+            active_medications=[], upcoming_appointments=[], specialities=[]
         )
         assert "Doctors available to book: none listed" in context

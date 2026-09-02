@@ -100,7 +100,7 @@ export function HowItWorks() {
     },
     {
       icon: "hub",
-      title: tr("A department is suggested", "AI department suggest karta hai"),
+      title: tr("A specialist is suggested", "AI specialist suggest karta hai"),
       body: tr(
         "It says where to go, or sends you straight on.",
         "Batata hai kahan jana hai — ya seedha aage bhej deta hai.",

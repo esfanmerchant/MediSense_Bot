@@ -802,9 +802,18 @@ select:focus ~ .select-chevron {
 @keyframes ecg-dash {
   to { stroke-dashoffset: -640; }
 }
+/* The trace across a dashboard hero. It runs once and rests.
+   ------------------------------------------------------------
+   It used to loop for ever, and an SVG `stroke-dashoffset` animation is not
+   compositable — the browser repaints the path on every frame, permanently, on
+   three of the busiest pages in the application. While somebody scrolls, that
+   repaint competes with the scroll for the same frame, which is most of why
+   those dashboards felt heavy. It draws once now, which is the only part
+   anybody was ever going to watch. */
 .animate-ecg {
   stroke-dasharray: 320 320;
-  animation: ecg-dash 3.2s linear infinite;
+  stroke-dashoffset: 320;
+  animation: ecg-dash 2.6s var(--ease-out-soft, ease-out) forwards;
 }
 
 @keyframes ecg-sweep {

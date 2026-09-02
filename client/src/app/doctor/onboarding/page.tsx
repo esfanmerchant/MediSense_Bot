@@ -42,7 +42,6 @@ import {
   SlimHeader,
   StepNav,
   useAutosave,
-  useDepartments,
 } from "@/components/doctorApplication/shared";
 import {
   StepIdentity,
@@ -148,7 +147,6 @@ function Wizard() {
   const tr = useTr();
   const router = useRouter();
   const reduced = useReducedMotion();
-  const departments = useDepartments();
 
   const [form, setForm] = useState<FormState>(emptyForm);
   const formRef = useRef<FormState>(form);
@@ -428,8 +426,6 @@ function Wizard() {
                 <StepProfessional
                   form={form}
                   patch={patch}
-                  departmentList={departments.list}
-                  departmentsLoading={departments.loading}
                 />
               )}
               {step === 2 && <StepQualifications form={form} patch={patch} />}
@@ -451,7 +447,6 @@ function Wizard() {
                 <StepReview
                   form={form}
                   documents={documents}
-                  departmentName={departments.nameFor(form.departmentId || null)}
                   consent={consent}
                   onConsentChange={setConsent}
                   onJump={goto}

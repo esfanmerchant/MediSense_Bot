@@ -13,11 +13,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
-import {
-  PageSectionNav,
-  Section,
-  type Section as SectionSpec,
-} from "@/components/layout/PageSectionNav";
+import { Section } from "@/components/layout/PageSectionNav";
 import {
   Badge,
   Card,
@@ -41,13 +37,6 @@ const ACTION_LABELS: Record<string, [string, string]> = {
   USER_STATUS_CHANGED: ["Account status changed", "Account status badla"],
   SESSION_EXPIRED: ["Session ended", "Session khatam"],
 };
-
-const SECTIONS: SectionSpec[] = [
-  { id: "overview", label: "Overview", icon: "dashboard" },
-  { id: "shortcuts", label: "Shortcuts", icon: "bolt" },
-  { id: "totals", label: "Totals", icon: "monitoring" },
-  { id: "security", label: "Security events", icon: "policy" },
-];
 
 export default function AdminDashboard() {
   // This dashboard carries the recent security events, and the API audits the
@@ -73,7 +62,6 @@ export default function AdminDashboard() {
           )}
         />
 
-        <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
 
         <section id="overview" className="scroll-section hero-navy relative overflow-hidden rounded-3xl p-6 text-white shadow-float sm:p-8">
           <svg

@@ -54,16 +54,35 @@ interface Props {
 }
 
 /**
- * Keeps the current button in view on a narrow screen.
+ * Keeps the current button in view on a narrow screen — and moves nothing else.
  *
- * Without this, the active section on a phone is frequently off the right-hand
- * edge of its own navigation — the bar says where you are to nobody who can see
- * it. `nearest` rather than `center` so a button already visible does not
- * shuffle the row under the reader's thumb for no reason.
+ * This was `button.scrollIntoView(...)`, which is the obvious way to write it
+ * and which broke scrolling on every page that has this bar. `scrollIntoView`
+ * does not scroll *an* ancestor, it scrolls **every** scrollable ancestor,
+ * including the document: so reading down a page fired the observer, the
+ * observer asked for the new button to be brought into view, and the browser
+ * obligingly scrolled the page back up to do it. The reader scrolls down, the
+ * page jumps up, and it happens again at every section boundary.
+ *
+ * Setting `scrollLeft` on the row touches one element and cannot reach the
+ * document. The row is only ever scrollable sideways, so nothing is lost.
  */
 function keepInView(bar: HTMLElement | null, id: string) {
-  const button = bar?.querySelector<HTMLElement>(`[data-section="${CSS.escape(id)}"]`);
-  button?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  if (!bar) return;
+  const button = bar.querySelector<HTMLElement>(`[data-section="${CSS.escape(id)}"]`);
+  if (!button) return;
+
+  const left = button.offsetLeft;
+  const right = left + button.offsetWidth;
+  const from = bar.scrollLeft;
+  const to = from + bar.clientWidth;
+  // A margin, so the active button does not sit flush against the edge fade.
+  const margin = 24;
+
+  if (left < from + margin) bar.scrollTo({ left: left - margin, behavior: "smooth" });
+  else if (right > to - margin) {
+    bar.scrollTo({ left: right - bar.clientWidth + margin, behavior: "smooth" });
+  }
 }
 
 export function PageSectionNav({ sections, mode, activeId, onChange, label }: Props) {
@@ -123,8 +142,19 @@ export function PageSectionNav({ sections, mode, activeId, onChange, label }: Pr
         const id = visible.target.id;
         setSeen(id);
         keepInView(bar.current, id);
+        // The hash is rewritten from an idle callback rather than from inside
+        // the observer. `replaceState` is not free, and doing it synchronously
+        // while the compositor is mid-scroll is a frame dropped at exactly the
+        // moment somebody is looking at the page moving.
         if (window.location.hash !== `#${id}`) {
-          window.history.replaceState(null, "", `#${id}`);
+          const write = () => {
+            if (window.location.hash !== `#${id}`) {
+              window.history.replaceState(null, "", `#${id}`);
+            }
+          };
+          const idle = window.requestIdleCallback;
+          if (idle) idle(write);
+          else window.setTimeout(write, 200);
         }
       },
       { threshold: 0.4, rootMargin: "-25% 0px -55% 0px" },
@@ -171,7 +201,13 @@ export function PageSectionNav({ sections, mode, activeId, onChange, label }: Pr
   return (
     <div
       ref={wrapper}
-      className="sticky z-30 -mx-4 mb-6 border-b border-line bg-canvas/95 backdrop-blur-sm sm:-mx-6"
+      /* Opaque, and no backdrop blur. The shell's header above this one already
+         carries a 20px backdrop-filter, and a second one stacked directly under
+         it means the browser blurs two full-width regions on every scroll frame
+         — which is most of the "scrolling feels heavy" this page had. The
+         background here is the page's own colour, so the blur was buying a
+         difference nobody could see. */
+      className="sticky z-30 -mx-4 mb-6 border-b border-line bg-canvas sm:-mx-6"
       style={{ top: "var(--topbar-h, 64px)" }}
     >
       {/* The fades are the only thing telling a phone reader the row continues

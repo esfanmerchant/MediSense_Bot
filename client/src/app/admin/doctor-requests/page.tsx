@@ -42,7 +42,6 @@ import { ReviewDrawer } from "@/components/doctorApplication/ReviewDrawer";
 import {
   RelativeTime,
   StatusChip,
-  useDepartments,
 } from "@/components/doctorApplication/shared";
 
 type Tab = "pending" | "approved" | "rejected";
@@ -56,7 +55,6 @@ const TAB_STATUS: Record<Tab, ApplicationStatus> = {
 export default function DoctorRequestsPage() {
   const tr = useTr();
   const reduced = useReducedMotion();
-  const departments = useDepartments();
 
   const [tab, setTab] = useState<Tab>("pending");
   const [nonce, setNonce] = useState(0);
@@ -274,7 +272,6 @@ export default function DoctorRequestsPage() {
                   <tr>
                     <th scope="col">{tr("Applicant", "Applicant")}</th>
                     <th scope="col">{tr("Specialization", "Specialization")}</th>
-                    <th scope="col">{tr("Department", "Department")}</th>
                     <th scope="col">{tr("Registration", "Registration")}</th>
                     <th scope="col">{tr("Submitted", "Bheji gayi")}</th>
                     <th scope="col">{tr("Status", "Soorat-e-haal")}</th>
@@ -287,7 +284,6 @@ export default function DoctorRequestsPage() {
                   <AnimatePresence initial={false}>
                     {rows.map((row) => {
                       const name = row.applicant?.name ?? row.fullName ?? "";
-                      const department = departments.nameFor(row.departmentId);
                       return (
                         <motion.tr
                           key={row.id}
@@ -320,9 +316,6 @@ export default function DoctorRequestsPage() {
                             ) : (
                               <span className="text-faint">—</span>
                             )}
-                          </td>
-                          <td className="text-muted">
-                            {department ?? <span className="text-faint">—</span>}
                           </td>
                           <td className="whitespace-nowrap font-mono text-xs text-muted">
                             {row.registrationNumber || "—"}
@@ -366,7 +359,6 @@ export default function DoctorRequestsPage() {
         key={selected?.id ?? "none"}
         open={drawerOpen}
         application={selected}
-        departmentName={departments.nameFor(selected?.departmentId)}
         onClose={() => setDrawerOpen(false)}
         onDecided={onDecided}
       />

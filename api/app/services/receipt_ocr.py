@@ -310,7 +310,8 @@ async def read(content: bytes, mime_type: str) -> Receipt:
             system_instruction=SYSTEM_INSTRUCTION,
             max_output_tokens=2048,
         )
-    except Exception as exc:  # noqa: BLE001 — advisory only; see the docstring.
+    # Advisory only, so every failure is the same failure: see the docstring.
+    except Exception as exc:
         logger.info("receipt_ocr_unavailable", error=type(exc).__name__)
         return Receipt()
 

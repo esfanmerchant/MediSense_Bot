@@ -16,7 +16,6 @@ import {
   useCallback,
   useEffect,
   useId,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -30,7 +29,6 @@ import { Logo } from "@/components/brand/Logo";
 import { Badge, Button, EmptyState, IconButton, cx } from "@/components/ui";
 import {
   ApiError,
-  departments,
   doctorApplication,
   type ApplicationDocument,
   type ApplicationDocumentKind,
@@ -41,7 +39,6 @@ import {
   type StoredQualification,
 } from "@/lib/api";
 import { useTr } from "@/lib/lang";
-import { useAsync } from "@/lib/useAsync";
 // The portal needs a document, which the server does not have.
 import { useHydrated } from "@/lib/useHydrated";
 
@@ -234,41 +231,6 @@ export function RelativeTime({ iso, className }: { iso: string; className?: stri
       {relativeTime(new Date(iso).getTime(), now, urdu)}
     </span>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Departments — the application stores an id, the screens show a name
-// ---------------------------------------------------------------------------
-
-export interface DepartmentOption {
-  id: string;
-  name: string;
-  code: string;
-}
-
-/**
- * The department list, and an id → name lookup.
- *
- * The application only ever carries `departmentId`; the name has to come from
- * here. A failure is not fatal — the screens fall back to showing the id, which
- * is still true, rather than inventing a name.
- */
-export function useDepartments(): {
-  list: DepartmentOption[];
-  nameFor: (id: string | null | undefined) => string | null;
-  loading: boolean;
-} {
-  const query = useAsync(() => departments.list(), []);
-  const list = useMemo<DepartmentOption[]>(
-    () => (query.data?.data ?? []).map(({ id, name, code }) => ({ id, name, code })),
-    [query.data],
-  );
-  const byId = useMemo(() => new Map(list.map((item) => [item.id, item.name])), [list]);
-  const nameFor = useCallback(
-    (id: string | null | undefined) => (id ? (byId.get(id) ?? id) : null),
-    [byId],
-  );
-  return { list, nameFor, loading: query.loading };
 }
 
 // ---------------------------------------------------------------------------

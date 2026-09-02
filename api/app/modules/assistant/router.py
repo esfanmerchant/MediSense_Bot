@@ -54,7 +54,6 @@ from app.db.enums import (
 from app.db.models import (
     AIInteraction,
     Appointment,
-    Department,
     Doctor,
     Patient,
     Prescription,
@@ -196,8 +195,20 @@ async def _gather_context(db: DbSession, patient_id: str) -> tuple[str, list[str
         for row in appointments
     ]
 
-    departments = (
-        (await db.execute(select(Department.name).where(Department.active.is_(True)).limit(30)))
+    # The specialities patients can actually be sent to — read from the doctors
+    # who are here, not from a list of hospital departments. This platform
+    # connects a patient to any doctor in the country rather than to a wing of
+    # one building, so a department has nothing to route to: what decides where
+    # somebody goes is what the available doctors *practise*.
+    specialities = (
+        (
+            await db.execute(
+                select(Doctor.specialization)
+                .where(Doctor.specialization.is_not(None), Doctor.accepting_patients.is_(True))
+                .distinct()
+                .limit(40)
+            )
+        )
         .scalars()
         .all()
     )
@@ -272,7 +283,7 @@ async def _gather_context(db: DbSession, patient_id: str) -> tuple[str, list[str
         patient_facts=facts,
         active_medications=medication_lines,
         upcoming_appointments=appointment_lines,
-        departments=list(departments),
+        specialities=list(specialities),
         doctors=doctor_lines,
     )
     return context, medication_names

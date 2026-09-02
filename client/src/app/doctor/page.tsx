@@ -14,11 +14,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
-import {
-  PageSectionNav,
-  Section,
-  type Section as SectionSpec,
-} from "@/components/layout/PageSectionNav";
+import { Section } from "@/components/layout/PageSectionNav";
 import { AvailabilityNotice } from "@/components/availability/AvailabilityNotice";
 import {
   Avatar,
@@ -105,13 +101,6 @@ function greeting(tr: (en: string, ur: string) => string): string {
   return tr("Good evening", "Shaam bakhair");
 }
 
-const SECTIONS: SectionSpec[] = [
-  { id: "shortcuts", label: "Shortcuts", icon: "bolt" },
-  { id: "today", label: "Today", icon: "today" },
-  { id: "alerts", label: "Vital alerts", icon: "e911_emergency", badge: "critical" },
-  { id: "clinic", label: "Clinic list", icon: "list_alt" },
-];
-
 export default function DoctorDashboard() {
   const { data, error, loading, reload } = useAsync(() => dashboard.doctor());
   const { user } = useSession();
@@ -194,7 +183,6 @@ export default function DoctorDashboard() {
         )}
 
         {/* Why nobody is booking, when that is the answer. Silent otherwise. */}
-        <PageSectionNav mode="jump" label="Sections" sections={SECTIONS} />
 
         <AvailabilityNotice />
 

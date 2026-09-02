@@ -32,7 +32,6 @@ function form(overrides: Partial<FormState> = {}): FormState {
     address: "",
     registrationNumber: "",
     specialization: "",
-    departmentId: "",
     qualifications: [],
     yearsExperience: "",
     previousHospital: "",
@@ -57,7 +56,6 @@ describe("the draft a half-filled form sends", () => {
       "address",
       "registrationNumber",
       "specialization",
-      "departmentId",
       "previousHospital",
     ] as const) {
       expect(draft[field], field).toBeNull();

@@ -108,14 +108,12 @@ function Section({
 export function ReviewDrawer({
   open,
   application,
-  departmentName,
   onClose,
   onDecided,
 }: {
   open: boolean;
   /** The row that was clicked. Rendered at once; refreshed from `get` behind it. */
   application: DoctorApplication | null;
-  departmentName: string | null;
   onClose: () => void;
   onDecided: (result: DoctorApplication) => void;
 }) {
@@ -393,12 +391,7 @@ export function ReviewDrawer({
                   <SummaryField
                     label={tr("Specialization", "Specialization")}
                     value={current.specialization}
-                  />
-                  <SummaryField
-                    label={tr("Department", "Department")}
-                    value={departmentName ?? ""}
-                  />
-                  <SummaryField
+                  />                  <SummaryField
                     label={tr("Years of experience", "Tajurbe ke saal")}
                     value={
                       current.yearsExperience === null || current.yearsExperience === undefined

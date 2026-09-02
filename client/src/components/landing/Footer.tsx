@@ -13,7 +13,6 @@
 import Link from "next/link";
 
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { EcgLine } from "@/components/brand/EcgLine";
 import { Logo } from "@/components/brand/Logo";
 import { useTr } from "@/lib/lang";
@@ -105,7 +104,6 @@ export function Footer() {
           </p>
           <div className="ml-auto flex items-center gap-3">
             <LanguageToggle />
-            <ThemeToggle />
           </div>
         </div>
       </Shell>

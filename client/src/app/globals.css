@@ -1393,3 +1393,31 @@ html {
   -webkit-background-clip: text;
   background-clip: text;
 }
+
+/* ---------------------------------------------------------------------------
+   The landing's bar: dark always, and a dark of its own.
+
+   It floats over seven bands that alternate light and dark, so it has to read
+   as a separate layer above all of them. On the light bands that is free. On
+   the dark ones it is not: the sections sit at #061024 and the hero's sky
+   opens at #0A2A63, so a bar sharing either value would dissolve into
+   whichever it happened to be over.
+
+   #0F1D42 sits deliberately between them — lighter than the sections, darker
+   and flatter than the hero — so it separates in both directions rather than
+   only one. The hairline under it does the rest, and is bright enough to be
+   the edge even where the two tones come close.
+
+   No backdrop blur. The bar is opaque, so a blur would buy nothing visible
+   while making the browser filter a full-width strip on every scrolled frame —
+   which is the cost the section rows were already carrying and which we took
+   off them.
+   --------------------------------------------------------------------------- */
+.nav-band {
+  background: linear-gradient(180deg, #12224a 0%, #0f1d42 100%);
+  border-bottom: 1px solid rgb(126 180 255 / 0.16);
+}
+.nav-band.is-scrolled {
+  border-bottom-color: rgb(126 180 255 / 0.26);
+  box-shadow: 0 10px 30px -18px rgb(0 0 0 / 0.85);
+}

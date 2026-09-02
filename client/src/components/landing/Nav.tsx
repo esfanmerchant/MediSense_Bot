@@ -48,10 +48,12 @@ export function Nav({
   return (
     <header
       className={cx(
-        "page-enter fixed inset-x-0 top-0 z-50 transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300",
-        scrolled
-          ? "border-b border-line bg-[var(--surface-glass)] shadow-sm backdrop-blur-xl"
-          : "border-b border-transparent",
+        // `band-dark` gives the bar its own palette, so `text-muted` and the
+        // rest resolve dark whichever band it is floating over; `nav-band`
+        // gives it a tone that is neither the sections' nor the hero's, so it
+        // stays a separate layer above both.
+        "band-dark nav-band page-enter fixed inset-x-0 top-0 z-50 transition-[border-color,box-shadow] duration-300",
+        scrolled && "is-scrolled",
       )}
     >
       {/* How far down the document the reader is, in the brand ramp. On white

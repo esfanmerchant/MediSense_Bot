@@ -1260,3 +1260,17 @@ html {
     transform: translate(-50%, -50%) scale(2);
   }
 }
+
+/* The scan line on the hero's document panel: one sweep, forever, over a
+   72px window. It is the only looping animation in the hero's HTML — the
+   building itself does its moving on the GPU. */
+@keyframes story-scan {
+  0%, 100% { top: 6%; }
+  50% { top: 88%; }
+}
+.story-scan {
+  animation: story-scan 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-scan { animation: none; top: 46%; }
+}

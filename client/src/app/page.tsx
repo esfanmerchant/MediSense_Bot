@@ -18,7 +18,7 @@
  */
 
 import { Bento } from "@/components/landing/Bento";
-import { Story } from "@/components/landing/Story";
+import { Hero } from "@/components/landing/Hero";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Footer } from "@/components/landing/Footer";
 import { HowItWorks } from "@/components/landing/HowItWorks";
@@ -52,13 +52,13 @@ export default function Home() {
       <Nav primaryHref={primaryHref} primaryLabel={navLabel} showSignIn={!loading && !user} />
 
       <main id="main">
-        {/* The page opens as a story rather than a pitch: one patient's day,
-            in four acts, over a field of points that rearranges itself from a
-            voice into a record into a system. A feature grid can list what this
-            product has; only a sequence can show that a symptom spoken at eight
-            in the morning is on a doctor's screen by half past ten. The old
-            hero is gone rather than pushed down — two openings is no opening. */}
-        <Story primaryHref={primaryHref} primaryLabel={heroLabel} />
+        {/* The page opens on a working hospital rather than a pitch. Scrolling
+            walks the camera through it room by room while the building carries
+            on around you — patients checking in, a nurse on her rounds, a ward
+            monitor that goes critical and a doctor who walks there. A feature
+            grid can list what this product has; only a place that is open can
+            show what it is for. */}
+        <Hero primaryHref={primaryHref} primaryLabel={heroLabel} />
         <Portals />
         <Bento />
         <HowItWorks />

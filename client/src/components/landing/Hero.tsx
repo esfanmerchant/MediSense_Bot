@@ -20,10 +20,13 @@
  * one thing the section exists to show. A caption that hides its subject is not
  * a caption.
  *
- * **Small screens and reduced motion get the same eight stops, stacked.** A
- * pinned eight-viewport scene on a phone is a hostage situation, and a person
- * who has asked for less movement should get the argument rather than an
- * apology for it.
+ * **A phone gets a different telling, not a squeezed one.** The pinned scene
+ * is a mouse-and-wheel experience — eight viewports of it on a phone is a
+ * hostage situation, and the hover labels and clickable rooms do not exist
+ * under a finger. So a touch device or a narrow window gets one picture of the
+ * building and the six rooms as a short list: the same argument, in about a
+ * third of the words, because on a phone the scroll *is* the cost. Reduced
+ * motion gets the same, for the same reason in a different key.
  */
 
 import Image from "next/image";
@@ -51,6 +54,16 @@ interface Stop {
   lead: [string, string];
   accent: [string, string];
   body: [string, string];
+  /**
+   * The same point, for a phone.
+   *
+   * Not a truncation of `body` — a sentence cut in half stops being one. Each
+   * of these is written to stand alone at about a third of the length, because
+   * on a small screen every extra line is a scroll somebody pays for.
+   */
+  short: [string, string];
+  /** Material Symbol for the compact list, where there is no scene to look at. */
+  icon: string;
 }
 
 const STOPS: Stop[] = [
@@ -64,6 +77,8 @@ const STOPS: Stop[] = [
       "Reception to billing, every job in one place. Scroll through it, or pick a room.",
       "Reception se billing tak har kaam ek jagah. Scroll karein, ya koi room chunein.",
     ],
+    short: ["Reception to billing, in one place.", "Reception se billing tak, ek jagah."],
+    icon: "domain",
   },
   {
     room: "reception",
@@ -75,6 +90,8 @@ const STOPS: Stop[] = [
       "The patient says what is wrong. Symptoms, severity and duration become a record on their own.",
       "Mareez apni takleef batata hai. Alamat, shiddat aur muddat khud record ban jate hain.",
     ],
+    short: ["Symptoms spoken become a record.", "Boli hui takleef record ban jati hai."],
+    icon: "record_voice_over",
   },
   {
     room: "records",
@@ -86,6 +103,8 @@ const STOPS: Stop[] = [
       "A photo of an old prescription or a lab report is read into text; the file itself is kept securely.",
       "Purane nuskhe ya lab report ki photo se text nikal aata hai; asal file mehfooz rehti hai.",
     ],
+    short: ["Photograph a report; it becomes text.", "Report ki photo — text ban jati hai."],
+    icon: "document_scanner",
   },
   {
     room: "icu",
@@ -97,6 +116,8 @@ const STOPS: Stop[] = [
       "Cross a threshold and the assigned doctor is alerted in about a second — watch, it happens on its own.",
       "Had cross ho to assigned doctor ko lagbhag ek second mein alert — dekhein, khud hota hai.",
     ],
+    short: ["A reading out of range alerts the doctor.", "Had se bahar reading — doctor ko alert."],
+    icon: "monitor_heart",
   },
   {
     room: "consultation",
@@ -108,6 +129,8 @@ const STOPS: Stop[] = [
       "Symptoms, reports and vitals are on screen before the visit. Mark it complete and the invoice writes itself.",
       "Visit se pehle alamat, reports aur vitals screen par. Mukammal karein aur invoice khud ban jati hai.",
     ],
+    short: ["Everything on screen before the visit.", "Visit se pehle sab kuch screen par."],
+    icon: "stethoscope",
   },
   {
     room: "pharmacy",
@@ -119,6 +142,8 @@ const STOPS: Stop[] = [
       "The prescription reaches the phone, reminders can be switched on, and the assistant explains each medicine.",
       "Nuskha phone par pohanchta hai, reminders on kiye ja sakte hain, aur assistant har dawa samjhata hai.",
     ],
+    short: ["The prescription reaches the phone, with reminders.", "Nuskha phone par, reminders ke saath."],
+    icon: "pill",
   },
   {
     room: "admin",
@@ -130,6 +155,8 @@ const STOPS: Stop[] = [
       "Approve doctors, watch billing, and every action is written to a log nobody can edit or delete.",
       "Doctors manzoor karein, billing dekhein, aur har amal aise log mein jata hai jo koi badal nahi sakta.",
     ],
+    short: ["Approvals, billing, and a log nobody can edit.", "Manzoori, billing, aur log jo koi badal nahi sakta."],
+    icon: "admin_panel_settings",
   },
   {
     room: null,
@@ -141,6 +168,8 @@ const STOPS: Stop[] = [
       "MediSense — a whole system for care, in one place.",
       "MediSense — sehat ka poora nizaam, ek jagah.",
     ],
+    short: ["One record, three portals.", "Ek record, teen portals."],
+    icon: "hub",
   },
 ];
 
@@ -215,23 +244,29 @@ export function Hero({
   const track = useRef<HTMLElement | null>(null);
 
   /**
-   * Small screens and reduced motion both get the stacked telling.
+   * Who gets the stacked telling instead of the scene.
+   *
+   * Width is not the whole question. A tablet held in portrait is 1024px wide
+   * and still the wrong device for this: the scene answers a wheel, and its
+   * hover labels and clickable rooms have no equivalent under a finger. So a
+   * coarse pointer opts out at any width, which is what actually distinguishes
+   * "phone or tablet" from "laptop" — a touchscreen laptop reports a fine
+   * primary pointer and keeps the scene.
    *
    * Decided before paint and kept in step, because a pinned scene that appears
    * for one frame on a phone and then unmounts is worse than never trying.
    */
   const [still, setStill] = useState(false);
   useEffect(() => {
-    const narrow = window.matchMedia("(max-width: 899px)");
-    const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setStill(narrow.matches || calm.matches);
+    const queries = [
+      window.matchMedia("(max-width: 899px)"),
+      window.matchMedia("(pointer: coarse)"),
+      window.matchMedia("(prefers-reduced-motion: reduce)"),
+    ];
+    const update = () => setStill(queries.some((q) => q.matches));
     update();
-    narrow.addEventListener("change", update);
-    calm.addEventListener("change", update);
-    return () => {
-      narrow.removeEventListener("change", update);
-      calm.removeEventListener("change", update);
-    };
+    queries.forEach((q) => q.addEventListener("change", update));
+    return () => queries.forEach((q) => q.removeEventListener("change", update));
   }, []);
 
   /**
@@ -293,15 +328,28 @@ export function Hero({
   const hintOpacity = useTransform(progress, [0, 0.02, 0.05], [1, 1, 0]);
 
   if (still) {
+    /* The six rooms are the argument; the two wide shots at either end only
+       restate the headline above them, so on a phone they are the headline and
+       nothing else. */
+    const rooms = STOPS.filter((item) => item.room !== null);
+
     return (
+      /* pt clears the fixed 72px header, which the old py-16 did not — the
+         eyebrow was printing underneath it. */
       <section className="band-dark border-b border-line">
-        <div className="mx-auto max-w-2xl px-6 py-16">
-          <p className="mono-caps text-xs text-primary">
+        <div className="mx-auto max-w-2xl px-5 pb-14 pt-28 sm:px-6 sm:pb-16 sm:pt-32">
+          <p className="mono-caps text-[11px] text-primary sm:text-xs">
             {tr("A hospital that runs itself", "Ek hospital jo khud chalta hai")}
           </p>
-          <h1 className="font-display mt-3 text-4xl font-black leading-[1.05] tracking-tight text-strong">
+          <h1 className="font-display mt-3 text-[2.125rem] font-black leading-[1.05] tracking-tight text-strong sm:text-4xl">
             {tr("Reception to billing, in one place.", "Reception se billing tak, ek jagah.")}
           </h1>
+          <p className="mt-3 text-base leading-relaxed text-muted">
+            {tr(
+              "One record, three portals — patient, doctor, administration.",
+              "Ek record, teen portals — mareez, doctor, intezamia.",
+            )}
+          </p>
 
           {/* One frame of the scene, rendered from the scene itself rather than
               drawn — a hand-made picture of a building would be wrong the first
@@ -318,22 +366,34 @@ export function Hero({
             priority
             className="mt-6 w-full rounded-2xl border border-line"
           />
-          <ol className="mt-10 space-y-9">
-            {STOPS.map((item) => (
-              <li key={item.label[0]} className="border-l-2 border-line pl-5">
-                <p className="mono-caps text-[11px] text-primary">
-                  {tr(...item.label)} · {tr(...item.chip)}
-                </p>
-                <p className="font-display mt-1.5 text-2xl font-bold leading-tight text-strong">
-                  {tr(...item.lead)} <span className="text-gradient-brand">{tr(...item.accent)}</span>
-                </p>
-                <p className="mt-2 text-base leading-relaxed text-muted">{tr(...item.body)}</p>
+
+          {/* Six lines, not six paragraphs. Each names a room and says the one
+              thing it does; the long version is the scene, and the scene is not
+              on this device. */}
+          <ul className="mt-8 divide-y divide-line overflow-hidden rounded-2xl border border-line">
+            {rooms.map((item) => (
+              <li key={item.label[0]} className="flex items-start gap-3.5 p-4">
+                <span
+                  aria-hidden
+                  className="bg-gradient-soft grid h-10 w-10 shrink-0 place-items-center rounded-xl text-primary"
+                >
+                  <Icon name={item.icon} className="text-[20px]" />
+                </span>
+                <div className="min-w-0">
+                  <p className="font-display text-[1.0625rem] font-bold leading-snug text-strong">
+                    {tr(...item.lead)} <span className="text-gradient-brand">{tr(...item.accent)}</span>
+                  </p>
+                  <p className="mt-1 text-[0.9375rem] leading-relaxed text-muted">
+                    {tr(...item.short)}
+                  </p>
+                </div>
               </li>
             ))}
-          </ol>
+          </ul>
+
           <Link
             href={primaryHref}
-            className="bg-gradient-brand mt-10 inline-flex min-h-12 items-center gap-2 rounded-xl px-6 font-bold text-white"
+            className="bg-gradient-brand mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-6 font-bold text-white sm:w-auto"
           >
             {primaryLabel}
             <Icon name="arrow_forward" className="text-[20px]" />
@@ -415,7 +475,7 @@ export function Hero({
                         key={room.key}
                         type="button"
                         onClick={() => goToStop(room.id)}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-[#DCEBFF] transition-colors hover:border-[#14C4C1]"
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-[11px] font-semibold text-[#DCEBFF] transition-colors hover:border-[#14C4C1]"
                       >
                         <span
                           className="h-2 w-2 rounded-full"

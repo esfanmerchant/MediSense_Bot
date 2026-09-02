@@ -1166,6 +1166,81 @@ class Notification(Base):
     created_at: Mapped[datetime] = _created()
 
 
+class PushSubscription(Base):
+    """A device that has agreed to be told things while the site is closed.
+
+    One row per browser-and-device, keyed by the endpoint the push service
+    gives us. A person with a phone and a laptop has two, and both are told;
+    that is the point of storing them separately rather than one flag on the
+    user.
+
+    **The keys here are not secrets we chose.** ``p256dh`` and ``auth`` come
+    from the browser and are what the payload is encrypted to, so a message we
+    send can only be read by the device that enrolled — the push service in the
+    middle carries ciphertext it cannot open.
+
+    ``failed_at`` is set when the push service says the endpoint is gone (404
+    or 410). The row is kept rather than deleted so a later pass can tell "this
+    device unsubscribed" from "this user never had one", and so a person
+    re-enrolling on the same browser updates a row instead of accumulating.
+    """
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(
+        "userId", Text, ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    )
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False)
+    p256dh: Mapped[str] = mapped_column(Text, nullable=False)
+    auth: Mapped[str] = mapped_column(Text, nullable=False)
+    #: What enrolled, so a person can recognise which device to remove.
+    user_agent: Mapped[str | None] = mapped_column("userAgent", Text)
+    last_seen_at: Mapped[datetime | None] = mapped_column("lastSeenAt", DateTime)
+    failed_at: Mapped[datetime | None] = mapped_column("failedAt", DateTime)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+class MedicationReminder(Base):
+    """When a patient has asked to be reminded about one prescription.
+
+    **The time comes from the patient, never from the prescription.** A
+    doctor writes "twice a day" or "subah, shaam", and turning that prose into
+    a clock time means guessing — at what hour, before or after food, and
+    whether "twice" means twelve hours apart or morning and evening. A system
+    that guessed would send a confident reminder at the wrong time, which on a
+    medicine is worse than sending none. So the prescription stays as the
+    doctor wrote it, and the patient sets the hours they actually take it.
+
+    ``at_minutes`` is minutes past local midnight in the clinic's zone, which
+    is where the patient is. Storing a UTC time would move the reminder by an
+    hour whenever the zone's offset changed, and "take it at eight" does not
+    mean "take it an hour earlier in winter".
+    """
+
+    __tablename__ = "medication_reminders"
+
+    id: Mapped[str] = _id()
+    prescription_id: Mapped[str] = mapped_column(
+        "prescriptionId",
+        Text,
+        ForeignKey("prescriptions.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+    )
+    patient_id: Mapped[str] = mapped_column(
+        "patientId",
+        Text,
+        ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"),
+        nullable=False,
+    )
+    #: Minutes past midnight, clinic-local. 8:00 is 480, 20:30 is 1230.
+    at_minutes: Mapped[int] = mapped_column("atMinutes", Integer, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
 # ===========================================================================
 # Emergency access & audit
 # ===========================================================================
@@ -1391,3 +1466,24 @@ Index("medical_documents_storagePath_key", MedicalDocument.storage_path, unique=
 # completion retries (R4).
 Index("invoices_appointmentId_key", Invoice.appointment_id, unique=True)
 Index("invoices_invoiceNumber_key", Invoice.invoice_number, unique=True)
+
+# One row per device: a browser re-enrolling gives the same endpoint back, and
+# without this it would collect a new row every time permission was granted.
+Index("push_subscriptions_endpoint_key", PushSubscription.endpoint, unique=True)
+Index("push_subscriptions_userId_idx", PushSubscription.user_id)
+# The dispatcher sweeps by time of day across every active reminder, so that
+# is the shape the index has to serve.
+Index(
+    "medication_reminders_active_atMinutes_idx",
+    MedicationReminder.active,
+    MedicationReminder.at_minutes,
+)
+Index("medication_reminders_patientId_idx", MedicationReminder.patient_id)
+# A prescription cannot carry the same time twice — two reminders at eight is a
+# duplicate, not a preference.
+Index(
+    "medication_reminders_prescriptionId_atMinutes_key",
+    MedicationReminder.prescription_id,
+    MedicationReminder.at_minutes,
+    unique=True,
+)

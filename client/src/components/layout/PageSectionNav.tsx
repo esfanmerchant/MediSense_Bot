@@ -242,7 +242,10 @@ export function PageSectionNav({ sections, mode, activeId, onChange, label }: Pr
                 tabIndex={mode === "tabs" && !active ? -1 : 0}
                 onClick={() => go(section.id)}
                 className={cx(
-                  "relative flex min-h-9 shrink-0 snap-start items-center gap-1.5 rounded-lg px-3 text-sm font-semibold",
+                  // This row is how a page changes what it shows, so on a
+                  // phone it is a thumb target: 36px is not one. Compact
+                  // again above the breakpoint, where a cursor points.
+                  "relative flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-lg px-3 text-sm font-semibold sm:min-h-9",
                   "transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                   active
                     ? "text-primary"

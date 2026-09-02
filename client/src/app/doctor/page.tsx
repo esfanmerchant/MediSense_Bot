@@ -314,7 +314,7 @@ export default function DoctorDashboard() {
               action={
                 <Link
                   href="/doctor/appointments"
-                  className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                  className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-primary hover:underline"
                 >
                   {tr("All appointments", "Sab appointments")}
                   <Icon name="arrow_forward" className="text-[18px]" />

@@ -99,7 +99,7 @@ export default function AdminAppointments() {
                   aria-selected={selected}
                   onClick={() => setActive(index)}
                   className={cx(
-                    "inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3.5 text-sm font-semibold transition-[background-color,color,box-shadow,transform] duration-200 ease-out",
+                    "inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3.5 text-sm font-semibold transition-[background-color,color,box-shadow,transform] duration-200 ease-out",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                     selected
                       ? "bg-gradient-brand text-white shadow-sm"

@@ -58,7 +58,7 @@ export function AvailabilityNotice() {
       <p className="min-w-0 flex-1 text-sm font-medium text-strong">{message}</p>
       <Link
         href="/doctor/availability"
-        className="inline-flex min-h-10 items-center gap-1 rounded-xl px-3 text-sm font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className="inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-sm font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
         {noHours
           ? tr("Set your availability", "Apni dastyabi set karein")

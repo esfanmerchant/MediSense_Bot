@@ -85,6 +85,60 @@ delivery off has said the code should not go anywhere.
 Mail is never allowed to fail an operation: `send` returns a `Delivery` and
 raises nothing, so a slow relay cannot become a slow appointment booking.
 
+### Push notifications and medication reminders
+
+A push is the only channel that reaches somebody who is not looking at the
+site, which is what a reminder to take a tablet has to do. Unlike an email it
+is **encrypted to the device before it leaves this server** — the keys come
+from the browser at subscribe time, and Google's, Apple's or Mozilla's push
+service in the middle routes ciphertext it cannot open. That is what makes it
+acceptable for a reminder to name a medicine, and why an email never does.
+
+| Variable | Meaning |
+|---|---|
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | The keypair that identifies this server to a push service. Both empty means push is simply off |
+| `VAPID_SUBJECT` | A `mailto:` a push service can complain to before it starts dropping messages |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | The public half again, for the browser. It must match, or every subscription is rejected on send |
+
+Generate a pair with:
+
+```bash
+python -c "from py_vapid import Vapid01; import base64; \
+  from cryptography.hazmat.primitives import serialization as s; \
+  v=Vapid01(); v.generate_keys(); b=lambda x: base64.urlsafe_b64encode(x).decode().rstrip('='); \
+  print('pub ', b(v.public_key.public_bytes(s.Encoding.X962, s.PublicFormat.UncompressedPoint))); \
+  print('priv', b(v.private_key.private_numbers().private_value.to_bytes(32,'big')))"
+```
+
+**Which notifications earn a push** is deliberately narrower than which earn an
+email (`PUSHED_TYPES` in `api/app/modules/notifications/templates.py`): a dose
+that is due, a vital past its threshold, break-glass access, a sign-in you may
+not have made. An invoice can wait for the inbox.
+
+**Reminder times come from the patient, never from the prescription.** A
+prescription's `frequency` is prose — "twice a day", "after meals", "SOS" — and
+turning that into 08:00 would be a guess. A notification saying *take your
+Metformin now* at an hour nobody chose is a confidently wrong instruction about
+medicine, so `PUT /api/medication-reminders/{prescriptionId}` takes times the
+patient set on their own record, in the clinic's timezone, and only the patient
+may set them. Discontinuing the medicine stops the reminders in the same pass,
+without deleting anything.
+
+### Running more than one worker
+
+Two things in the API are exactly correct in one process and wrong in four: the
+rate limiter counts per worker, and the live vitals feed fans out per worker, so
+an alert reaches only the browsers connected to whichever worker recorded the
+vital. Setting `REDIS_URL` fixes both — one sliding window across all workers,
+and a channel each worker relays events back from.
+
+| Variable | Meaning |
+|---|---|
+| `REDIS_URL` | Optional. Empty is a supported configuration and the right one for a single worker |
+
+An unreachable Redis is treated as absent, not as an outage: every call falls
+back to the in-process behaviour rather than failing the request.
+
 ### Codes, sessions and the clinic clock
 
 | Variable | Meaning |
@@ -160,9 +214,13 @@ Two tiers, because they answer different questions at very different speeds.
 
 ```
 cd api && .venv/Scripts/python.exe -m ruff check . && .venv/Scripts/python.exe -m mypy app
-cd api && .venv/Scripts/python.exe -m pytest tests/test_thresholds.py tests/test_assistant_safety.py     tests/test_notifications_email.py tests/test_ratelimit.py tests/test_access_control_review.py     tests/test_schedule.py tests/test_rbac.py tests/test_file_validation.py tests/test_prescription_parser.py
+cd api && .venv/Scripts/python.exe -m pytest -q --ignore-glob="*_integration.py"
 npm run verify        # client typecheck, lint, UI tests, build
 ```
+
+That is every test that does not need the database — about 725 of them, in
+twenty seconds. The exclusion is the point: `*_integration.py` is the tier
+below.
 
 `mypy` earns its place here: it caught three of the four Phase 10 defects in
 seconds, where the database suite needed eighteen minutes to surface the same

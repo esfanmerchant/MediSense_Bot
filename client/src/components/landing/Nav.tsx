@@ -73,7 +73,7 @@ export function Nav({
         <Link
           href="/"
           aria-label="MediSense"
-          className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+          className="flex min-h-11 items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
         >
           <Logo variant="full" size="md" />
         </Link>
@@ -85,14 +85,14 @@ export function Nav({
           {showSignIn && (
             <Link
               href="/login"
-              className="hidden min-h-10 items-center rounded-xl px-3.5 text-sm font-semibold text-muted transition-colors hover:bg-gradient-soft hover:text-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:inline-flex"
+              className="hidden min-h-11 items-center rounded-xl px-3.5 text-sm font-semibold text-muted transition-colors hover:bg-gradient-soft hover:text-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:inline-flex"
             >
               {tr("Sign in", "Login karein")}
             </Link>
           )}
           <Link
             href={primaryHref}
-            className="btn-gradient btn-shine group inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="btn-gradient btn-shine group inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             {primaryLabel}
             <Icon

@@ -8,15 +8,17 @@ from __future__ import annotations
 
 from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import CursorResult, func, select, update
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import CursorResult, delete, func, select, update
 
 from app.api.deps import CurrentAuth, DbSession
 from app.api.responses import Page, ok, pagination
+from app.core.config import settings
 from app.core.errors import not_found
 from app.db.base import utcnow
 from app.db.enums import NotificationStatus
-from app.db.models import Notification
+from app.db.models import Notification, PushSubscription
 from app.modules.notifications.service import serialize
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -101,3 +103,127 @@ async def mark_all_read(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
         .values(read_at=utcnow(), status=NotificationStatus.READ)
     )
     return ok({"markedRead": cast("CursorResult[Any]", result).rowcount})
+
+
+# --- Web Push enrolment ------------------------------------------------------
+#
+# A subscription belongs to a browser, not to a person: the browser generates
+# the keys and the endpoint, and hands them over once permission is granted.
+# That shapes the two rules below.
+
+
+class PushKeys(BaseModel):
+    p256dh: Annotated[str, Field(min_length=1, max_length=255)]
+    auth: Annotated[str, Field(min_length=1, max_length=255)]
+
+
+class PushEnrol(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    endpoint: Annotated[str, Field(min_length=1, max_length=1000)]
+    keys: PushKeys
+
+    @field_validator("endpoint")
+    @classmethod
+    def _https_only(cls, value: str) -> str:
+        # The endpoint is a URL this server will POST to. Anything but https to
+        # a real host is either a mistake or an attempt to make us fetch
+        # something internal, so it is refused at the door.
+        if not value.startswith("https://"):
+            raise ValueError("endpoint must be an https URL")
+        return value
+
+
+@router.get("/push")
+async def push_status(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
+    """What the browser needs to decide whether to offer push at all.
+
+    ``publicKey`` is returned rather than only baked into the bundle so a
+    deployment that rotates its VAPID keys does not need a rebuild — the two
+    halves must match, and this is the half that is safe to hand out.
+    """
+    devices = (
+        await db.execute(
+            select(func.count(PushSubscription.id)).where(
+                PushSubscription.user_id == auth.user_id,
+                PushSubscription.failed_at.is_(None),
+            )
+        )
+    ).scalar_one()
+    return ok(
+        {
+            "enabled": settings.push_enabled,
+            "publicKey": settings.VAPID_PUBLIC_KEY or None,
+            "devices": devices,
+        }
+    )
+
+
+@router.post("/push")
+async def push_subscribe(
+    payload: PushEnrol, request: Request, auth: CurrentAuth, db: DbSession
+) -> dict[str, Any]:
+    """Enrol this browser, or re-confirm an enrolment.
+
+    Called on every load, not only the first time: a push service may rotate an
+    endpoint underneath the page, and a subscription that has gone quiet for
+    months is worth touching so we know the device is still real.
+
+    An endpoint already on file is **moved** to the current user rather than
+    rejected. The alternative — refusing it — would silently keep sending a
+    shared or handed-down device's reminders to whoever signed in first.
+    """
+    existing = (
+        await db.execute(
+            select(PushSubscription).where(PushSubscription.endpoint == payload.endpoint)
+        )
+    ).scalar_one_or_none()
+
+    now = utcnow()
+    agent = (request.headers.get("user-agent") or "")[:400] or None
+
+    if existing is not None:
+        existing.user_id = auth.user_id
+        existing.p256dh = payload.keys.p256dh
+        existing.auth = payload.keys.auth
+        existing.user_agent = agent
+        existing.last_seen_at = now
+        # A device that answers again has recovered; clear the tombstone so the
+        # dispatcher stops skipping it.
+        existing.failed_at = None
+        row = existing
+    else:
+        row = PushSubscription(
+            user_id=auth.user_id,
+            endpoint=payload.endpoint,
+            p256dh=payload.keys.p256dh,
+            auth=payload.keys.auth,
+            user_agent=agent,
+            last_seen_at=now,
+        )
+        db.add(row)
+
+    await db.flush()
+    return ok({"id": row.id, "enabled": settings.push_enabled})
+
+
+@router.delete("/push")
+async def push_unsubscribe(
+    auth: CurrentAuth,
+    db: DbSession,
+    endpoint: Annotated[str, Query(min_length=1, max_length=1000)],
+) -> dict[str, Any]:
+    """Forget this browser.
+
+    Scoped to the caller, so knowing someone else's endpoint is not enough to
+    turn their reminders off. Deleting rather than deactivating is right here:
+    the row is a routing address, not a clinical fact, and the honest answer to
+    "stop sending me these" is to no longer hold the address.
+    """
+    result = await db.execute(
+        delete(PushSubscription).where(
+            PushSubscription.endpoint == endpoint,
+            PushSubscription.user_id == auth.user_id,
+        )
+    )
+    return ok({"removed": cast("CursorResult[Any]", result).rowcount})

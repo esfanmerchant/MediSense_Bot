@@ -25,10 +25,10 @@ record that the reminder was sent.
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -46,16 +46,20 @@ from app.db.models import (
     Appointment,
     Doctor,
     Invoice,
+    MedicationReminder,
     Notification,
     Patient,
     Payment,
+    Prescription,
+    PushSubscription,
     User,
 )
 from app.db.session import SessionFactory
-from app.modules.appointments.schedule import to_clinic
+from app.modules.appointments.schedule import clinic_timezone, to_clinic
 from app.modules.notifications import templates
 from app.services import email as email_service
 from app.services import email_templates
+from app.services import push as push_service
 
 #: How often the loop wakes. Email is not interactive; a message that goes out
 #: within a minute is on time, and a tighter interval would spend connections
@@ -383,12 +387,248 @@ async def schedule_invoice_reminders() -> int:
     return created
 
 
+#: How late a medication reminder may still be sent. A dose reminder that
+#: arrives four hours after the time somebody chose is not a reminder — it is a
+#: prompt to take a second dose. Past this the pass skips it, and the next one
+#: goes out at the next scheduled time.
+MEDICATION_GRACE = timedelta(minutes=30)
+
+
+async def claim_pending_push(db: AsyncSession, limit: int = BATCH_SIZE) -> list[Notification]:
+    """Take a batch of push rows, locked against other workers."""
+    return list(
+        (
+            await db.execute(
+                select(Notification)
+                .where(
+                    Notification.channel == NotificationChannel.PUSH,
+                    Notification.status == NotificationStatus.PENDING,
+                )
+                .order_by(Notification.priority.desc(), Notification.created_at)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def deliver_push(db: AsyncSession, notification: Notification) -> bool:
+    """Fan one queued message out to every device this user has enrolled.
+
+    One row, many devices — so "did it work" needs a definition. It is *any*
+    device: somebody with a phone and a laptop has been reminded once the phone
+    buzzes, and failing the row because the laptop is asleep would retry a
+    message they have already seen.
+
+    Endpoints the push service reports as gone are deleted here rather than
+    left to accumulate. This is the only place we ever learn a subscription
+    died, because the browser that dropped it cannot tell us.
+    """
+    rows = (
+        (
+            await db.execute(
+                select(PushSubscription).where(
+                    PushSubscription.user_id == notification.user_id,
+                    PushSubscription.failed_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    if not rows:
+        # Every device is gone. Nothing to retry, so this is final rather than
+        # left PENDING to expire slowly.
+        notification.status = NotificationStatus.FAILED
+        notification.failed_at = utcnow()
+        notification.error = "no device enrolled"
+        return False
+
+    meta = notification.notification_metadata or {}
+    results = await asyncio.gather(
+        *(
+            push_service.send(
+                push_service.Subscription(
+                    id=row.id, endpoint=row.endpoint, p256dh=row.p256dh, auth=row.auth
+                ),
+                title=notification.title,
+                body=notification.body,
+                link=notification.link,
+                # Grouped so a phone replaces rather than stacks: three days of
+                # the same reminder should be one line on a lock screen.
+                tag=f"{notification.type}:{meta.get('reminderId') or notification.id}",
+            )
+            for row in rows
+        )
+    )
+
+    delivered = 0
+    dead: list[str] = []
+    for row, result in zip(rows, results, strict=True):
+        if result.ok:
+            delivered += 1
+            row.last_seen_at = utcnow()
+        elif result.gone:
+            dead.append(row.id)
+
+    if dead:
+        await db.execute(delete(PushSubscription).where(PushSubscription.id.in_(dead)))
+
+    if delivered:
+        notification.status = NotificationStatus.SENT
+        notification.sent_at = utcnow()
+        notification.error = None
+        return True
+
+    notification.failed_at = utcnow()
+    notification.error = "no device accepted the message"
+    if utcnow() - notification.created_at > GIVE_UP_AFTER or len(dead) == len(rows):
+        notification.status = NotificationStatus.FAILED
+    return False
+
+
+async def push_pending() -> int:
+    """One push pass. Returns how many messages reached at least one device."""
+    if not settings.push_enabled:
+        return 0
+
+    sent = 0
+    async with SessionFactory() as db:
+        for row in await claim_pending_push(db):
+            if await deliver_push(db, row):
+                sent += 1
+        await db.commit()
+
+    if sent:
+        logger.info("push_batch_sent", count=sent)
+    return sent
+
+
+async def due_medication_reminders(
+    db: AsyncSession,
+) -> list[tuple[MedicationReminder, str, str, str, str]]:
+    """Reminder times that have just come round and have not been sent today.
+
+    Returns (reminder, patient user id, medication, dosage, clinic-local date).
+
+    Two things make this safe to run on a one-minute loop:
+
+    * **The window is one-sided.** Only times between now and
+      ``MEDICATION_GRACE`` ago are due, so a reminder set for 20:00 cannot fire
+      at 19:00 because a pass ran early.
+    * **The date is part of the identity.** "Sent already" is asked per
+      reminder *per clinic-local day*, so the same 08:00 goes out tomorrow and
+      not twice today — including across a restart, since the answer lives in
+      the notification table rather than in this process.
+    """
+    local = datetime.now(UTC).astimezone(clinic_timezone())
+    now_minutes = local.hour * 60 + local.minute
+    earliest = now_minutes - int(MEDICATION_GRACE.total_seconds() // 60)
+    today = local.date().isoformat()
+
+    rows = (
+        (
+            await db.execute(
+                select(
+                    MedicationReminder,
+                    Patient.user_id,
+                    Prescription.medication,
+                    Prescription.dosage,
+                )
+                .join(Patient, Patient.id == MedicationReminder.patient_id)
+                .join(Prescription, Prescription.id == MedicationReminder.prescription_id)
+                .where(
+                    MedicationReminder.active.is_(True),
+                    # A discontinued medicine must stop reminding immediately —
+                    # this is the check that makes "stop taking it" stick even
+                    # when the reminder rows outlive the decision.
+                    Prescription.active.is_(True),
+                    MedicationReminder.at_minutes <= now_minutes,
+                    MedicationReminder.at_minutes >= earliest,
+                )
+                .limit(BATCH_SIZE)
+            )
+        )
+        .tuples()
+        .all()
+    )
+    if not rows:
+        return []
+
+    ids = [row[0].id for row in rows]
+    already = set(
+        (
+            await db.execute(
+                select(Notification.notification_metadata["reminderId"].astext).where(
+                    Notification.type == NotificationType.MEDICATION_REMINDER,
+                    Notification.notification_metadata["reminderId"].astext.in_(ids),
+                    Notification.notification_metadata["on"].astext == today,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    return [
+        (reminder, user_id, medication, dosage, today)
+        for reminder, user_id, medication, dosage in rows
+        if reminder.id not in already
+    ]
+
+
+async def schedule_medication_reminders() -> int:
+    """One medication pass. Returns how many reminders were created.
+
+    The wording is deliberately flat — it names the medicine and the dose and
+    stops there. A push is read on a lock screen, and anything more would be
+    the app giving medical instructions it is not entitled to give.
+    """
+    from app.modules.notifications.service import notify
+
+    created = 0
+    async with SessionFactory() as db:
+        for reminder, user_id, medication, dosage, today in await due_medication_reminders(db):
+            clock = f"{reminder.at_minutes // 60:02d}:{reminder.at_minutes % 60:02d}"
+            await notify(
+                db,
+                user_id=user_id,
+                notification_type=NotificationType.MEDICATION_REMINDER,
+                title="Medication reminder",
+                body=f"{medication} — {dosage}, scheduled for {clock}.",
+                link="/patient/records",
+                metadata={
+                    "reminderId": reminder.id,
+                    "prescriptionId": reminder.prescription_id,
+                    "on": today,
+                },
+                priority=1,
+            )
+            created += 1
+        await db.commit()
+
+    if created:
+        logger.info("medication_reminders_created", count=created)
+    return created
+
+
 async def run_once() -> dict[str, int]:
     """One full pass. Separate from the loop so a test can drive it directly."""
     reminders = await schedule_reminders()
+    medication = await schedule_medication_reminders()
     invoices = await schedule_invoice_reminders()
     sent = await send_pending()
-    return {"reminders": reminders, "invoices": invoices, "sent": sent}
+    pushed = await push_pending()
+    return {
+        "reminders": reminders,
+        "medication": medication,
+        "invoices": invoices,
+        "sent": sent,
+        "pushed": pushed,
+    }
 
 
 async def loop() -> None:
@@ -415,8 +655,11 @@ def should_run() -> bool:
 
     Off in tests: a background task making SMTP connections during a test run
     would send real mail and make results depend on timing.
+
+    Either channel is reason enough to run. A deployment with push keys and
+    no SMTP still owes its patients their medication reminders.
     """
-    return settings.email_configured and not settings.is_test
+    return (settings.email_configured or settings.push_enabled) and not settings.is_test
 
 
 def start() -> Any:

@@ -397,7 +397,7 @@ function AnswerBody({
           {answer.urgency !== "INFORMATION" && (
             <Link
               href="/patient/appointments"
-              className="btn-gradient inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="btn-gradient inline-flex min-h-11 items-center gap-1.5 rounded-xl px-4 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Icon name="calendar_add_on" className="text-[18px]" />
               {tr("Book an appointment", "Appointment book karein")}
@@ -2172,7 +2172,7 @@ export function AssistantPanels({ prefill = "" }: { prefill?: string } = {}) {
             type="button"
             aria-label={tr("Open conversations", "Baat-cheet kholein")}
             onClick={() => setDrawer(true)}
-            className="grid h-10 w-10 place-items-center rounded-full text-muted hover:bg-sunken lg:hidden"
+            className="grid h-11 w-11 place-items-center rounded-full text-muted hover:bg-sunken lg:hidden"
           >
             <Icon name="history" className="text-[22px]" />
           </button>

@@ -110,7 +110,7 @@ function ModeSwitch({
           aria-pressed={value === option.mode}
           onClick={() => onChange(option.mode)}
           className={cx(
-            "min-h-8 rounded-md px-3 text-xs font-bold transition-colors",
+            "min-h-11 rounded-md px-3 text-xs font-bold transition-colors sm:min-h-8",
             "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
             value === option.mode
               ? "bg-primary text-primary-on"

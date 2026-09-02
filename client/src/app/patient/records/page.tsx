@@ -20,6 +20,7 @@ import {
   type Section as SectionSpec,
 } from "@/components/layout/PageSectionNav";
 import { PrescriptionRow, RecordTimeline } from "@/components/records";
+import { ReminderTimes } from "@/components/ReminderTimes";
 import {
   Card,
   EmptyState,
@@ -125,7 +126,12 @@ export default function PatientRecords() {
               ) : (
                 <ul className="stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {active.map((prescription) => (
-                    <PrescriptionRow key={prescription.id} prescription={prescription} variant="card" />
+                    <PrescriptionRow
+                      key={prescription.id}
+                      prescription={prescription}
+                      variant="card"
+                      action={<ReminderTimes prescriptionId={prescription.id} />}
+                    />
                   ))}
                 </ul>
               )}

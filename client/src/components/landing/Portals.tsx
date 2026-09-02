@@ -202,7 +202,7 @@ export function Portals() {
   ];
 
   return (
-    <section id="portals" className="band-light relative scroll-mt-24 overflow-hidden py-24">
+    <section id="portals" className="band-light relative scroll-mt-24 overflow-hidden py-14 sm:py-20 lg:py-24">
       {/* One ramp wash behind the grid, so three white cards are not floating
           on nothing. It drifts, which is the whole difference on a light page
           between depth and a gradient somebody applied once. */}
@@ -253,7 +253,12 @@ export function Portals() {
                   <div className="relative h-full transition-transform duration-500 ease-out group-hover:scale-[1.04]">
                     {portal.preview}
                   </div>
-                  <span className="mono-caps absolute bottom-1.5 right-2 text-[0.5rem] text-faint">
+                  {/* On its own ground, not straight on the artwork. The
+                      doctor preview draws a status pill in this corner and the
+                      two were printing on top of each other — and of the two,
+                      this is the label that must stay readable: it is what
+                      stops a drawing of vitals being mistaken for vitals. */}
+                  <span className="mono-caps absolute bottom-1.5 right-1.5 rounded-md bg-card/85 px-1.5 py-0.5 text-[0.5rem] text-faint backdrop-blur-[2px]">
                     {tr("Illustration", "Sirf tasveeri misaal")}
                   </span>
                 </div>

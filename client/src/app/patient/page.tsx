@@ -159,7 +159,7 @@ function HealthSnapshot({ patientId }: { patientId: string }) {
       action={
         <Link
           href="/patient/vitals"
-          className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-primary hover:underline"
+          className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-primary hover:underline"
         >
           {tr("All readings", "Sab readings")}
           <Icon name="arrow_forward" className="text-[18px]" />
@@ -283,7 +283,7 @@ function ExplainLatestReport({ patientId }: { patientId: string }) {
       </div>
       <Link
         href={`/patient/assistant?q=${encodeURIComponent(question)}`}
-        className="btn-outline inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className="btn-outline inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
         <Icon name="auto_awesome" className="text-[18px]" />
         {tr("Explain", "Samjhayein")}

@@ -149,7 +149,7 @@ function Request({
             />
             <label
               htmlFor={`proof-${withdrawal.id}`}
-              className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-line bg-card px-4 text-sm font-semibold text-strong hover:border-primary"
+              className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-line bg-card px-4 text-sm font-semibold text-strong hover:border-primary"
             >
               <Icon name="image" className="text-[18px]" />
               {file ? file.name : tr("Attach the receipt", "Receipt lagayein")}

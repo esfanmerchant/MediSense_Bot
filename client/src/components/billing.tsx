@@ -672,7 +672,7 @@ function InvoiceRow({
             variant="ghost"
             aria-expanded={open}
             aria-controls={panelId}
-            className="!min-h-9 px-3 text-sm"
+            className="!min-h-11 px-3 text-sm sm:!min-h-9"
             onClick={() => setOpen((v) => !v)}
           >
             {open ? tr("Hide detail", "Tafseel chhupayein") : tr("View detail", "Tafseel dekhein")}

@@ -38,8 +38,8 @@ from app.db.enums import (
     NotificationStatus,
     NotificationType,
 )
-from app.db.models import Doctor, Notification, Patient, User
-from app.modules.notifications.templates import EMAILED_TYPES
+from app.db.models import Doctor, Notification, Patient, PushSubscription, User
+from app.modules.notifications.templates import EMAILED_TYPES, PUSHED_TYPES
 
 #: Longest a notification body may be. Anything approaching this is carrying
 #: detail that belongs behind authentication, not in a notification.
@@ -69,12 +69,14 @@ async def notify(
     metadata: dict[str, Any] | None = None,
     priority: int = 0,
     email: bool | None = None,
+    push: bool | None = None,
 ) -> Notification | None:
     """Notify one user, in-app and — where it is warranted — by email.
 
     Returns the in-app row. ``email`` overrides the per-type default from
     ``EMAILED_TYPES``: pass ``False`` to keep something in the portal only, or
     ``True`` to force a message out for a type that is not normally mailed.
+    ``push`` does the same for ``PUSHED_TYPES``.
 
     The in-app row is marked ``SENT`` immediately because the write *is* the
     delivery. The email row stays ``PENDING`` until the dispatcher claims it,
@@ -121,7 +123,78 @@ async def notify(
             priority=priority,
         )
 
+    wants_push = PUSHED_TYPES.__contains__(notification_type) if push is None else push
+    if wants_push:
+        await queue_push(
+            db,
+            user_id=user_id,
+            notification_type=notification_type,
+            title=title,
+            body=body,
+            link=link,
+            metadata=metadata,
+            priority=priority,
+        )
+
     return notification
+
+
+async def queue_push(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    notification_type: NotificationType,
+    title: str,
+    body: str,
+    link: str | None,
+    metadata: dict[str, Any] | None,
+    priority: int,
+) -> Notification | None:
+    """Add a ``PENDING`` push row for the dispatcher to fan out to devices.
+
+    One row per user, not per device. Which phones that becomes is decided at
+    send time, so a device enrolled between now and the next pass still gets
+    the message, and one that was removed does not leave an orphan row behind.
+
+    Nothing is queued when push is unconfigured, or when this user has no
+    device on file — for the same reason email is not queued without SMTP: a
+    queue that cannot drain looks like a backlog and floods the moment it can.
+    """
+    if not settings.push_enabled:
+        return None
+
+    has_device = (
+        await db.execute(
+            select(PushSubscription.id)
+            .where(
+                PushSubscription.user_id == user_id,
+                PushSubscription.failed_at.is_(None),
+            )
+            .limit(1)
+        )
+    ).first()
+    if not has_device:
+        return None
+
+    try:
+        row = Notification(
+            id=new_id(),
+            user_id=user_id,
+            type=notification_type,
+            channel=NotificationChannel.PUSH,
+            status=NotificationStatus.PENDING,
+            title=title,
+            body=body,
+            link=link,
+            notification_metadata=metadata,
+            priority=priority,
+        )
+        db.add(row)
+        await db.flush()
+        return row
+    except Exception:
+        logger.exception("push_not_queued", notification_type=str(notification_type))
+        return None
 
 
 async def queue_email(

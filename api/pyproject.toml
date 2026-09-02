@@ -27,6 +27,18 @@ dependencies = [
     # toolchain and nothing to fetch from a CDN.
     "pyotp>=2.9",
     "segno>=1.6",
+    # Web Push. The payload is encrypted to keys the browser generated, so the
+    # push service in the middle carries ciphertext it cannot open — which is
+    # the only way a reminder naming a medicine is safe to send through one.
+    # Hand-rolling aes128gcm and VAPID signing for a healthcare product would
+    # be the wrong kind of clever.
+    "pywebpush>=2.0",
+    # Optional at runtime, not at install time. Nothing imports it unless
+    # REDIS_URL is set, and every caller falls back to the in-process
+    # behaviour when it is absent — so a single-worker deployment needs no
+    # Redis, and a multi-worker one gets a correct rate limiter and a live
+    # feed that reaches every browser rather than one worker's share.
+    "redis>=5.2",
 ]
 
 [project.optional-dependencies]
@@ -81,5 +93,5 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 # Third-party packages that ship no type information. Listed explicitly rather
 # than globally ignored, so a genuinely missing import is still an error.
-module = ["paddleocr.*", "paddle.*", "pypdfium2.*"]
+module = ["paddleocr.*", "paddle.*", "pypdfium2.*", "pywebpush.*"]
 ignore_missing_imports = true

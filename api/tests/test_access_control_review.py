@@ -221,6 +221,12 @@ class TestEverythingIsGuarded:
                     "auth.patient_id",
                     "auth.user_id",
                     "auth.role",
+                    # Deliberately narrower than clinical access: it refuses
+                    # every role but PATIENT and then compares the row's
+                    # patient id to the session's. A doctor may read this
+                    # prescription and still not set an alarm on somebody's
+                    # phone about it.
+                    "require_own_prescription",
                 )
             ) or DELEGATES_TO_SERVICE.search(source) is not None
             if not guarded:

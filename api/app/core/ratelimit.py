@@ -11,13 +11,17 @@ endpoints where unbounded repetition actually costs something:
   exists — lockout stops an attack on *one* account, and this stops one client
   working through many.
 
-**Known limitation, stated rather than hidden: the counter lives in this
-process.** A deployment running four workers allows roughly four times the
-configured rate, because each worker counts on its own. That is a real weakness
-and the honest fix is a shared store — Redis, or a Postgres table — which is not
-in this stack. It is still worth having: it bounds a runaway client and a naive
-script by a large factor, and the controls that must not be bypassable (account
-lockout, authorization, audit) are all in the database rather than here.
+**The counter is shared when it can be.** With ``REDIS_URL`` set, the window
+lives in Redis and four workers enforce one limit between them. Without it the
+counter lives in this process, and a deployment running four workers allows
+roughly four times the configured rate because each worker counts on its own.
+That fallback is stated rather than hidden: it still bounds a runaway client
+and a naive script by a large factor, and it is exactly correct on the single
+worker most deployments of this size run.
+
+**Redis being down is not an outage.** A failed call falls through to the local
+counter for that request rather than raising. A limiter that 500s when its
+store is unreachable turns a cache problem into a site problem.
 
 **Nothing security-critical depends on this alone.** Rate limiting here is a
 cost and noise control. Brute force is stopped by `Account.lockedUntil`, which
@@ -32,6 +36,7 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import Request
 
+from app.core import redis as redis_store
 from app.core.errors import AppError, ErrorCode
 from app.core.logging import logger
 
@@ -74,6 +79,57 @@ def _sweep(window_seconds: float, now: float) -> int:
     return len(stale)
 
 
+
+async def _shared_window(key: str, times: int, seconds: int) -> tuple[bool, int] | None:
+    """Count this hit in Redis. Returns (allowed, retry_after), or None.
+
+    ``None`` means "no shared store, or it did not answer" — the caller then
+    counts locally, which is the pre-Redis behaviour.
+
+    A sorted set of hit timestamps rather than a plain counter with an expiry,
+    because a counter's window resets on a boundary: 20 requests at 11:59:59
+    and 20 more at 12:00:01 would both pass a "20 per minute" limit. Trimming
+    by score gives a window that actually slides.
+
+    All four commands go in one pipeline, so the read cannot see a state that
+    another worker is halfway through writing.
+    """
+    connection = await redis_store.client()
+    if connection is None:
+        return None
+
+    now = time.time()
+    cutoff = now - seconds
+    member = f"{now:.6f}:{id(connection)}"
+
+    try:
+        pipe = connection.pipeline()
+        pipe.zremrangebyscore(key, 0, cutoff)
+        pipe.zadd(key, {member: now})
+        pipe.zcard(key)
+        # Expire slightly past the window so a key nobody touches again is
+        # reclaimed by Redis rather than living forever.
+        pipe.expire(key, seconds + 1)
+        _, _, count, _ = await pipe.execute()
+    except Exception:
+        return None
+
+    if count <= times:
+        return True, 0
+
+    # Over the limit. This hit was added before we knew that, so take it back
+    # out — otherwise a client hammering the endpoint keeps pushing its own
+    # window forward and is locked out for far longer than the window.
+    try:
+        await connection.zrem(key, member)
+        oldest = await connection.zrange(key, 0, 0, withscores=True)
+    except Exception:
+        return False, seconds
+
+    retry_after = max(1, int(seconds - (now - oldest[0][1]))) if oldest else seconds
+    return False, retry_after
+
+
 def reset() -> None:
     """Clear every counter. For tests, which must not inherit each other's."""
     _hits.clear()
@@ -96,6 +152,18 @@ def limit(
         session_id = getattr(request.state, "session_id", None)
         client = request.client.host if request.client else "unknown"
         key = f"{scope}:{session_id or client}"
+
+        shared = await _shared_window(f"rl:{key}", times, seconds)
+        if shared is not None:
+            allowed, retry_after = shared
+            if not allowed:
+                logger.warning("rate_limited", scope=scope, retry_after=retry_after)
+                raise AppError(
+                    429,
+                    ErrorCode.RATE_LIMITED,
+                    f"Too many requests. Try again in {retry_after} seconds.",
+                )
+            return
 
         now = time.monotonic()
         hits = _prune(key, seconds, now)

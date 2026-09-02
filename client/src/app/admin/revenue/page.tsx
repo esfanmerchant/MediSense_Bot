@@ -196,7 +196,7 @@ export default function AdminRevenue() {
                       aria-pressed={grain === option.value}
                       onClick={() => setGrain(option.value)}
                       className={cx(
-                        "min-h-8 rounded-md px-3 text-xs font-bold transition-colors",
+                        "min-h-11 rounded-md px-3 text-xs font-bold transition-colors sm:min-h-8",
                         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                         grain === option.value
                           ? "bg-primary text-primary-on"

@@ -268,7 +268,9 @@ export function AvatarEditor({
         title={tr("Edit profile picture", "Profile tasveer badlein")}
         aria-label={tr("Edit profile picture", "Profile tasveer badlein")}
         className={cx(
-          "absolute -bottom-0.5 -right-0.5 grid h-8 w-8 place-items-center rounded-full",
+          // Bigger under the breakpoint: it sits on the corner of the
+          // avatar, where a thumb has least room to be precise.
+          "absolute -bottom-0.5 -right-0.5 grid h-11 w-11 place-items-center rounded-full sm:h-8 sm:w-8",
           "border border-line bg-card text-muted shadow-card",
           "transition-[opacity,color,transform] hover:scale-105 hover:text-primary",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",

@@ -320,7 +320,11 @@ export function QuickAction({
       onMouseMove={tilt.onMove}
       onMouseLeave={tilt.onLeave}
       className={cx(
-        "tilt group flex items-center gap-4 rounded-2xl border border-line bg-gradient-to-br bg-card p-5 shadow-card",
+        // `min-w-0` is load-bearing, not tidiness. As a grid item this keeps
+        // its automatic minimum size, which is its min-content width — and
+        // that made a single-column grid resolve a 448px track inside a 358px
+        // section on a phone, scrolling the whole page sideways.
+        "tilt group flex min-w-0 items-center gap-4 rounded-2xl border border-line bg-gradient-to-br bg-card p-5 shadow-card",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
         tints[tone],
       )}
@@ -335,7 +339,7 @@ export function QuickAction({
         <Icon name={icon} filled className="text-[28px]" />
       </span>
       <span className="min-w-0">
-        <span className="block font-display text-[17px] font-bold text-strong">{title}</span>
+        <span className="block truncate font-display text-[17px] font-bold text-strong">{title}</span>
         <span className="block truncate text-sm text-muted">{description}</span>
       </span>
       <Icon
@@ -527,7 +531,10 @@ export function IconButton({
     primary: "btn-gradient text-white",
     danger: "bg-critical text-white hover:opacity-90",
   } as const;
-  const sizes = { sm: "h-9 w-9 text-[20px]", md: "h-11 w-11 text-[22px]" } as const;
+  // `sm` is for dense rows, where a cursor is precise and 36px is plenty.
+  // A finger is not, so below the breakpoint even the small one is 44px —
+  // these are usually the only control on their row.
+  const sizes = { sm: "h-11 w-11 text-[20px] sm:h-9 sm:w-9", md: "h-11 w-11 text-[22px]" } as const;
   return (
     <button
       type="button"
@@ -759,7 +766,9 @@ export function PillGroup<T extends string>({
             aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={cx(
-              "min-h-8 rounded-full px-3 text-xs font-semibold transition-[background-color,color,box-shadow] duration-200",
+              // Same reasoning as the tab row: a finger needs 44px, a cursor
+              // does not, and the breakpoint is the closest thing to that line.
+              "min-h-11 rounded-full px-3 text-xs font-semibold transition-[background-color,color,box-shadow] duration-200 sm:min-h-8",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
               active ? "bg-gradient-brand text-white shadow-sm" : "text-muted hover:text-strong",
             )}

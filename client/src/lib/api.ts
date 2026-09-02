@@ -1017,6 +1017,41 @@ export const prescriptions = {
 };
 
 // ---------------------------------------------------------------------------
+// Medication reminders
+// ---------------------------------------------------------------------------
+
+export interface MedicationReminder {
+  id: string;
+  prescriptionId: string;
+  medication: string;
+  dosage: string;
+  /** "HH:MM" in the clinic's timezone, which the meta below names. */
+  time: string;
+  active: boolean;
+}
+
+export const medicationReminders = {
+  list: (prescriptionId?: string) =>
+    apiList<MedicationReminder, { timezone: string }>(
+      "/medication-reminders",
+      prescriptionId ? { prescriptionId } : undefined,
+    ),
+
+  /** Replaces the whole set for one prescription; an empty list turns them off. */
+  set: (prescriptionId: string, times: string[]) =>
+    apiRequest<{ prescriptionId: string; medication: string; times: string[]; timezone: string }>(
+      `/medication-reminders/${prescriptionId}`,
+      { method: "PUT", body: { times } },
+    ),
+
+  clear: (prescriptionId: string) =>
+    apiRequest<{ prescriptionId: string; removed: number }>(
+      `/medication-reminders/${prescriptionId}`,
+      { method: "DELETE" },
+    ),
+};
+
+// ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------
 
@@ -1319,6 +1354,24 @@ export const notifications = {
     apiRequest<{ id: string; read: boolean }>(`/notifications/${id}/read`, { method: "POST" }),
   markAllRead: () =>
     apiRequest<{ markedRead: number }>("/notifications/read-all", { method: "POST" }),
+
+  /** Whether the server can send push at all, and how many devices are enrolled. */
+  pushStatus: () =>
+    apiRequest<{ enabled: boolean; publicKey: string | null; devices: number }>(
+      "/notifications/push",
+    ),
+
+  subscribePush: (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    apiRequest<{ id: string; enabled: boolean }>("/notifications/push", {
+      method: "POST",
+      body: subscription,
+    }),
+
+  unsubscribePush: (endpoint: string) =>
+    apiRequest<{ removed: number }>(
+      `/notifications/push?endpoint=${encodeURIComponent(endpoint)}`,
+      { method: "DELETE" },
+    ),
 };
 
 // ---------------------------------------------------------------------------

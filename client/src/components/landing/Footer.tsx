@@ -78,12 +78,17 @@ export function Footer() {
             {columns.map((column) => (
               <div key={column.heading}>
                 <p className="mono-caps text-[0.6rem] text-faint">{column.heading}</p>
-                <ul className="mt-4 space-y-2.5">
+                {/* The links are the row, not a word inside it: an anchor that
+                    wraps only its text is 17px tall, which is half the
+                    smallest thing a thumb can reliably hit. `flex` plus a
+                    minimum height gives each one a real target without
+                    changing how the column looks. */}
+                <ul className="mt-2 sm:mt-3">
                   {column.links.map((link) => (
                     <li key={link.label}>
                       <Link
                         href={link.href}
-                        className="text-sm text-muted transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                        className="flex min-h-11 items-center text-sm text-muted transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                       >
                         {link.label}
                       </Link>

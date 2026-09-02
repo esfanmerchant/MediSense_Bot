@@ -51,6 +51,25 @@ EMAILED_TYPES: frozenset[NotificationType] = frozenset(
 )
 
 
+#: Types that also buzz a phone.
+#:
+#: Deliberately narrower than the emailed set. A push interrupts somebody
+#: wherever they are, so it is reserved for the things that are useless if seen
+#: later: a dose that is due now, a vital that has crossed a threshold, a
+#: request to open somebody's record in an emergency, a sign-in they may not
+#: have made. An invoice can wait for the inbox.
+PUSHED_TYPES: frozenset[NotificationType] = frozenset(
+    {
+        NotificationType.MEDICATION_REMINDER,
+        NotificationType.APPOINTMENT_REMINDER,
+        NotificationType.APPOINTMENT_CANCELLED,
+        NotificationType.VITAL_ALERT,
+        NotificationType.EMERGENCY_ACCESS,
+        NotificationType.ACCOUNT_SECURITY,
+    }
+)
+
+
 @dataclass(frozen=True)
 class Email:
     subject: str

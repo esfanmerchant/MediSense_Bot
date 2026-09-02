@@ -151,7 +151,7 @@ export function WithdrawDialog({
                 aria-pressed={method === option.value}
                 onClick={() => setMethod(option.value)}
                 className={cx(
-                  "min-h-10 rounded-xl px-4 text-sm font-semibold transition-colors",
+                  "min-h-11 rounded-xl px-4 text-sm font-semibold transition-colors",
                   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                   method === option.value
                     ? "bg-primary text-primary-on"

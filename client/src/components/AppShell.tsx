@@ -834,6 +834,19 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
   const [railOpen, setRailOpen] = useState(false);
 
   /**
+   * Re-register this browser for push, silently, once there is a session.
+   *
+   * A push service may rotate an endpoint underneath us, and the server only
+   * learns the new one if the page tells it. This never prompts — with
+   * permission not already granted it returns immediately — so it costs a
+   * signed-out or uninterested visitor nothing.
+   */
+  useEffect(() => {
+    if (!user) return;
+    void import("@/lib/push").then((push) => push.sync());
+  }, [user]);
+
+  /**
    * Publish the sticky header's height so other sticky things can sit under it.
    *
    * Measured rather than declared: `h-16` is only the header, and the stack
@@ -1048,12 +1061,16 @@ export function AppShell({ role, children }: { role: Role; children: ReactNode }
                   type="button"
                   aria-label="Open navigation"
                   aria-expanded={railOpen}
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-gradient-soft hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary lg:hidden"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-gradient-soft hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary lg:hidden"
                   onClick={() => setRailOpen(true)}
                 >
                   <Icon name="menu" />
                 </button>
-                <Link href="/" className="shrink-0 lg:hidden">
+                <Link
+                  href="/"
+                  aria-label="MediSense home"
+                  className="grid min-h-11 shrink-0 place-items-center lg:hidden"
+                >
                   <Logo variant="mark" size="sm" />
                 </Link>
                 <Breadcrumb role={user.role} pathname={pathname} />

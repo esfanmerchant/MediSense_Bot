@@ -158,7 +158,7 @@ export default function DoctorPatients() {
                               <div className="min-w-0">
                                 <Link
                                   href={`/doctor/patients/${patient.id}`}
-                                  className="font-semibold text-strong transition-colors hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                                  className="flex min-h-11 items-center font-semibold text-strong transition-colors hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:min-h-0"
                                 >
                                   {patient.name}
                                 </Link>
@@ -228,7 +228,7 @@ export default function DoctorPatients() {
                             <Link
                               href={`/doctor/patients/${patient.id}`}
                               aria-label={`${tr("Open chart for", "Chart kholein")} ${patient.name}`}
-                              className="inline-grid h-9 w-9 place-items-center rounded-full text-faint transition-[background-color,color,transform] duration-200 hover:bg-gradient-soft hover:text-primary group-hover:translate-x-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                              className="inline-grid h-11 w-11 place-items-center rounded-full text-faint transition-[background-color,color,transform] duration-200 hover:bg-gradient-soft hover:text-primary group-hover:translate-x-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:h-9 sm:w-9"
                             >
                               <Icon name="arrow_forward" className="text-[20px]" />
                             </Link>

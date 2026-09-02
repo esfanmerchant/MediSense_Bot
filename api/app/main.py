@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.deps import DbSession
+from app.core import redis as redis_store
 from app.core.config import settings
 from app.core.errors import AppError, ErrorCode
 from app.core.logging import configure_logging, logger
@@ -39,9 +40,11 @@ from app.modules.emergency.router import router as emergency_router
 from app.modules.notifications import dispatcher
 from app.modules.notifications.router import router as notifications_router
 from app.modules.patients.router import router as patients_router
+from app.modules.prescriptions.reminders import router as medication_reminders_router
 from app.modules.prescriptions.router import router as prescriptions_router
 from app.modules.records.router import router as records_router
 from app.modules.users.router import router as users_router
+from app.modules.vitals import stream
 from app.modules.vitals.alerts_router import router as alerts_router
 from app.modules.vitals.router import router as vitals_router
 from app.services import storage
@@ -94,6 +97,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         await _ensure_storage_buckets()
     if not settings.ai_configured:
         logger.warning("ai_not_configured", detail="chatbot and symptom analysis disabled")
+    if not settings.push_enabled:
+        logger.info("push_not_configured", detail="medication reminders stay in the portal")
     if not settings.email_configured:
         logger.warning("email_not_configured", detail="notifications will be logged, not sent")
     else:
@@ -111,12 +116,20 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # a sleeping task it will never need again.
     dispatcher_task = dispatcher.start() if dispatcher.should_run() else None
 
+    # With several workers, a browser's live feed is attached to one of them
+    # while the vital that raises an alert may be recorded on another. This
+    # relays those across. It is a no-op — and starts nothing — when there is
+    # no REDIS_URL, which is the correct configuration for a single worker.
+    stream.start_relay()
+
     yield
 
     if dispatcher_task is not None:
         dispatcher_task.cancel()
         with suppress(asyncio.CancelledError):
             await dispatcher_task
+    await stream.stop_relay()
+    await redis_store.close()
     await dispose_engine()
 
 
@@ -171,6 +184,7 @@ def create_app() -> FastAPI:
         appointments_router,
         records_router,
         prescriptions_router,
+        medication_reminders_router,
         documents_router,
         ocr_router,
         assistant_router,

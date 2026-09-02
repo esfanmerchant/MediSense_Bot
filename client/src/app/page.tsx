@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * The front door — Roman Urdu first, English one tap away.
  *

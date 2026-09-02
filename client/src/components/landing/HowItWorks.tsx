@@ -125,7 +125,7 @@ export function HowItWorks() {
   ];
 
   return (
-    <section id="kaise" className="band-light relative scroll-mt-24 overflow-hidden py-24">
+    <section id="kaise" className="band-light relative scroll-mt-24 overflow-hidden py-14 sm:py-20 lg:py-24">
       <Shell className="relative">
         <SectionHead
           eyebrow={tr("How it works", "Kaise chalta hai")}

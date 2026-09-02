@@ -107,3 +107,69 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// --- Push ------------------------------------------------------------------
+//
+// The payload arrives already decrypted: the browser opened it with the keys
+// it generated at subscribe time, and the push service in between only ever
+// carried ciphertext. That is what makes it acceptable for a body to name a
+// medicine.
+
+self.addEventListener("push", (event) => {
+  let message = {};
+  try {
+    message = event.data ? event.data.json() : {};
+  } catch {
+    // A push with no readable payload still means *something* happened. Say so
+    // rather than dropping it — a silent push is worse than a vague one, and
+    // some browsers show their own generic notification if we show none.
+    message = {};
+  }
+
+  const title = message.title || "MediSense";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: message.body || "You have a new notification.",
+      // A tag replaces rather than stacks, so three days of the same reminder
+      // are one line on a lock screen instead of a wall of them.
+      tag: message.tag || "medisense",
+      icon: "/brand/icon-192.png",
+      badge: "/brand/icon-192.png",
+      data: { link: message.link || "/" },
+      // Reminders about medicine should survive a glance at the screen.
+      requireInteraction: (message.tag || "").startsWith("MEDICATION_REMINDER"),
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const link = (event.notification.data && event.notification.data.link) || "/";
+  const target = new URL(link, self.location.origin).href;
+
+  // Focus a tab that is already open rather than piling up new ones — someone
+  // tapping four reminders should not end up with four copies of the portal.
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windows) => {
+        for (const client of windows) {
+          if (client.url === target && "focus" in client) return client.focus();
+        }
+        for (const client of windows) {
+          if ("navigate" in client && "focus" in client) {
+            return client.navigate(target).then((c) => (c ? c.focus() : undefined));
+          }
+        }
+        return self.clients.openWindow(target);
+      }),
+  );
+});
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  // The push service rotated the endpoint underneath us. Re-subscribing here
+  // needs the application key, which lives in the page, so the honest move is
+  // to let the next page load re-enrol — it posts on every load for exactly
+  // this reason. Nothing to do but not crash.
+  event.waitUntil(Promise.resolve());
+});

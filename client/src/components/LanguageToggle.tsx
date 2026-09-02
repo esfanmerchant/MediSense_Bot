@@ -38,7 +38,7 @@ export function LanguageToggle({ onDark = false }: { onDark?: boolean }) {
             aria-pressed={active}
             onClick={() => setLang(option.value)}
             className={cx(
-              "min-h-8 rounded-full px-3 transition-colors",
+              "min-h-11 rounded-full px-3 transition-colors",
               "focus-visible:outline-2 focus-visible:outline-offset-2",
               onDark ? "focus-visible:outline-white" : "focus-visible:outline-primary",
               active

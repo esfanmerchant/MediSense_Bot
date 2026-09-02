@@ -3,19 +3,21 @@
 /**
  * What the system will tell you about — and nothing you can switch.
  *
- * **There is no preferences endpoint, so there are no switches.** A row of
- * toggles that looks live and saves nowhere is worse than no toggles at all: it
- * teaches someone they have turned off a vital-sign alert they will still be
- * sent, and the first time that matters is the time it matters most. So this
- * tab does the one honest thing available — it says exactly what the server
- * sends, to whom, and by which channel, and it says plainly that none of it is
- * configurable yet.
+ * **One real switch, and no fake ones.** Push on this device is a thing the
+ * server can genuinely act on, so it gets a control. Per-type preferences have
+ * no endpoint to save to, so they get none: a row of toggles that looks live
+ * and saves nowhere is worse than no toggles at all — it teaches someone they
+ * have turned off a vital-sign alert they will still be sent, and the first
+ * time that matters is the time it matters most. For those, this tab does the
+ * one honest thing available: it says exactly what the server sends, to whom,
+ * and by which channel.
  *
  * The list is not decoration: it is read off the notification types the API
  * actually dispatches, so a reader can predict their inbox.
  */
 
 import { Icon } from "@/components/Icon";
+import { PushToggle } from "@/components/settings/PushToggle";
 import { Badge, Card, cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
 import type { Role } from "@/lib/api";
@@ -26,6 +28,8 @@ interface NotificationKind {
   description: [string, string];
   /** Also sent by email — deliberately saying less than the in-app copy. */
   emailed: boolean;
+  /** Also pushed to enrolled devices. Reserved for what is useless seen late. */
+  pushed: boolean;
   roles: Role[];
 }
 
@@ -38,6 +42,7 @@ const KINDS: NotificationKind[] = [
       "Book hona, waqt badalna, cancel hona, aur visit se pehle reminder. Mareez aur doctor dono ko jata hai.",
     ],
     emailed: true,
+    pushed: true,
     roles: ["PATIENT", "DOCTOR"],
   },
   {
@@ -48,6 +53,7 @@ const KINDS: NotificationKind[] = [
       "Koi reading apni muqarrar hadd paar kare to. Yeh ilaaj karne wale doctor ko jata hai, reading ke saath.",
     ],
     emailed: true,
+    pushed: true,
     roles: ["DOCTOR"],
   },
   {
@@ -58,6 +64,7 @@ const KINDS: NotificationKind[] = [
       "Aap ka record emergency mein khola jaye to — aap ko bhi bataya jata hai aur admin ko bhi, jo isay review karta hai.",
     ],
     emailed: true,
+    pushed: true,
     roles: ["PATIENT", "ADMIN"],
   },
   {
@@ -68,26 +75,29 @@ const KINDS: NotificationKind[] = [
       "Mukammal consultation ke liye nayi invoice bane to.",
     ],
     emailed: true,
+    pushed: false,
     roles: ["PATIENT", "ADMIN"],
   },
   {
     icon: "description",
     title: ["New documents", "Naye documents"],
     description: [
-      "A report or scan added to your record. In the portal only — a result never travels by email.",
-      "Aap ke record mein report ya scan add ho to. Sirf portal mein — result kabhi email se nahi jata.",
+      "A report or scan added to your record. In the portal only — a result never leaves it.",
+      "Aap ke record mein report ya scan add ho to. Sirf portal mein — result kabhi bahar nahi jata.",
     ],
     emailed: false,
+    pushed: false,
     roles: ["PATIENT"],
   },
   {
     icon: "medication",
     title: ["Medication reminders", "Dawa ke reminders"],
     description: [
-      "A dose due from an active prescription. In the portal only.",
-      "Kisi chalti hui prescription ki dose ka waqt. Sirf portal mein.",
+      "A dose due, at times you set yourself on the prescription. Pushed to your devices — never emailed.",
+      "Dose ka waqt, jo aap khud prescription par muqarrar karte hain. Aap ke devices par push hota hai — email kabhi nahi.",
     ],
     emailed: false,
+    pushed: true,
     roles: ["PATIENT"],
   },
   {
@@ -98,6 +108,7 @@ const KINDS: NotificationKind[] = [
       "Password badalna, naya sign-in, ya two-factor on/off hona.",
     ],
     emailed: true,
+    pushed: true,
     roles: ["PATIENT", "DOCTOR", "ADMIN", "NURSE"],
   },
 ];
@@ -122,24 +133,26 @@ export function NotificationsTab({ role }: { role: Role }) {
         <p className="text-sm leading-relaxed text-strong">
           <strong className="font-semibold">
             {tr(
-              "Notification preferences are not configurable yet.",
-              "Notifications ki settings abhi tabdeel nahi ki ja sakteen.",
+              "You can switch this device on or off. Which notifications you get is not yet a choice.",
+              "Is device ko on ya off aap kar sakte hain. Kaun se notifications aayenge, yeh abhi tabdeel nahi hota.",
             )}
           </strong>{" "}
           <span className="text-muted">
             {tr(
-              "There is no endpoint to save them to, so this page shows what the system currently sends rather than pretending to control it. Everything below is on.",
-              "Inhein save karne ke liye abhi koi endpoint nahi, is liye yeh safha sirf yeh batata hai ke system is waqt kya bhejta hai — control ka jhoota wada nahi karta. Neeche sab kuch on hai.",
+              "There is nowhere to save per-notification preferences yet, so the list below describes what the system actually sends rather than pretending to control it. All of it is on.",
+              "Har notification ki alag setting save karne ki abhi koi jagah nahi, is liye neeche di gayi fehrist sirf yeh batati hai ke system asal mein kya bhejta hai — control ka jhoota wada nahi karti. Yeh sab on hai.",
             )}
           </span>
         </p>
       </div>
 
+      <PushToggle />
+
       <Card
         title={tr("What you are notified about", "Aap ko kis cheez ki ittila di jati hai")}
         description={tr(
-          "Every one of these reaches you in the portal. The ones marked also arrive by email.",
-          "In sab ki ittila portal mein milti hai. Jin par nishaan hai, woh email se bhi aate hain.",
+          "Every one of these reaches you in the portal. The badges say which also travel by email or to your devices.",
+          "In sab ki ittila portal mein milti hai. Nishaan batate hain ke kaun se email ya aap ke devices par bhi jate hain.",
         )}
         icon="notifications"
         flush
@@ -170,6 +183,12 @@ export function NotificationsTab({ role }: { role: Role }) {
                     {tr("Email", "Email")}
                   </Badge>
                 )}
+                {kind.pushed && (
+                  <Badge tone="info">
+                    <Icon name="notifications_active" className="text-[14px]" />
+                    {tr("Push", "Push")}
+                  </Badge>
+                )}
               </div>
             </li>
           ))}
@@ -182,8 +201,8 @@ export function NotificationsTab({ role }: { role: Role }) {
       >
         <p className={cx("text-sm leading-relaxed text-muted")}>
           {tr(
-            "An in-app notification is read inside your session, behind a sign-in. An email crosses to a mail provider, sits on their servers and lands on a lock screen anyone nearby can read. So an email names the kind of thing that happened and where to go and see it — appointment times and invoice numbers included, because a reminder that withholds the time is not a reminder. Diagnoses, medicines, symptoms and results stay in the portal.",
-            "App ke andar notification aap ke session mein, sign-in ke peeche parhi jati hai. Email mail provider tak jati hai, un ke servers par rehti hai, aur lock screen par aati hai jahan qareeb khara koi bhi parh sakta hai. Is liye email sirf yeh batati hai ke kis qism ka waqia hua aur kahan dekhna hai — appointment ka waqt aur invoice number shamil, kyunke waqt chhupane wala reminder reminder nahi hota. Tashkhees, dawaiyan, alamat aur results portal hi mein rehte hain.",
+            "An in-app notification is read inside your session, behind a sign-in. An email crosses to a mail provider, sits on their servers and lands on a lock screen anyone nearby can read. So an email names the kind of thing that happened and where to go and see it — appointment times and invoice numbers included, because a reminder that withholds the time is not a reminder. Diagnoses, symptoms and results stay in the portal. A push is different again: it is encrypted to your device before it leaves us, and the service that carries it cannot read it — which is why a dose reminder may name the medicine, and an email never does.",
+            "App ke andar notification aap ke session mein, sign-in ke peeche parhi jati hai. Email mail provider tak jati hai, un ke servers par rehti hai, aur lock screen par aati hai jahan qareeb khara koi bhi parh sakta hai. Is liye email sirf yeh batati hai ke kis qism ka waqia hua aur kahan dekhna hai — appointment ka waqt aur invoice number shamil, kyunke waqt chhupane wala reminder reminder nahi hota. Tashkhees, alamat aur results portal hi mein rehte hain. Push is se mukhtalif hai: woh aap ke device ke liye yahan se hi encrypt ho kar jata hai, aur beech mein le jane wali service usay parh nahi sakti — is liye dawa ka reminder dawa ka naam le sakta hai, aur email kabhi nahi.",
           )}
         </p>
       </Card>

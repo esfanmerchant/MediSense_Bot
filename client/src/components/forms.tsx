@@ -165,13 +165,23 @@ export function Segmented<T extends string>({
 }) {
   const reduced = useReducedMotion();
   const layoutId = useId();
-  const sizes = { sm: "min-h-9 px-3 text-xs", md: "min-h-11 px-4 text-sm" } as const;
+  // `sm` is compact by intent, but a tab row is how a page changes what it
+  // shows, and on a phone that is a thumb target — 36px is not one. It gets
+  // the full height under the breakpoint and stays compact above it.
+  const sizes = { sm: "min-h-11 px-3 text-xs sm:min-h-9", md: "min-h-11 px-4 text-sm" } as const;
 
   return (
     <div
       role="tablist"
       aria-label={label}
-      className={cx("inline-flex rounded-xl border border-line bg-sunken p-1", className)}
+      // `inline-flex` sizes to its content and its children are `flex-1`, so a
+      // row of five tabs simply refuses to be narrower than the phone it is on
+      // — which scrolled the whole page sideways. `max-w-full` plus its own
+      // scroller keeps every tab reachable and the document still.
+      className={cx(
+        "no-scrollbar inline-flex max-w-full overflow-x-auto rounded-xl border border-line bg-sunken p-1",
+        className,
+      )}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -183,7 +193,7 @@ export function Segmented<T extends string>({
             aria-selected={active}
             onClick={() => onChange(option.value)}
             className={cx(
-              "relative flex flex-1 items-center justify-center gap-1.5 rounded-lg font-semibold transition-colors",
+              "relative flex flex-1 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-semibold transition-colors",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
               sizes[size],
               active ? "text-white" : "text-muted hover:text-strong",
@@ -242,6 +252,11 @@ export function Switch({
         onClick={() => onChange(!checked)}
         className={cx(
           "relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors",
+          // A switch that *looks* 44px tall looks wrong, so the hit area is
+          // extended instead of the track. The label beside it is not a target
+          // — a <label> forwards clicks to an input, not to a button — so this
+          // is the only thing a thumb has to aim at.
+          "before:absolute before:-inset-2.5 before:content-['']",
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
           checked ? "bg-primary" : "bg-line-strong",
         )}

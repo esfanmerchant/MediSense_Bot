@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     #: than taking booking offline.
     CLINIC_TIMEZONE: str = "Asia/Karachi"
 
+    #: Optional shared state, for a deployment running more than one worker.
+    #:
+    #: Empty is a supported configuration: the rate limiter counts in-process
+    #: and the live feed fans out in-process, both of which are exactly correct
+    #: with one worker. Set this and both become correct with several. See
+    #: ``app.core.redis`` for why it is never required.
+    REDIS_URL: str = ""
+
     # --- Billing ---------------------------------------------------------
     INVOICE_CURRENCY: str = "PKR"
     #: Tax applied to a consultation fee, as a percentage. Configuration rather
@@ -56,6 +64,25 @@ class Settings(BaseSettings):
     SESSION_SECRET: str = ""
     SESSION_IDLE_TIMEOUT_SECONDS: int = 120
     SESSION_ABSOLUTE_TIMEOUT_SECONDS: int = 43_200
+
+    # --- Web Push ---------------------------------------------------------
+    #: The VAPID keypair that identifies this server to a push service. The
+    #: public half is handed to the browser and is public by design; the
+    #: private half signs the request and lives only here.
+    #:
+    #: Empty by default, and push is simply off when they are: a deployment
+    #: that has not been given keys should send no push rather than crash on
+    #: the first reminder.
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    #: Where a push service should complain to. A mailto: URL, per the VAPID
+    #: spec — it is how an operator tells you your pushes are misbehaving
+    #: before they start dropping them.
+    VAPID_SUBJECT: str = "mailto:medisensebot@gmail.com"
+
+    @property
+    def push_enabled(self) -> bool:
+        return bool(self.VAPID_PUBLIC_KEY and self.VAPID_PRIVATE_KEY)
 
     # --- Supabase Storage ------------------------------------------------
     SUPABASE_URL: str = ""

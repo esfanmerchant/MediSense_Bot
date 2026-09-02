@@ -124,7 +124,7 @@ export function BookingOffer({ proposal }: { proposal: BookingProposal }) {
             aria-pressed={chosen === slot.startTime}
             onClick={() => setChosen(slot.startTime)}
             className={cx(
-              "min-h-9 rounded-lg px-3 text-sm font-semibold tabular-nums transition-colors",
+              "min-h-11 rounded-lg px-3 text-sm font-semibold tabular-nums transition-colors sm:min-h-9",
               "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
               chosen === slot.startTime
                 ? "bg-primary text-primary-on"

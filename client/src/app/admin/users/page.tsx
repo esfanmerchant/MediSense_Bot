@@ -215,7 +215,7 @@ export default function AdminUsers() {
                   aria-pressed={role === option.value}
                   onClick={() => setRole(option.value)}
                   className={cx(
-                    "min-h-9 rounded-md px-3 text-xs font-bold transition-colors",
+                    "min-h-11 rounded-md px-3 text-xs font-bold transition-colors sm:min-h-9",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                     role === option.value
                       ? "bg-primary text-primary-on"

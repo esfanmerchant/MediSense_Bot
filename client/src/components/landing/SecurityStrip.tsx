@@ -59,7 +59,7 @@ export function SecurityStrip() {
   ];
 
   return (
-    <section id="hifazat" className="band-dark relative scroll-mt-24 overflow-hidden py-24">
+    <section id="hifazat" className="band-dark relative scroll-mt-24 overflow-hidden py-14 sm:py-20 lg:py-24">
       {/* The machine room's own field, lagging the scroll — the depth cue the
           navy gets that a white section has to earn. */}
       <Parallax speed={110} className="pointer-events-none absolute inset-x-0 -inset-y-20 opacity-50">

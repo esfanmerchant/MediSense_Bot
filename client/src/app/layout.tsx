@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono, Sora } from "next/font/google";
 import type { ReactNode } from "react";
 
+import { ICON_NAMES } from "@/app/icon-names.generated";
 import { Providers } from "@/components/Providers";
 import { ServiceWorker } from "@/components/ServiceWorker";
 import "./globals.css";
@@ -64,9 +65,24 @@ const mono = JetBrains_Mono({
  * `display=block` rather than `swap`, for the same reason: `swap` shows the raw
  * ligature name until the glyph arrives, and a word where an icon should be
  * reads as a bug.
+ *
+ * What made blocking affordable is the subset below. The unqualified URL
+ * fetches every Material Symbol Google has, at every axis — 3.8 MB — and
+ * blocking the first paint on that is a different proposition from blocking
+ * on the 28 KB this application actually uses.
  */
 const ICON_FONT =
-  "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block";
+  "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" +
+  // Only FILL varies: `.msym` pins wght 400, GRAD 0 and opsz 24, and
+  // `.msym-fill` changes nothing but FILL. Asking for the full ranges shipped
+  // four axes of interpolation the app never moves — 230 KB against 28 KB.
+  ":opsz,wght,FILL,GRAD@24,400,0..1,0" +
+  // Naming the icons is the rest of it: unqualified, Google serves every
+  // symbol it has. The list is generated from the source rather than written,
+  // because an icon missing from it has no glyph and renders its own name as
+  // a word — see icon-names.generated.ts and the test beside it.
+  `&icon_names=${ICON_NAMES.join(",")}` +
+  "&display=block";
 
 export const metadata: Metadata = {
   title: "MediSense — Smart Healthcare Management",
@@ -111,7 +127,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link rel="preload" as="style" href={ICON_FONT} />
-        { }
         <link rel="stylesheet" href={ICON_FONT} />
       </head>
       <body className="text-strong antialiased">

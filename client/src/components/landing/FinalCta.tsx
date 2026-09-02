@@ -31,7 +31,7 @@ export function FinalCta({
   const { ref: headRef, className: headMotion } = useStagger<HTMLDivElement>();
 
   return (
-    <section className="band-light relative overflow-hidden py-24">
+    <section className="band-light relative overflow-hidden py-14 sm:py-20 lg:py-24">
       <Shell>
         <Rise y={34}>
           <div className="relative">
@@ -46,7 +46,7 @@ export function FinalCta({
               }}
             />
 
-            <div className="border-gradient-thick ms-elevate relative overflow-hidden rounded-2xl px-6 py-16 text-center sm:px-10">
+            <div className="border-gradient-thick ms-elevate relative overflow-hidden rounded-2xl px-5 py-12 text-center sm:px-10 sm:py-16">
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 opacity-10"

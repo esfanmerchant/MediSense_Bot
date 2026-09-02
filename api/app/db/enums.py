@@ -288,6 +288,10 @@ class NotificationType(StrEnum):
 class NotificationChannel(StrEnum):
     IN_APP = "IN_APP"
     EMAIL = "EMAIL"
+    #: A Web Push message to a device the patient has enrolled. The only
+    #: channel that reaches somebody who is not looking at the site, which is
+    #: the whole point of a reminder to take a tablet.
+    PUSH = "PUSH"
 
 
 class NotificationStatus(StrEnum):

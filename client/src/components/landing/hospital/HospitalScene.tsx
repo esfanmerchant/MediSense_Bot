@@ -34,8 +34,29 @@ import * as THREE from "three";
 import { buildHospital, person, type Person } from "./build";
 import { NODES, ROOMS, walkThrough, type Room } from "./plan";
 
-/** Where the camera stands for each stop, and what it looks at. */
-const OVERVIEW = { eye: [19.5, 15.6, 20.5], look: [-0.2, 0.7, -0.3] } as const;
+/**
+ * Where the camera stands for each stop, and what it looks at.
+ *
+ * The words live over the left third of the screen, so every shot is aimed to
+ * put the building right of centre. Moving the *look-at* does that rather than
+ * moving the camera: shifting the target along screen-left slides the subject
+ * screen-right without changing the angle you see it from, which is the part
+ * that makes the building read as a building.
+ *
+ * Screen-right, from this fixed three-quarter angle, is roughly +x −z. So the
+ * offset below is its opposite, scaled by how far the subject has to clear the
+ * text.
+ */
+const SHIFT_RIGHT = { x: -0.76, z: 0.65 };
+
+function aimed(eye: readonly [number, number, number], at: readonly [number, number, number], clear: number) {
+  return {
+    eye,
+    look: [at[0] + SHIFT_RIGHT.x * clear, at[1], at[2] + SHIFT_RIGHT.z * clear] as const,
+  };
+}
+
+const OVERVIEW = aimed([22.5, 18.2, 23.5], [0.2, 0.9, -0.9], 2.2);
 
 /**
  * Close enough to read the room, far enough to see it *is* a room.
@@ -46,19 +67,18 @@ const OVERVIEW = { eye: [19.5, 15.6, 20.5], look: [-0.2, 0.7, -0.3] } as const;
  * are both in shot, which is the whole point of having built them.
  */
 function roomShot(room: Room) {
-  return {
-    eye: [room.x + 5.6, 6.1, room.z + 6.6],
-    look: [room.x - 0.2, 0.45, room.z + 0.1],
-  } as const;
+  return aimed([room.x + 7.4, 8, room.z + 8.6], [room.x - 0.2, 0.55, room.z + 0.1], 2);
 }
 
 export const STOPS = [
   OVERVIEW,
   ...ROOMS.map(roomShot),
-  { eye: [18.5, 15, 19.5], look: [-0.2, 0.7, 0] } as const,
+  aimed([21.5, 17.4, 22.5], [0.2, 0.9, -0.6], 2.2),
 ];
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+/** Eases both ends of a 0..1 run, so nothing starts or stops abruptly. */
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
 const damp = (a: number, b: number, lambda: number, dt: number) =>
   a + (b - a) * (1 - Math.exp(-lambda * dt));
 
@@ -326,8 +346,8 @@ export function HospitalScene({
     host.addEventListener("click", onClick);
 
     /* ---- the loop ------------------------------------------------------------ */
-    const eye = new THREE.Vector3(...OVERVIEW.eye);
-    const look = new THREE.Vector3(...OVERVIEW.look);
+    const eye = new THREE.Vector3(...STOPS[0].eye);
+    const look = new THREE.Vector3(...STOPS[0].look);
     let darkness = night.current ? 1 : 0;
     let reportedStop = -1;
 
@@ -388,17 +408,30 @@ export function HospitalScene({
         reportedStop = stop;
         handlers.current.onStop(stop);
       }
-      const shot = STOPS[Math.min(STOPS.length - 1, stop)];
 
-      /* -- camera -- */
-      const k = 1 - Math.exp(-2.2 * dt);
-      eye.x = damp(eye.x, shot.eye[0], 2.2, dt);
-      eye.y = damp(eye.y, shot.eye[1], 2.2, dt);
-      eye.z = damp(eye.z, shot.eye[2], 2.2, dt);
-      look.x = damp(look.x, shot.look[0], 2.2, dt);
-      look.y = damp(look.y, shot.look[1], 2.2, dt);
-      look.z = damp(look.z, shot.look[2], 2.2, dt);
-      void k;
+      /* -- camera --
+         The shot is interpolated between the two stops the reader is between,
+         not snapped to the nearer one. Snapping is what made this feel steppy:
+         the target jumped the moment the scroll crossed a midpoint, and the
+         damping then chased it, so the camera was always either still or
+         catching up — never simply moving with the page.
+
+         The blend holds at each end and travels in the middle, so a stop still
+         *settles* on its room instead of drifting through it. Damping stays on
+         top, but only to take the jitter out of the scroll. */
+      const leg = Math.min(STOPS.length - 2, Math.floor(position));
+      const along = clamp01(position - leg);
+      const glide = smoothstep(clamp01((along - 0.16) / 0.68));
+      const a = STOPS[leg];
+      const b = STOPS[leg + 1];
+      const blend = (from: number, to: number) => from + (to - from) * glide;
+
+      eye.x = damp(eye.x, blend(a.eye[0], b.eye[0]), 5.5, dt);
+      eye.y = damp(eye.y, blend(a.eye[1], b.eye[1]), 5.5, dt);
+      eye.z = damp(eye.z, blend(a.eye[2], b.eye[2]), 5.5, dt);
+      look.x = damp(look.x, blend(a.look[0], b.look[0]), 5.5, dt);
+      look.y = damp(look.y, blend(a.look[1], b.look[1]), 5.5, dt);
+      look.z = damp(look.z, blend(a.look[2], b.look[2]), 5.5, dt);
       camera.position.copy(eye);
       if (pointerLive) {
         camera.position.x += pointer.x * 0.35;

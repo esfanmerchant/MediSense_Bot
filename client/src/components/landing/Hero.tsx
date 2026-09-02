@@ -183,7 +183,7 @@ function Words({
   const y = useTransform(progress, range, [12, 0, 0, -12]);
 
   return (
-    <motion.div style={{ opacity, y }} className="absolute inset-x-0 top-1/2 max-w-xl -translate-y-1/2">
+    <motion.div style={{ opacity, y }} className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2">
       <span className="inline-flex items-center gap-2 rounded-full border border-white/14 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-[#AFC9E8]">
         <span className="h-1.5 w-1.5 rounded-full bg-[#14C4C1]" />
         {tr(...stop.chip)}
@@ -245,10 +245,20 @@ export function Hero({
   }, []);
 
   const { scrollYProgress } = useScroll({ target: track, offset: ["start start", "end end"] });
+  /**
+   * The scroll, smoothed.
+   *
+   * Overdamped on purpose — the damping ratio here is about two and a half, so
+   * the value glides to the scroll position and never overshoots it. Raw scroll
+   * is mechanical and an underdamped spring rings, which on a camera reads as a
+   * wobble at the end of every move. It also means progress cannot stray below
+   * zero or past one, which an overshooting spring did, and which used to index
+   * off the end of the stop list.
+   */
   const progress = useSpring(scrollYProgress, {
-    stiffness: 80,
-    damping: 26,
-    mass: 0.45,
+    stiffness: 70,
+    damping: 30,
+    mass: 0.5,
     restDelta: 0.0001,
   });
 
@@ -342,11 +352,55 @@ export function Hero({
       style={{ background: "radial-gradient(120% 90% at 50% 10%, #0A2A63 0%, #00194D 48%, #040B1F 100%)" }}
     >
       <div className="sticky top-0 h-screen overflow-hidden">
-        {/* Two columns. The words never sit on the building, and the building
-            is never hidden by the words — which is the whole reason this
-            section can afford to be a hospital rather than a diagram. */}
-        <div className="relative mx-auto grid h-full max-w-7xl grid-cols-[minmax(0,26rem)_1fr] items-center gap-8 px-6 xl:gap-12">
-          <div className="relative z-10 h-[30rem]">
+        {/* The building fills the frame, and the words sit on it.
+            ------------------------------------------------------
+            It was two columns, which kept them apart but also kept the
+            hospital in half a screen — and a hospital in half a screen is a
+            diagram of one. Full bleed, with the camera aimed so the building
+            sits right of centre and the left third stays clear, gives the
+            scene the room it needs and the words somewhere to stand. */}
+        <div className="absolute inset-0">
+          {stillOnly ? (
+            <div className="flex h-full items-center justify-end pr-[4vw]">
+              <Image
+                src={dark ? "/hero/hospital-dark.webp" : "/hero/hospital-light.webp"}
+                alt={tr(
+                  "The hospital: reception, records, ward, consultation, pharmacy and administration around a corridor.",
+                  "Hospital: corridor ke ird-gird reception, records, ward, consultation, pharmacy aur administration.",
+                )}
+                width={880}
+                height={718}
+                className="w-[min(62vw,60rem)] rounded-2xl"
+              />
+            </div>
+          ) : (
+            <HospitalScene
+              progress={scenePosition}
+              stops={STOPS.length}
+              onStop={setStop}
+              onHover={setHovered}
+              onAlert={setCritical}
+              onRoomClick={(room) => goToStop(room.id)}
+              onUnsupported={() => setStillOnly(true)}
+              dark={dark}
+            />
+          )}
+        </div>
+
+        {/* Enough ground under the words to read them on, and no more. A panel
+            would cut the building in half again; a gradient that fades out
+            before the middle of the screen does not. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-[62%]"
+          style={{
+            background:
+              "linear-gradient(90deg, rgba(4,11,31,0.92) 0%, rgba(4,11,31,0.78) 34%, rgba(4,11,31,0) 100%)",
+          }}
+        />
+
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex w-[min(30rem,46vw)] items-center px-6 lg:pl-[5vw]">
+          <div className="relative h-[30rem] w-full">
             {STOPS.map((item, i) => (
               <Words
                 key={item.label[0]}
@@ -392,32 +446,6 @@ export function Hero({
                 )}
               </Words>
             ))}
-          </div>
-
-          <div className="relative flex h-full items-center">
-            {stillOnly ? (
-              <Image
-                src={dark ? "/hero/hospital-dark.webp" : "/hero/hospital-light.webp"}
-                alt={tr(
-                  "The hospital: reception, records, ward, consultation, pharmacy and administration around a corridor.",
-                  "Hospital: corridor ke ird-gird reception, records, ward, consultation, pharmacy aur administration.",
-                )}
-                width={880}
-                height={718}
-                className="w-full rounded-2xl"
-              />
-            ) : (
-              <HospitalScene
-                progress={scenePosition}
-                stops={STOPS.length}
-                onStop={setStop}
-                onHover={setHovered}
-                onAlert={setCritical}
-                onRoomClick={(room) => goToStop(room.id)}
-                onUnsupported={() => setStillOnly(true)}
-                dark={dark}
-              />
-            )}
           </div>
         </div>
 

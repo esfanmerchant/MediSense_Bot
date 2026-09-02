@@ -62,6 +62,9 @@ function Voice() {
             setShown(0);
           }}
           aria-pressed={live}
+          // An icon is not a name. Without this the only control in the panel
+          // is announced as "button", which is the same as not being there.
+          aria-label={live ? tr("Stop speaking", "Bolna band karein") : tr("Speak", "Bolein")}
           className="bg-gradient-brand grid h-11 w-11 shrink-0 place-items-center rounded-full text-white"
         >
           <Icon name={live ? "mic" : "mic_off"} filled className="text-[20px]" />

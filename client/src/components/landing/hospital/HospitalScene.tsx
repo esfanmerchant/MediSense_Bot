@@ -62,6 +62,12 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const damp = (a: number, b: number, lambda: number, dt: number) =>
   a + (b - a) * (1 - Math.exp(-lambda * dt));
 
+/** Arms swing against the legs, from the shoulder rather than the elbow. */
+function swingArms(body: Person, angle: number) {
+  body.arms[0].parent!.rotation.x = -angle;
+  body.arms[1].parent!.rotation.x = angle;
+}
+
 /** A character walking a fixed loop over the graph. */
 interface Walker {
   body: Person;
@@ -103,6 +109,7 @@ export function HospitalScene({
   onHover,
   onAlert,
   onRoomClick,
+  onUnsupported,
   dark,
 }: {
   /** 0 → 1 across the pinned hero. Read every frame. */
@@ -112,6 +119,8 @@ export function HospitalScene({
   onHover: (room: Room | null) => void;
   onAlert: (critical: boolean) => void;
   onRoomClick: (room: Room) => void;
+  /** Called when this machine cannot render the scene at a watchable rate. */
+  onUnsupported: () => void;
   dark: boolean;
 }) {
   const mount = useRef<HTMLDivElement | null>(null);
@@ -121,10 +130,10 @@ export function HospitalScene({
   // from an effect rather than during render: React 19 forbids the latter, and
   // is right to — a ref written mid-render is a value that disagrees with
   // itself if the render is thrown away.
-  const handlers = useRef({ onStop, onHover, onAlert, onRoomClick });
+  const handlers = useRef({ onStop, onHover, onAlert, onRoomClick, onUnsupported });
   useEffect(() => {
-    handlers.current = { onStop, onHover, onAlert, onRoomClick };
-  }, [onStop, onHover, onAlert, onRoomClick]);
+    handlers.current = { onStop, onHover, onAlert, onRoomClick, onUnsupported };
+  }, [onStop, onHover, onAlert, onRoomClick, onUnsupported]);
 
   const night = useRef(dark);
   useEffect(() => {
@@ -139,16 +148,55 @@ export function HospitalScene({
     try {
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" });
     } catch {
+      // No WebGL at all. The caller shows the rendered still instead.
+      handlers.current.onUnsupported();
+      return;
+    }
+
+    /**
+     * Machines that cannot really do this get the picture instead.
+     *
+     * Not a performance trick — a correctness one. Where WebGL falls back to a
+     * software rasteriser (SwiftShader, llvmpipe, a VM with no GPU) every frame
+     * of this scene costs over a tenth of a second, and what the visitor gets
+     * is not an animated hospital but a locked browser tab with a slideshow in
+     * it. A still render of the same building is strictly better, and it is the
+     * same building, because it was rendered from this scene.
+     *
+     * Checked twice: by name up front, because the known-bad ones say so; and
+     * by measuring, because the list of slow machines is not knowable.
+     */
+    const debugInfo = renderer.getContext().getExtension("WEBGL_debug_renderer_info");
+    const rendererName = debugInfo
+      ? String(renderer.getContext().getParameter(debugInfo.UNMASKED_RENDERER_WEBGL))
+      : "";
+
+    // `?hero=force` runs the scene anyway, and exists for one job: the still in
+    // `public/hero/` is a screenshot *of this scene*, so regenerating it means
+    // running the scene on whatever machine is doing the regenerating — which
+    // is usually a build box with no GPU, exactly the machine this check turns
+    // the scene off on. Without the override the picture could never be
+    // remade, and a fallback that cannot be regenerated goes stale the first
+    // time a room moves.
+    const forced =
+      typeof window !== "undefined" && window.location.search.includes("hero=force");
+
+    if (!forced && /swiftshader|llvmpipe|software|basic render/i.test(rendererName)) {
+      renderer.dispose();
+      handlers.current.onUnsupported();
       return;
     }
 
     const width = () => host.clientWidth || 1;
     const height = () => host.clientHeight || 1;
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // 1.25 rather than 1.5, and a plain PCF shadow rather than a soft one.
+    // Flat-shaded boxes gain almost nothing from either, and both are paid for
+    // on every frame of the one page that has to open fastest.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     renderer.setSize(width(), height(), false);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.domElement.style.width = "100%";
     renderer.domElement.style.height = "100%";
     renderer.domElement.style.display = "block";
@@ -163,7 +211,7 @@ export function HospitalScene({
     const sun = new THREE.DirectionalLight(0xfff4e6, 1.45);
     sun.position.set(7, 11, 5);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(512, 512);
     Object.assign(sun.shadow.camera, {
       left: -13,
       right: 13,
@@ -297,9 +345,38 @@ export function HospitalScene({
     let frame = 0;
     let running = true;
     let last = performance.now();
+    let lastPaint = 0;
+
+    // The machine is timed, but not from the first frame.
+    //
+    // The opening frames of any WebGL scene are the most expensive it will ever
+    // draw — shaders compile, textures upload, the shadow map fills for the
+    // first time — so judging on those would demote a perfectly good laptop for
+    // being slow at the one moment everything is slow. Twenty frames of warm-up
+    // are thrown away, then forty are measured, and the bar is about thirty a
+    // second: below that this is a slideshow, and the still is honestly better.
+    const WARM_UP = 20;
+    const SAMPLE = 40;
+    const samples: number[] = [];
+    let seenFrames = 0;
+    let judged = false;
 
     const draw = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
+      if (!judged) {
+        seenFrames += 1;
+        if (seenFrames > WARM_UP) samples.push(now - last);
+        if (samples.length === SAMPLE) {
+          judged = true;
+          const median = samples.slice().sort((a, b) => a - b)[SAMPLE / 2];
+          if (!forced && median > 32) {
+            running = false;
+            cancelAnimationFrame(frame);
+            handlers.current.onUnsupported();
+            return;
+          }
+        }
+      }
       last = now;
       const t = now / 1000;
 
@@ -361,6 +438,7 @@ export function HospitalScene({
           walker.pause -= dt;
           walker.body.legs[0].rotation.x = 0;
           walker.body.legs[1].rotation.x = 0;
+          swingArms(walker.body, 0);
         } else {
           const span = Math.hypot(next.x - here.x, next.z - here.z) || 0.001;
           walker.along += (dt * walker.speed) / span;
@@ -372,6 +450,7 @@ export function HospitalScene({
           }
           walker.body.legs[0].rotation.x = Math.sin(t * 11) * 0.5;
           walker.body.legs[1].rotation.x = -Math.sin(t * 11) * 0.5;
+          swingArms(walker.body, Math.sin(t * 11) * 0.42);
         }
 
         const from = NODES[walker.path[walker.at]];
@@ -458,6 +537,7 @@ export function HospitalScene({
             doctor.group.rotation.y = Math.atan2(toNode.x - fromNode.x, toNode.z - fromNode.z);
             doctor.legs[0].rotation.x = Math.sin(t * 12) * 0.5;
             doctor.legs[1].rotation.x = -Math.sin(t * 12) * 0.5;
+            swingArms(doctor, Math.sin(t * 12) * 0.42);
             for (const [key] of built.doors) {
               const node = Object.values(NODES).find((n) => n.door === key);
               if (!node) continue;
@@ -468,6 +548,7 @@ export function HospitalScene({
           } else {
             doctor.legs[0].rotation.x = 0;
             doctor.legs[1].rotation.x = 0;
+            swingArms(doctor, 0);
             if (!forward) doctor.group.position.copy(doctorHome);
           }
         }
@@ -494,7 +575,15 @@ export function HospitalScene({
       /* -- small life -- */
       built.scanner.position.z = 0.55 + Math.sin(t * 3) * 0.06;
       built.leaf.rotation.z = Math.sin(t * 1.1) * 0.07;
-      for (const screen of built.screens) screen.update(t);
+
+      // The nine little screens redraw ten times a second, not sixty. Each one
+      // is a canvas repaint plus a texture upload to the GPU, and at sixty a
+      // second that is the largest avoidable cost in the whole scene — for
+      // bars and traces nobody can tell apart at either rate.
+      if (now - lastPaint > 100) {
+        lastPaint = now;
+        for (const screen of built.screens) screen.update(t);
+      }
 
       /* -- day and night -- */
       darkness = damp(darkness, night.current ? 1 : 0, 3, dt);
@@ -553,11 +642,22 @@ export function HospitalScene({
 
     window.addEventListener("resize", onResize);
     document.addEventListener("visibilitychange", onVisibility);
-    frame = requestAnimationFrame(draw);
+
+    // The building waits for the page to finish arriving. Starting the loop
+    // during hydration means the first thing a visitor's main thread does is
+    // render a hospital, and the headline they came to read waits behind it.
+    let start = 0;
+    const begin = () => {
+      if (running && !document.hidden) frame = requestAnimationFrame(draw);
+    };
+    if (document.readyState === "complete") start = window.setTimeout(begin, 0);
+    else window.addEventListener("load", begin, { once: true });
 
     return () => {
       running = false;
       cancelAnimationFrame(frame);
+      window.clearTimeout(start);
+      window.removeEventListener("load", begin);
       watcher.disconnect();
       window.removeEventListener("resize", onResize);
       document.removeEventListener("visibilitychange", onVisibility);

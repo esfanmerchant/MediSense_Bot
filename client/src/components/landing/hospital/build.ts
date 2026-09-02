@@ -89,6 +89,7 @@ export function screenTexture(draw: (ctx: CanvasRenderingContext2D, t: number) =
 export interface Person {
   group: THREE.Group;
   legs: [THREE.Mesh, THREE.Mesh];
+  arms: [THREE.Mesh, THREE.Mesh];
 }
 
 /** One person: a torso, a head, two legs that swing, and their uniform. */
@@ -149,6 +150,20 @@ export function person(kind: "doctor" | "nurse" | "desk" | "patient" | "medic", 
     group.add(eye);
   }
 
+  // Hair, as a cap over the back of the head. Two dots and a silhouette is the
+  // whole face at this distance, and a head that is a bare sphere reads as a
+  // mannequin among people who are meant to be at work.
+  const hair = new THREE.Mesh(
+    // Half a dome, tilted back off the brow. Any more than this and the cap
+    // swallows the face from the camera's angle, and the person turns into a
+    // dark ball on a body.
+    new THREE.SphereGeometry(0.126, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.46),
+    material([0x2b2118, 0x4a3323, 0x1d1712, 0x6b4a2f, 0x332822][seed % 5]),
+  );
+  hair.position.set(0, 0.672, -0.022);
+  hair.rotation.x = -0.5;
+  group.add(hair);
+
   const legColour = kind === "patient" ? 0x3b4664 : 0x2b3a67;
   const legs: [THREE.Mesh, THREE.Mesh] = [
     box(0.07, 0.23, 0.07, legColour, -0.05, 0.115, 0),
@@ -156,7 +171,25 @@ export function person(kind: "doctor" | "nurse" | "desk" | "patient" | "medic", 
   ];
   legs.forEach((leg) => group.add(leg));
 
-  return { group, legs };
+  // Arms, hung from the shoulder so they swing against the legs. Without them
+  // a walking figure is a bottle on two sticks; with them it is a person.
+  const sleeve = kind === "doctor" ? UNIFORM.doctorCoat : body;
+  const arms: [THREE.Mesh, THREE.Mesh] = [
+    box(0.055, 0.26, 0.055, sleeve, -0.145, -0.1, 0),
+    box(0.055, 0.26, 0.055, sleeve, 0.145, -0.1, 0),
+  ];
+  for (const arm of arms) {
+    const shoulder = new THREE.Group();
+    shoulder.position.y = 0.56;
+    // The box hangs below its pivot, so rotating the pivot swings the arm.
+    arm.position.y = -0.13;
+    shoulder.add(arm);
+    shoulder.userData.arm = arm;
+    group.add(shoulder);
+    arm.userData.shoulder = shoulder;
+  }
+
+  return { group, legs, arms };
 }
 
 export interface Built {

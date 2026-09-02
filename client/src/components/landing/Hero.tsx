@@ -26,6 +26,7 @@
  * apology for it.
  */
 
+import Image from "next/image";
 import Link from "next/link";
 import { motion, useMotionValueEvent, useScroll, useSpring, useTransform } from "framer-motion";
 import dynamic from "next/dynamic";
@@ -261,6 +262,15 @@ export function Hero({
   const [hovered, setHovered] = useState<Room | null>(null);
   const [critical, setCritical] = useState(false);
 
+  /**
+   * True once the scene has decided this machine cannot run it.
+   *
+   * A browser with no WebGL, or one falling back to a software rasteriser,
+   * gets the rendered still in the same slot. The picture came out of this
+   * scene, so it is the same hospital — just the one frame of it.
+   */
+  const [stillOnly, setStillOnly] = useState(false);
+
   const goToStop = (index: number) => {
     const node = track.current;
     if (!node) return;
@@ -283,6 +293,22 @@ export function Hero({
           <h1 className="font-display mt-3 text-4xl font-black leading-[1.05] tracking-tight text-strong">
             {tr("Reception to billing, in one place.", "Reception se billing tak, ek jagah.")}
           </h1>
+
+          {/* One frame of the scene, rendered from the scene itself rather than
+              drawn — a hand-made picture of a building would be wrong the first
+              time a room moved. Somebody who cannot have the moving version
+              still gets to see the place. */}
+          <Image
+            src={dark ? "/hero/hospital-dark.webp" : "/hero/hospital-light.webp"}
+            alt={tr(
+              "The hospital: reception, records, ward, consultation, pharmacy and administration around a corridor.",
+              "Hospital: corridor ke ird-gird reception, records, ward, consultation, pharmacy aur administration.",
+            )}
+            width={880}
+            height={718}
+            priority
+            className="mt-6 w-full rounded-2xl border border-line"
+          />
           <ol className="mt-10 space-y-9">
             {STOPS.map((item) => (
               <li key={item.label[0]} className="border-l-2 border-line pl-5">
@@ -368,16 +394,30 @@ export function Hero({
             ))}
           </div>
 
-          <div className="relative h-full">
-            <HospitalScene
-              progress={scenePosition}
-              stops={STOPS.length}
-              onStop={setStop}
-              onHover={setHovered}
-              onAlert={setCritical}
-              onRoomClick={(room) => goToStop(room.id)}
-              dark={dark}
-            />
+          <div className="relative flex h-full items-center">
+            {stillOnly ? (
+              <Image
+                src={dark ? "/hero/hospital-dark.webp" : "/hero/hospital-light.webp"}
+                alt={tr(
+                  "The hospital: reception, records, ward, consultation, pharmacy and administration around a corridor.",
+                  "Hospital: corridor ke ird-gird reception, records, ward, consultation, pharmacy aur administration.",
+                )}
+                width={880}
+                height={718}
+                className="w-full rounded-2xl"
+              />
+            ) : (
+              <HospitalScene
+                progress={scenePosition}
+                stops={STOPS.length}
+                onStop={setStop}
+                onHover={setHovered}
+                onAlert={setCritical}
+                onRoomClick={(room) => goToStop(room.id)}
+                onUnsupported={() => setStillOnly(true)}
+                dark={dark}
+              />
+            )}
           </div>
         </div>
 

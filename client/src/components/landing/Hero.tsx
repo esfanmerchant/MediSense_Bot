@@ -31,11 +31,19 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { motion, useMotionValueEvent, useScroll, useSpring, useTransform } from "framer-motion";
+import {
+  motion,
+  useMotionValueEvent,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from "framer-motion";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 
 import { Icon } from "@/components/Icon";
+import { HeroStops } from "@/components/landing/HeroStops";
 import { MiniScreen } from "@/components/landing/hospital/MiniScreen";
 import { ROOMS, type Room } from "@/components/landing/hospital/plan";
 import { useTr } from "@/lib/lang";
@@ -242,6 +250,10 @@ export function Hero({
 }) {
   const tr = useTr();
   const track = useRef<HTMLElement | null>(null);
+  /** Reduced motion is asked here as well as in `still`, because the two are
+      different questions: whether to run the scene at all, and whether the
+      words that replace it may move. */
+  const calm = useReducedMotion();
 
   /**
    * Who gets the stacked telling instead of the scene.
@@ -333,71 +345,91 @@ export function Hero({
        nothing else. */
     const rooms = STOPS.filter((item) => item.room !== null);
 
+    /* Each line arrives a beat after the one before it, which is the only
+       reading order a three-line headline has.
+
+       `animate`, deliberately not `whileInView`. This is the top of the page,
+       so there is nothing to wait to scroll into — and a scroll-triggered
+       reveal made the call to action invisible on the reduced-motion path,
+       where the taller list pushes it past the fold and the observer never
+       fired. Nothing a reader has to press may depend on an animation running.
+
+       Reduced motion skips the offset entirely rather than shortening it: the
+       ask is for no movement, not less. */
+    const line = (i: number) =>
+      calm
+        ? {}
+        : {
+            initial: { opacity: 0, y: 18 },
+            animate: { opacity: 1, y: 0 },
+            transition: {
+              duration: 0.5,
+              delay: i * 0.09,
+              ease: [0.22, 1, 0.36, 1] as const,
+            },
+          };
+
     return (
       /* pt clears the fixed 72px header, which the old py-16 did not — the
          eyebrow was printing underneath it. */
-      <section className="band-dark border-b border-line">
-        <div className="mx-auto max-w-2xl px-5 pb-14 pt-28 sm:px-6 sm:pb-16 sm:pt-32">
-          <p className="mono-caps text-[11px] text-primary sm:text-xs">
+      <section className="band-dark relative overflow-hidden border-b border-line">
+        {/* The only graphic left: a wash of the brand colours behind the type.
+            It is a background, not a subject, so it costs one gradient and
+            reads at any size — which the cropped render of the building did
+            not. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[36rem]"
+          style={{
+            background:
+              "radial-gradient(120% 70% at 18% 0%, rgba(20,196,193,0.16) 0%, rgba(27,79,224,0.10) 42%, transparent 72%)",
+          }}
+        />
+
+        <div className="relative mx-auto max-w-2xl px-5 pb-14 pt-28 sm:px-6 sm:pb-16 sm:pt-32">
+          <motion.p {...line(0)} className="mono-caps text-[11px] text-primary sm:text-xs">
             {tr("A hospital that runs itself", "Ek hospital jo khud chalta hai")}
-          </p>
+          </motion.p>
+
           <h1 className="font-display mt-3 text-[2.125rem] font-black leading-[1.05] tracking-tight text-strong sm:text-4xl">
-            {tr("Reception to billing, in one place.", "Reception se billing tak, ek jagah.")}
+            <motion.span {...line(1)} className="block">
+              {tr("Reception to billing,", "Reception se billing tak,")}
+            </motion.span>
+            <motion.span {...line(2)} className="block text-gradient-brand">
+              {tr("in one place.", "ek jagah.")}
+            </motion.span>
           </h1>
-          <p className="mt-3 text-base leading-relaxed text-muted">
+
+          {/* A rule that draws itself under the headline — the pulse line from
+              the logo, reduced to one stroke. */}
+          <motion.span
+            aria-hidden
+            initial={calm ? false : { scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 0.7, delay: 0.34, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-4 block h-px w-24 origin-left bg-gradient-to-r from-[#14C4C1] to-transparent"
+          />
+
+          <motion.p {...line(3)} className="mt-4 text-base leading-relaxed text-muted">
             {tr(
               "One record, three portals — patient, doctor, administration.",
               "Ek record, teen portals — mareez, doctor, intezamia.",
             )}
-          </p>
+          </motion.p>
 
-          {/* One frame of the scene, rendered from the scene itself rather than
-              drawn — a hand-made picture of a building would be wrong the first
-              time a room moved. Somebody who cannot have the moving version
-              still gets to see the place. */}
-          <Image
-            src="/hero/hospital-light.webp"
-            alt={tr(
-              "The hospital: reception, records, ward, consultation, pharmacy and administration around a corridor.",
-              "Hospital: corridor ke ird-gird reception, records, ward, consultation, pharmacy aur administration.",
-            )}
-            width={880}
-            height={718}
-            priority
-            className="mt-6 w-full rounded-2xl border border-line"
-          />
+          {/* Where the picture of the building used to be. A phone cannot show
+              a hospital; it can walk through one a room at a time. */}
+          <HeroStops stops={rooms} />
 
-          {/* Six lines, not six paragraphs. Each names a room and says the one
-              thing it does; the long version is the scene, and the scene is not
-              on this device. */}
-          <ul className="mt-8 divide-y divide-line overflow-hidden rounded-2xl border border-line">
-            {rooms.map((item) => (
-              <li key={item.label[0]} className="flex items-start gap-3.5 p-4">
-                <span
-                  aria-hidden
-                  className="bg-gradient-soft grid h-10 w-10 shrink-0 place-items-center rounded-xl text-primary"
-                >
-                  <Icon name={item.icon} className="text-[20px]" />
-                </span>
-                <div className="min-w-0">
-                  <p className="font-display text-[1.0625rem] font-bold leading-snug text-strong">
-                    {tr(...item.lead)} <span className="text-gradient-brand">{tr(...item.accent)}</span>
-                  </p>
-                  <p className="mt-1 text-[0.9375rem] leading-relaxed text-muted">
-                    {tr(...item.short)}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <Link
-            href={primaryHref}
-            className="bg-gradient-brand mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-6 font-bold text-white sm:w-auto"
-          >
-            {primaryLabel}
-            <Icon name="arrow_forward" className="text-[20px]" />
-          </Link>
+          <motion.div {...line(4)}>
+            <Link
+              href={primaryHref}
+              className="bg-gradient-brand mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-6 font-bold text-white sm:w-auto"
+            >
+              {primaryLabel}
+              <Icon name="arrow_forward" className="text-[20px]" />
+            </Link>
+          </motion.div>
         </div>
       </section>
     );

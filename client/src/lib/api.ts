@@ -6,7 +6,15 @@
  * in memory or localStorage to steal.
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+/**
+ * Where the API lives.
+ *
+ * Exported because one page — the unsubscribe link from an email — calls
+ * the API without a session and so without going through `apiRequest`.
+ * Re-reading the environment variable there would be a second copy of
+ * this line, and the two would drift.
+ */
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
 /**
  * Mirrors `ErrorCode` in api/app/core/errors.py, plus `NETWORK_ERROR`, which is

@@ -30,8 +30,9 @@ from app.core.config import settings
 from app.core.errors import not_found
 from app.db.base import utcnow
 from app.db.enums import NotificationChannel, NotificationStatus
-from app.db.models import Notification, PushSubscription
+from app.db.models import Notification, PushSubscription, User
 from app.modules.notifications.service import serialize
+from app.services.email_links import read_unsubscribe_token
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -255,3 +256,45 @@ async def push_unsubscribe(
         )
     )
     return ok({"removed": cast("CursorResult[Any]", result).rowcount})
+
+
+# --- Unsubscribing, from inside an email -------------------------------------
+
+
+class UnsubscribeRequest(BaseModel):
+    """The sealed token from the link. Nothing else — there is no session."""
+
+    token: Annotated[str, Field(min_length=1, max_length=512)]
+
+
+@router.post("/unsubscribe", status_code=200)
+async def unsubscribe(payload: UnsubscribeRequest, db: DbSession) -> dict[str, Any]:
+    """Turn email off for the account this token belongs to.
+
+    **No session, on purpose.** This is reached from a mail client — either the
+    person pressing "Unsubscribe" in Gmail, which POSTs here without opening a
+    browser, or the link in the footer. Requiring a sign-in first would make
+    the promise in the `List-Unsubscribe` header false, and a header that
+    promises one-click and then asks for a password is worse than no header:
+    it is the thing spam filters are checking for.
+
+    **The token is the authorisation.** It is the user id sealed with a key
+    derived from the server's own secret, so it cannot be forged or read, and
+    it grants exactly one power — turning this account's email off. It cannot
+    sign anybody in, cannot be replayed against another account, and turning
+    email off is not a destructive act: the portal keeps every notification and
+    the switch is one press to undo in settings.
+
+    **The answer is the same whatever the token was.** A token that decodes to
+    nothing gets the same 200 as one that worked, because a different answer
+    would turn this into a way to test which sealed strings are real.
+    """
+    address = read_unsubscribe_token(payload.token)
+    if address:
+        await db.execute(
+            update(User)
+            .where(func.lower(User.email) == address.lower())
+            .values(notify_by_email=False)
+        )
+        await db.flush()
+    return ok({"unsubscribed": True})

@@ -77,11 +77,30 @@ PUBLIC_PATHS = {
     # account. A terms page you must sign in to read is not terms anybody can
     # consent to, and there is nothing here to protect.
     "/api/auth/terms",
+    # Unsubscribing, from inside an email.
+    #
+    # It has to work with no session: the link is opened from a mail client on
+    # a device that is probably signed out, and Gmail's one-click POSTs here
+    # without opening a browser at all. A sign-in wall would make the
+    # `List-Unsubscribe` header a promise the server does not keep, which is
+    # the thing that header exists to be checked against.
+    #
+    # The token is the credential — an address sealed with a key derived from
+    # the server's own secret, so it cannot be forged or read. It grants
+    # exactly one power: turning that address's *email* off. It cannot sign
+    # anybody in, cannot name another account, reveals nothing about whether an
+    # address is registered (the answer is 200 either way), and the act is
+    # reversible in one press from the settings page. The portal keeps every
+    # notification regardless.
+    "/api/notifications/unsubscribe",
 }
 
 #: Routes that authenticate but deliberately have no permission requirement:
 #: signing in, signing out, refreshing, and asking who you are.
 AUTH_ENTRY_PATHS = {
+    # Carries no session by design; its credential is the sealed token in the
+    # body, which is checked before anything is written. See PUBLIC_PATHS.
+    "/api/notifications/unsubscribe",
     "/api/auth/login",
     "/api/auth/logout",
     "/api/auth/refresh",

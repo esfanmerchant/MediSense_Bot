@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     #: than taking booking offline.
     CLINIC_TIMEZONE: str = "Asia/Karachi"
 
+    #: Who the foot of every email says is sending it.
+    #:
+    #: A message with no identifiable sender is one a filter has no reason to
+    #: trust, and a patient reading about their own record is entitled to know
+    #: which organisation holds it. Empty falls back to a generic line naming
+    #: the product; a real deployment should put its clinic and address here,
+    #: because that is the version that is actually true.
+    EMAIL_SENDER_IDENTITY: str = ""
+
     #: Optional shared state, for a deployment running more than one worker.
     #:
     #: Empty is a supported configuration: the rate limiter counts in-process

@@ -146,6 +146,7 @@ export const ICON_NAMES = [
   "long",
   "mail",
   "manage_search",
+  "mark_email_read",
   "medical_information",
   "medication",
   "menu",

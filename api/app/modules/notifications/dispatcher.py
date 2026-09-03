@@ -57,6 +57,7 @@ from app.db.models import (
 from app.db.session import SessionFactory
 from app.modules.appointments.schedule import clinic_timezone, to_clinic
 from app.modules.notifications import templates
+from app.modules.notifications.templates import ALWAYS_SENT
 from app.services import email as email_service
 from app.services import email_templates
 from app.services import push as push_service
@@ -125,6 +126,11 @@ async def deliver(db: AsyncSession, notification: Notification) -> bool:
         subject=message.subject,
         text_body=message.text,
         html_body=message.html,
+        # An unsubscribe on everything except the two kinds of notice no
+        # preference switches off. Offering to stop a break-glass alert would
+        # be an offer this system will not honour, and a header that promises
+        # something it will not do is the thing filters check for.
+        allow_unsubscribe=notification.type not in ALWAYS_SENT,
     )
 
     if result.sent:

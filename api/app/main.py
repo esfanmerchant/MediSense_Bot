@@ -97,6 +97,15 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         await _ensure_storage_buckets()
     if not settings.ai_configured:
         logger.warning("ai_not_configured", detail="chatbot and symptom analysis disabled")
+    # An unsubscribe link is only as good as the address it points at. In
+    # production a localhost one is a dead link in real mail — which is worse
+    # than no link, because a reader who presses it and gets nothing reports
+    # the message instead.
+    if settings.is_production and "localhost" in settings.CLIENT_ORIGIN:
+        logger.error(
+            "client_origin_is_localhost",
+            hint="set CLIENT_ORIGIN to the public URL; email links point at it",
+        )
     if not settings.push_enabled:
         logger.info("push_not_configured", detail="medication reminders stay in the portal")
     if not settings.email_configured:

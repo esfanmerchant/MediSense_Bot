@@ -44,9 +44,22 @@ _CARD_BORDER = "#e2e8f0"
 _PAGE = "#f1f5f9"
 _FONT = "font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
+#: Why this message arrived, said in the message.
+#:
+#: "Do not reply — this mailbox is not monitored" used to end every one. It is
+#: gone: a `Reply-To` header now points at a real address, and telling somebody
+#: their reply goes nowhere while advertising a reply path is a contradiction
+#: a filter can see and a person will resent.
+#:
+#: What replaced it is the sentence deliverability guidance asks for in as many
+#: words — why the recipient is being written to. A reader who cannot tell why
+#: they received something reports it, and a report costs the sender more than
+#: any wording ever saves.
 _SIGNOFF = (
-    "You are receiving this because someone used this address to sign up for "
-    f"{BRAND}. Do not reply to this message — this mailbox is not monitored."
+    "You are receiving this because you have a "
+    f"{BRAND} account and this address is on it. "
+    "For anything that needs an answer, sign in and use the portal — it is the "
+    "only place your record is."
 )
 
 
@@ -64,6 +77,17 @@ def portal_url(path: str | None = None) -> str:
     return f"{base}/{path.lstrip('/')}"
 
 
+#: Who is sending, in words, for the foot of every message.
+#:
+#: A message with no identifiable sender is one a filter has no reason to
+#: trust, and a patient reading about their own record is entitled to know
+#: which organisation holds it. Overridable, because whoever deploys this is
+#: the one who can answer it truthfully.
+SENDER_IDENTITY = (
+    settings.EMAIL_SENDER_IDENTITY or f"{BRAND} — Smart Healthcare Management, Karachi"
+)
+
+
 def _escape(value: str) -> str:
     """Minimal escaping.
 
@@ -76,6 +100,52 @@ def _escape(value: str) -> str:
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
+    )
+
+
+#: Where the unsubscribe links go, left for `email.send` to fill.
+#:
+#: A template renders before anybody has decided who it is going to, so it
+#: cannot build the link itself. A marker keeps the footer's shape here — where
+#: the rest of the design is — and lets the one function that knows the
+#: recipient put the address-specific part in.
+UNSUBSCRIBE_MARKER = "<!--medisense:unsubscribe-->"
+
+
+def fill_unsubscribe(html: str, url: str | None) -> str:
+    """Put the real link in, or take the offer out.
+
+    Removing it rather than leaving a dead link is the point: a message that
+    offers to stop and then cannot is worse than one that never offered.
+    """
+    if not url:
+        return html.replace(UNSUBSCRIBE_MARKER, "")
+    return html.replace(
+        UNSUBSCRIBE_MARKER,
+        f'<br><a href="{_escape(url)}" style="color:{_MUTED}">Stop these emails</a>'
+        f' &middot; <a href="{_escape(portal_url("/patient/settings"))}" '
+        f'style="color:{_MUTED}">Choose what you are emailed about</a>',
+    )
+
+
+def _footer() -> str:
+    """Who sent this and how to stop it.
+
+    Filters look for an unsubscribe in the body as well as in the headers, and
+    a reader who cannot find one marks the message as spam instead — which
+    costs the sender far more than the unsubscribe would have.
+
+    Two links, because they answer different questions. "Stop emailing me" is
+    what the header can do; "email me about some things and not others" is what
+    somebody usually actually wants, and sending them to the switch is a better
+    outcome for both sides than switching everything off.
+    """
+    # A named sender first, then why this arrived, then the way to stop it.
+    # All three are what a filter looks for and what a reader wants; the third
+    # is filled in by `email.send`, which is the only place that knows both the
+    # address and whether this kind of message may be switched off.
+    return (
+        f"{_escape(SENDER_IDENTITY)}<br>{_escape(_SIGNOFF)}{UNSUBSCRIBE_MARKER}"
     )
 
 
@@ -102,7 +172,7 @@ def _shell(heading: str, body_html: str) -> str:
         "</div>"
         f'<div style="height:3px;background-color:{GRADIENT_FALLBACK};background:{GRADIENT}"></div>'
         f'<div style="padding:16px 28px;color:{_MUTED};font-size:12px;line-height:1.5">'
-        f"{_escape(_SIGNOFF)}</div>"
+        f"{_footer()}</div>"
         "</div></div>"
     )
 

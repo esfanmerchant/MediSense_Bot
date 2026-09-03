@@ -85,6 +85,50 @@ delivery off has said the code should not go anywhere.
 Mail is never allowed to fail an operation: `send` returns a `Delivery` and
 raises nothing, so a slow relay cannot become a slow appointment booking.
 
+#### Staying out of the spam folder
+
+Most of what decides where a message lands is settled before anybody reads it.
+What the code does about that:
+
+| | |
+|---|---|
+| `From` is forced to the authenticated account | A `From` the sending server is not authorised for fails SPF and DKIM, and is the single fastest way into a spam folder. A mismatched `SMTP_FROM` is overridden and logged rather than honoured |
+| `Message-ID`, `Date`, `Reply-To` | A message missing these looks assembled by a script, because usually it is |
+| `List-Unsubscribe` + `List-Unsubscribe-Post` | One-click unsubscribe, required of bulk senders by Gmail and Yahoo since 2024. It is honest: no session, no password, and `POST /api/notifications/unsubscribe` acts on a sealed token |
+| A footer that names the sender and says why the message arrived | Both in the HTML and in the plain-text part |
+| Plain text alongside every HTML message | An HTML-only message is less accessible and more likely to be junked |
+| No images, no tracking pixel | Nothing to load, nothing to block, and no open-tracking to look like bulk mail |
+| No `X-Priority`, no `Importance`, no `Precedence: bulk` | Claiming urgency on routine mail reads as a sender jumping a queue |
+
+Codes and break-glass notices carry **no** unsubscribe. A one-time code is the
+only way into an account and a security notice is not switchable, so offering
+to stop either would be an offer this system will not honour — and an
+unhonoured offer is what the header is checked against in the first place.
+
+**The rest is DNS, and only you can do it.** Nothing above outweighs sending
+from a domain that authenticates. Today the sender is a `@gmail.com` address,
+which passes SPF and DKIM because Gmail signs its own outgoing mail — but it
+identifies the hospital as a personal mailbox, and a free Gmail account is
+capped at roughly 500 recipients a day.
+
+To do better, move to a domain you own and publish three records:
+
+* **SPF** — `v=spf1 include:<your provider> -all`
+* **DKIM** — the key your provider gives you, so each message is signed
+* **DMARC** — start at `v=DMARC1; p=none; rua=mailto:you@yourdomain`, read the
+  reports for a fortnight, then tighten to `p=quarantine` and later `p=reject`
+
+Then set `SMTP_FROM` to an address at that domain — and `SMTP_USER` to an
+account there, because the two must match or the alignment above kicks in and
+sends from the wrong one. `EMAIL_SENDER_IDENTITY` should name the clinic and
+its address; the default is generic, and a real postal identity in the footer
+is worth more than any header.
+
+`CLIENT_ORIGIN` must be the public URL. Every email link is built from it, and
+a `localhost` unsubscribe in real mail is a dead link — worse than none,
+because somebody who presses it and gets nothing reports the message instead.
+The API logs an error at startup if that is the case in production.
+
 ### Push notifications and medication reminders
 
 A push is the only channel that reaches somebody who is not looking at the

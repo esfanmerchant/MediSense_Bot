@@ -85,6 +85,8 @@ export default function PatientAppointments() {
     () => rows.filter((a) => !isUpcoming(a) && !isAwaitingConfirmation(a)),
     [rows],
   );
+  /** Whether this person has ever booked, which is not the same as having one now. */
+  const hasHistory = rows.length > 0;
 
   // The success card takes a bow and leaves on its own.
   useEffect(() => {
@@ -235,7 +237,14 @@ export default function PatientAppointments() {
               <AppointmentList
                 appointments={upcoming}
                 emptyTitle={tr("No upcoming appointments", "Koi aane wali appointment nahi")}
-                emptyDescription={tr("Book one and it will appear here.", "Book karein, yahan nazar aaye gi.")}
+                emptyDescription={
+                  hasHistory
+                    ? tr(
+                        "Your past visits are below. Book another and it will appear here.",
+                        "Aap ki guzri hui visits neeche hain. Nayi book karein, yahan nazar aaye gi.",
+                      )
+                    : tr("Book one and it will appear here.", "Book karein, yahan nazar aaye gi.")
+                }
               >
                 {(appointment) => (
                   <UpcomingRow
@@ -258,7 +267,12 @@ export default function PatientAppointments() {
                     }}
                   >
                     <Icon name="calendar_add_on" className="text-[20px]" />
-                    {tr("Book your first appointment", "Apni pehli appointment book karein")}
+                    {/* "First" only if it is. Somebody with four completed
+                        visits being invited to book their first one is the app
+                        telling them it has not been paying attention. */}
+                    {hasHistory
+                      ? tr("Book an appointment", "Appointment book karein")
+                      : tr("Book your first appointment", "Apni pehli appointment book karein")}
                   </Button>
                 </div>
               )}

@@ -14,10 +14,11 @@
  * decision. That also makes a retry on a flaky connection harmless.
  */
 
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Icon } from "@/components/Icon";
-import { Badge, Button, cx } from "@/components/ui";
+import { TimePicker } from "@/components/TimePicker";
+import { Badge, Button } from "@/components/ui";
 import { medicationReminders } from "@/lib/api";
 import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
@@ -27,7 +28,6 @@ const MAX_TIMES = 12;
 
 export function ReminderTimes({ prescriptionId }: { prescriptionId: string }) {
   const tr = useTr();
-  const fieldId = useId();
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,15 +75,16 @@ export function ReminderTimes({ prescriptionId }: { prescriptionId: string }) {
     }
   };
 
-  const add = () => {
-    if (!draft) return;
+  const add = (time?: string) => {
+    const wanted = time ?? draft;
+    if (!wanted) return;
     const current = times ?? [];
-    if (current.includes(draft)) {
+    if (current.includes(wanted)) {
       setDraft("");
       return;
     }
     if (current.length >= MAX_TIMES) return;
-    void save([...current, draft].sort());
+    void save([...current, wanted].sort());
     setDraft("");
   };
 
@@ -136,22 +137,17 @@ export function ReminderTimes({ prescriptionId }: { prescriptionId: string }) {
 
       {times.length < MAX_TIMES && (
         <div className="mt-3 flex flex-wrap items-end gap-2">
-          <div>
-            <label htmlFor={fieldId} className="block text-xs font-medium text-muted">
-              {tr("Add a time", "Waqt shamil karein")}
-            </label>
-            <input
-              id={fieldId}
-              type="time"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              className={cx(
-                "mt-1 min-h-11 rounded-xl border border-line bg-card px-3 text-sm text-strong",
-                "focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30",
-              )}
-            />
-          </div>
-          <Button variant="secondary" onClick={add} disabled={!draft || saving}>
+          <TimePicker
+            label={tr("Add a time", "Waqt shamil karein")}
+            value={draft}
+            onChange={setDraft}
+            // Choosing a minute finishes the choice, so the reminder is added
+            // there and then rather than making somebody reach for a button
+            // they have already earned.
+            onCommit={(time) => add(time)}
+            disabled={saving}
+          />
+          <Button variant="secondary" onClick={() => add()} disabled={!draft || saving}>
             {tr("Add", "Shamil karein")}
           </Button>
         </div>

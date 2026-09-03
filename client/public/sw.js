@@ -27,11 +27,25 @@ const VERSION = "medisense-v1";
 const SHELL = `${VERSION}-shell`;
 const OFFLINE_URL = "/offline";
 
+/**
+ * Whether this worker may cache anything.
+ *
+ * False in development, where it is registered as `/sw.js?dev=1`. Push needs a
+ * service worker and there is no other way to have one — but a worker that
+ * caches a dev build serves yesterday's JavaScript after a rebuild, and the
+ * hour spent working out why is an hour nobody gets back. In development the
+ * worker exists only to receive pushes and pass every fetch straight through.
+ */
+const CACHING = !new URL(self.location.href).searchParams.has("dev");
+
 /** Warmed on install so the offline page is available the first time it is
     needed rather than the second. */
 const PRECACHE = [OFFLINE_URL, "/brand/icon-192.png", "/brand/icon-512.png"];
 
 self.addEventListener("install", (event) => {
+  // Nothing is pre-cached in development, for the same reason nothing is
+  // cached at fetch time.
+  if (!CACHING) return void self.skipWaiting();
   event.waitUntil(
     caches
       .open(SHELL)
@@ -76,6 +90,11 @@ self.addEventListener("fetch", (event) => {
 
   // Never the API. See the note at the top of this file.
   if (url.pathname.startsWith("/api/")) return;
+
+  // In development the worker is here for push and nothing else. Dev asset
+  // URLs carry no content hash, so cache-first on them is how a rebuild goes
+  // unnoticed.
+  if (!CACHING) return;
 
   if (isShellAsset(url)) {
     // Cache first: these filenames contain a content hash, so a hit is always

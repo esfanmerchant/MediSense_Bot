@@ -38,6 +38,7 @@ import {
 } from "@/components/ui";
 import { ApiError, users, type Role } from "@/lib/api";
 import { useTr } from "@/lib/lang";
+import { useSession } from "@/lib/session";
 import { useAsync } from "@/lib/useAsync";
 
 type Row = {
@@ -59,6 +60,8 @@ const ROLES: Array<{ value: Role | ""; label: [string, string] }> = [
 
 function Person({ row, onChanged }: { row: Row; onChanged: () => void }) {
   const tr = useTr();
+  const { user } = useSession();
+  const isSelf = user?.id === row.id;
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [suspending, setSuspending] = useState(false);
@@ -116,7 +119,19 @@ function Person({ row, onChanged }: { row: Row; onChanged: () => void }) {
           <p className="truncate text-sm text-muted">{row.email}</p>
         </div>
 
-        {active ? (
+        {/* Never on your own row.
+            ----------------------
+            The server has always refused this — `set_user_status` returns 403
+            when the id is the caller's own — but the button was still offered,
+            so the only thing pressing it produced was an error. An action that
+            cannot succeed should not be on screen: suspending yourself would
+            revoke your own session mid-click and, with one administrator left,
+            lock the hospital out of its own admin portal. */}
+        {isSelf ? (
+          <span className="mono-caps text-[11px] text-faint">
+            {tr("This is you", "Yeh aap hain")}
+          </span>
+        ) : active ? (
           <Button variant="ghost" onClick={() => setSuspending((open) => !open)}>
             {tr("Suspend", "Mo'attal karein")}
           </Button>

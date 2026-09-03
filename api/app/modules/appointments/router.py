@@ -14,14 +14,15 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_any_permission
 from app.api.responses import Page, ok, pagination
 from app.core.config import settings
 from app.core.errors import bad_request, forbidden
 from app.db.base import utcnow
-from app.db.enums import AppointmentStatus, AuditAction, NotificationType, Role
-from app.db.models import Appointment
+from app.db.enums import AppointmentStatus, AuditAction, DataSource, NotificationType, Role
+from app.db.models import Appointment, MedicalRecord
 from app.modules.appointments import service
 from app.modules.appointments.schedule import MAX_RANGE_DAYS, iso_utc, to_clinic
 from app.modules.audit.service import AuditEntry, record_audit
@@ -386,6 +387,52 @@ async def reschedule(
     return ok(service.serialize_row(new_row))
 
 
+async def _record_the_consultation(db: DbSession, appointment: Appointment) -> None:
+    """Write the visit into the patient's record, once.
+
+    Idempotent by lookup on the appointment: completing twice — a retry, a
+    double-click, a doctor reopening and finishing again — must not leave a
+    patient with two consultations for one visit. A second completion updates
+    the note rather than adding a record beside it.
+
+    Nothing is written when the doctor left the note empty. A record that says
+    only "a consultation happened" is already in the appointment list; putting
+    an empty one in the clinical history makes the history longer without
+    making it say more.
+    """
+    note = (appointment.notes or "").strip()
+    if not note:
+        return
+
+    existing = (
+        await db.execute(
+            select(MedicalRecord).where(MedicalRecord.appointment_id == appointment.id)
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        # Only fill a blank. A doctor who has since written a proper record
+        # from the chart has said more than the completion dialog did, and
+        # overwriting that with the older note would lose the better one.
+        if not (existing.notes or "").strip():
+            existing.notes = note
+        return
+
+    db.add(
+        MedicalRecord(
+            patient_id=appointment.patient_id,
+            doctor_id=appointment.doctor_id,
+            appointment_id=appointment.id,
+            notes=note,
+            # Written by the clinician who completed the visit, so this is a
+            # physician record — the enum's other values describe machine
+            # output, which never reaches this table.
+            source=DataSource.PHYSICIAN,
+        )
+    )
+    await db.flush()
+
+
 @router.post("/{appointment_id}/status")
 async def set_status(
     appointment_id: str,
@@ -441,6 +488,21 @@ async def set_status(
         )
 
     if payload.status == AppointmentStatus.COMPLETED:
+        # The visit becomes a line in the patient's record.
+        #
+        # The doctor already writes "what was discussed, and what happens next"
+        # in the dialog that completes the appointment — and until now those
+        # words went onto the appointment row and stopped there. The patient's
+        # consultation history reads `medical_records`, so a patient with four
+        # completed visits saw "No records yet" and had no way to learn what
+        # their own doctor had written about them.
+        #
+        # Only `notes` is filled. A diagnosis and a treatment plan are clinical
+        # judgements a doctor states deliberately, from the chart; inventing
+        # either from a free-text note would put words in a clinician's mouth
+        # in the one table that is supposed to be authoritative.
+        await _record_the_consultation(db, appointment)
+
         # Automatic billing (spec §15, R4). Inside the same transaction as the
         # status change, so a completed consultation and its invoice commit
         # together or not at all — there is no window where the visit is billed

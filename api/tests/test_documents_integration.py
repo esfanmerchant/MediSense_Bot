@@ -22,13 +22,14 @@ from app.core.config import settings
 from app.db.models import MedicalDocument, Patient, User
 from app.db.session import SessionFactory
 from app.services import storage
-from tests.conftest import requires_db
+from tests.conftest import ADMIN_EMAIL, password_for, requires_db
 
 pytestmark = requires_db
 
 DEMO_PASSWORD = "Demo@Pass123"
 
-ADMIN = "admin@example.com"
+#: Supplied by the environment — see `requires_admin` in conftest.
+ADMIN = ADMIN_EMAIL
 DOCTOR = "doctor@example.com"  # treats Priya
 OTHER_DOCTOR = "doctor3@example.com"  # treats Meera
 PATIENT = "patient@example.com"  # Priya
@@ -41,8 +42,16 @@ PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 200
 
 
 def sign_in(client: TestClient, email: str) -> dict[str, Any]:
+    # An unset administrator skips rather than fails. Marking whole files would
+    # skip the patient and doctor tests in them too, and those are most of each
+    # file and need no administrator at all.
+    if not email:
+        pytest.skip(
+            "set TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD to run the tests that "
+            "act as an administrator"
+        )
     client.cookies.clear()
-    response = client.post("/api/auth/login", json={"email": email, "password": DEMO_PASSWORD})
+    response = client.post("/api/auth/login", json={"email": email, "password": password_for(email)})
     assert response.status_code == 200, f"{email}: {response.text}"
     return response.json()["data"]["user"]
 

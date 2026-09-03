@@ -231,6 +231,11 @@ class TestEverythingIsGuarded:
                     # prescription it hangs on. Refuses every role but PATIENT
                     # and then scopes the lookup to the session's patient id.
                     "require_own_reminder",
+                    # The notification list's own filter. Scopes to the
+                    # session's user id *and* to the in-app channel, so an
+                    # endpoint cannot reach another inbox or the delivery
+                    # queue — see `_mine` in that router.
+                    "_mine(auth)",
                 )
             ) or DELEGATES_TO_SERVICE.search(source) is not None
             if not guarded:

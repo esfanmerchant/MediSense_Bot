@@ -16,13 +16,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Patient, User
-from tests.conftest import requires_db
+from tests.conftest import ADMIN_EMAIL, password_for, requires_db
 
 pytestmark = requires_db
 
 DEMO_PASSWORD = "Demo@Pass123"
 
-ADMIN = "admin@example.com"
+#: Supplied by the environment — see `requires_admin` in conftest.
+ADMIN = ADMIN_EMAIL
 DOCTOR = "doctor@example.com"  # Cardiology — assigned Priya and Vikram
 OTHER_DOCTOR = "doctor3@example.com"  # General Medicine — assigned Meera only
 PATIENT = "patient@example.com"  # Priya
@@ -32,8 +33,16 @@ NURSE = "nurse@example.com"
 
 def sign_in(client: TestClient, email: str) -> dict:
     """Sign in and leave the session cookies on the client."""
+    # An unset administrator skips rather than fails. Marking whole files would
+    # skip the patient and doctor tests in them too, and those are most of each
+    # file and need no administrator at all.
+    if not email:
+        pytest.skip(
+            "set TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD to run the tests that "
+            "act as an administrator"
+        )
     client.cookies.clear()
-    response = client.post("/api/auth/login", json={"email": email, "password": DEMO_PASSWORD})
+    response = client.post("/api/auth/login", json={"email": email, "password": password_for(email)})
     assert response.status_code == 200, f"{email}: {response.text}"
     return response.json()["data"]["user"]
 

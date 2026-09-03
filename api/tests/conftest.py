@@ -33,6 +33,39 @@ requires_db = pytest.mark.skipif(
     reason="set DATABASE_URL in .env and run `alembic upgrade head` to enable database tests",
 )
 
+#: The demo accounts all share one password, which is fine because they are
+#: fictional and their credentials are in the README.
+DEMO_PASSWORD = "Demo@Pass123"
+
+#: The administrator these tests sign in as, from the environment.
+#:
+#: There used to be a demo admin alongside the real one, and it was removed:
+#: a hospital wants one administrator, not one plus a fixture. What is left is
+#: somebody's actual account, so its password cannot live in this file or in
+#: git — it is supplied by whoever runs the suite, and the admin tests skip
+#: without it rather than failing with a password error that looks like a bug
+#: in the code they were meant to be testing.
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
+
+requires_admin = pytest.mark.skipif(
+    not (ADMIN_EMAIL and ADMIN_PASSWORD),
+    reason=(
+        "set TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD to run the tests that "
+        "act as an administrator"
+    ),
+)
+
+
+def password_for(email: str) -> str:
+    """The password to sign this account in with.
+
+    One function rather than a constant, because the administrator's is not the
+    demo one any more and every test that signs somebody in needs to stop
+    assuming they are interchangeable.
+    """
+    return ADMIN_PASSWORD if email and email == ADMIN_EMAIL else DEMO_PASSWORD
+
 
 @pytest.fixture(scope="session")
 def client() -> Generator[TestClient, None, None]:

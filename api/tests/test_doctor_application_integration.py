@@ -52,14 +52,15 @@ from app.db.models import (
 )
 from app.modules.auth import twofactor
 from app.modules.doctor_applications.service import REQUIRED_DOCUMENTS
-from tests.conftest import requires_db
+from tests.conftest import ADMIN_EMAIL, password_for, requires_db
 
 pytestmark = requires_db
 
 PASSWORD = "ApplicantPass123"
 KNOWN_CODE = "424242"
 
-ADMIN = "admin@example.com"
+#: Supplied by the environment — see `requires_admin` in conftest.
+ADMIN = ADMIN_EMAIL
 DEMO_PASSWORD = "Demo@Pass123"
 
 #: The en dash a year range takes, written as an escape because in source an
@@ -140,7 +141,19 @@ def _fresh_rate_limits() -> None:
     ratelimit.reset()
 
 
-def sign_in(client: TestClient, email: str, password: str) -> dict[str, Any]:
+def sign_in(client: TestClient, email: str, password: str | None = None) -> dict[str, Any]:
+    """Sign in, defaulting to whichever password belongs to this account.
+
+    An unset administrator skips rather than fails: this file's other tests are
+    about an applicant and a reviewer, and only some of them need the reviewer
+    to be an admin.
+    """
+    if not email:
+        pytest.skip(
+            "set TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD to run the tests that "
+            "act as an administrator"
+        )
+    password = password if password is not None else password_for(email)
     client.cookies.clear()
     response = client.post("/api/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200, response.text

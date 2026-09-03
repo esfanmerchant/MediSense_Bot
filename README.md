@@ -197,11 +197,24 @@ All fictional, all sharing the password `Demo@Pass123`.
 
 | Email | Role |
 |---|---|
-| `admin@example.com` | Admin |
 | `doctor@example.com` | Doctor — Cardiology, treats Priya and Vikram |
 | `doctor3@example.com` | Doctor — General Medicine, treats Meera |
 | `patient@example.com` | Patient — Priya Sharma |
 | `nurse@example.com` | Nurse — emergency access only, no dashboard |
+
+**There is no demo administrator.** The system runs one administrator, and it
+is a real account, so its password is not in this file. The integration tests
+that act as one read `TEST_ADMIN_EMAIL` and `TEST_ADMIN_PASSWORD` from the
+environment and skip when those are unset — a skip rather than a failure,
+because a missing credential is not a broken endpoint.
+
+```bash
+TEST_ADMIN_EMAIL=you@example.org TEST_ADMIN_PASSWORD=...   .venv/Scripts/python.exe -m pytest tests/test_authorization_integration.py
+```
+
+Several demo accounts are currently `SUSPENDED` in the database and cannot sign
+in, which fails the integration tests that use them. Reactivating them is an
+administrator's decision, not something a test run should make for itself.
 
 ## Project layout
 

@@ -2,6 +2,18 @@
 
 Scoped entirely by session: there is no id in any path here and no way to name
 another user, so the endpoints cannot be pointed at someone else's inbox.
+
+**And scoped to the in-app channel, everywhere.** One event writes one row per
+channel: the ``IN_APP`` row is the thing a person reads in the portal, and the
+``EMAIL`` and ``PUSH`` rows are queue entries the dispatcher drains. Listing
+all three showed every emailed notification twice in the bell — and every
+emailed *and* pushed one three times.
+
+The second consequence was worse and invisible. "Mark all read" set
+``status = READ`` on every unread row of every channel, and the dispatcher
+claims rows by ``status == PENDING`` — so pressing it silently cancelled every
+email and push still waiting to go out. Both follow from the same missing
+filter, so it is applied in one place and used by all three endpoints.
 """
 
 from __future__ import annotations
@@ -17,11 +29,24 @@ from app.api.responses import Page, ok, pagination
 from app.core.config import settings
 from app.core.errors import not_found
 from app.db.base import utcnow
-from app.db.enums import NotificationStatus
+from app.db.enums import NotificationChannel, NotificationStatus
 from app.db.models import Notification, PushSubscription
 from app.modules.notifications.service import serialize
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+def _mine(auth: CurrentAuth) -> list[Any]:
+    """This user's own portal notifications, and nothing else.
+
+    Both halves matter and both are easy to leave out: without the user id an
+    endpoint reads somebody else's inbox, and without the channel it reads the
+    delivery queue and treats it as inbox.
+    """
+    return [
+        Notification.user_id == auth.user_id,
+        Notification.channel == NotificationChannel.IN_APP,
+    ]
 
 
 @router.get("")
@@ -31,7 +56,7 @@ async def list_notifications(
     page: Annotated[Page, Depends(pagination)],
     unread_only: bool = Query(default=False, alias="unreadOnly"),
 ) -> dict[str, Any]:
-    filters = [Notification.user_id == auth.user_id]
+    filters = _mine(auth)
     if unread_only:
         filters.append(Notification.read_at.is_(None))
 
@@ -39,7 +64,7 @@ async def list_notifications(
     unread = (
         await db.execute(
             select(func.count(Notification.id)).where(
-                Notification.user_id == auth.user_id, Notification.read_at.is_(None)
+                *_mine(auth), Notification.read_at.is_(None)
             )
         )
     ).scalar_one()
@@ -73,7 +98,7 @@ async def mark_read(notification_id: str, auth: CurrentAuth, db: DbSession) -> d
         update(Notification)
         .where(
             Notification.id == notification_id,
-            Notification.user_id == auth.user_id,
+            *_mine(auth),
             Notification.read_at.is_(None),
         )
         .values(read_at=utcnow(), status=NotificationStatus.READ)
@@ -86,7 +111,7 @@ async def mark_read(notification_id: str, auth: CurrentAuth, db: DbSession) -> d
         exists = (
             await db.execute(
                 select(Notification.id).where(
-                    Notification.id == notification_id, Notification.user_id == auth.user_id
+                    Notification.id == notification_id, *_mine(auth)
                 )
             )
         ).first()
@@ -99,7 +124,10 @@ async def mark_read(notification_id: str, auth: CurrentAuth, db: DbSession) -> d
 async def mark_all_read(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
     result = await db.execute(
         update(Notification)
-        .where(Notification.user_id == auth.user_id, Notification.read_at.is_(None))
+        # The channel filter is what stops this cancelling the outbox: without
+        # it, "mark all read" flipped every PENDING email and push to READ and
+        # the dispatcher never sent them.
+        .where(*_mine(auth), Notification.read_at.is_(None))
         .values(read_at=utcnow(), status=NotificationStatus.READ)
     )
     return ok({"markedRead": cast("CursorResult[Any]", result).rowcount})

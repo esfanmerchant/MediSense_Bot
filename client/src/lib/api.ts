@@ -1281,9 +1281,42 @@ export interface AssistantAnswer {
    * wrong appointment costs a clinic slot and somebody's day — so it proposes
    * and the patient confirms, which is the same shape the symptom flow uses.
    * Absent whenever the request could not be resolved to one doctor and one
-   * free time, in which case the assistant's own sentence still stands.
+   * free time — in which case `bookingProblem` says why.
    */
   booking?: BookingProposal;
+  /**
+   * Why there is no offer, when the assistant went looking and found nothing.
+   *
+   * The reason travels rather than a sentence: the server knows which doctor
+   * and which day, and only the client knows which language this reader
+   * chose. Without this the model's "I have found a time" stood alone with no
+   * time behind it, which is the bug this pair exists to close.
+   */
+  bookingProblem?: BookingProblem;
+}
+
+export type BookingProblemReason =
+  /** The day asked for has already gone. */
+  | "past"
+  /** A day this doctor does not hold a clinic on. */
+  | "not_working"
+  /** A day they do work, with every slot taken. */
+  | "day_full"
+  | "unknown_doctor"
+  | "ambiguous_doctor"
+  /** Matched, but not bookable — usually no published hours at all. */
+  | "not_bookable";
+
+export interface BookingProblem {
+  reason: BookingProblemReason;
+  doctorId?: string;
+  doctorName?: string;
+  date?: string;
+  today?: string;
+  /** The weekdays this doctor sits, in words, e.g. "Saturday, Sunday". */
+  worksOn?: string;
+  /** Dates within the next four weeks that actually have a free slot. */
+  nextFree?: string[];
 }
 
 export interface BookingProposal {

@@ -134,12 +134,24 @@ invent a policy, a price or a guarantee that is not in it.
 that list only. Never invent a doctor, a clinic, a fee or an availability.
 
 Booking an appointment:
-- If the patient asks you to book, and you can identify a doctor from the list \
-and a day from what they said, end your reply with a line of exactly this form:
+- Today's date is given to you below. Work every date out from it. If somebody \
+says "2nd September" with no year they mean the next 2nd September that has not \
+already gone — never a past one.
+- Never propose a date that has already passed. If they ask for one, tell them \
+that day has gone and ask which upcoming day they mean.
+- Each doctor's line says which weekdays they see patients. Only propose a date \
+that falls on one of those days. If the day they asked for is not one, say so \
+plainly first — name the doctor and the day, and tell them which days that \
+doctor does sit — and then ask which of those they want.
+- When the doctor and the day both work, end your reply with a line of exactly \
+this form:
   BOOK: doctor=<exact doctor name from the list>; date=<YYYY-MM-DD>
-- Put nothing after that line. Say in your reply, in the patient's language, \
-that you have found a time and they need to confirm it — never that you have \
-booked it, because you have not: a person confirms it on the screen.
+- Put nothing after that line.
+- **Do not say you have found a time.** You have not looked: the system reads \
+the diary after you write, and shows the patient the real slot to confirm. Say \
+you are checking that day for them. Claiming a time was found and then having \
+none is worse than saying nothing.
+- Never say you have booked anything. A person confirms it on the screen.
 - If you cannot tell which doctor or which day they mean, ask instead of \
 guessing. A wrong appointment wastes a clinic slot and the patient's day.
 
@@ -278,6 +290,7 @@ def build_context(
     upcoming_appointments: list[str],
     specialities: list[str],
     doctors: list[str] | None = None,
+    today: str | None = None,
 ) -> str:
     """Everything the assistant is allowed to treat as true.
 
@@ -294,6 +307,13 @@ def build_context(
     anything named in an answer that is not on these lists was made up.
     """
     parts = ["FACTS AVAILABLE TO YOU (do not invent anything beyond these):"]
+
+    if today:
+        # First, and stated as the day *here*, because every date the patient
+        # says is relative to it. Without this the model dates "next Tuesday"
+        # and even "2nd September" from whenever its training stopped, which is
+        # how an appointment ends up proposed for a year that has gone.
+        parts.append(f"Today's date: {today}. Any date before this is in the past.")
 
     if patient_name:
         parts.append(f"You are talking to: {patient_name}")

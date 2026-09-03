@@ -39,6 +39,7 @@ import {
 
 import { Segmented } from "@/components/forms";
 import { BookingOffer } from "@/components/BookingOffer";
+import { BookingProblem } from "@/components/BookingProblem";
 import { Icon } from "@/components/Icon";
 import { LogoMark } from "@/components/Logo";
 import {
@@ -363,6 +364,12 @@ function AnswerBody({
           the generic suggestion, because it is the specific answer to what
           they actually asked — and nothing is booked until it is pressed. */}
       {revealed && answer.booking && <BookingOffer proposal={answer.booking} />}
+
+      {/* And when it went looking and found nothing — which used to be silent,
+          leaving the model's "I found a time" standing with no time behind it. */}
+      {revealed && !answer.booking && answer.bookingProblem && (
+        <BookingProblem problem={answer.bookingProblem} />
+      )}
 
       {/* The suggestion, as its own card: what kind of care, and the way to
           it. Urgent answers wear the critical accent and a stronger call. */}

@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
@@ -61,7 +61,7 @@ from app.db.models import (
     User,
 )
 from app.modules.appointments import service as appointments_service
-from app.modules.appointments.schedule import to_clinic
+from app.modules.appointments.schedule import clinic_timezone, parse_windows, to_clinic
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
 from app.services import ai, assistant, triage
@@ -260,6 +260,7 @@ async def _gather_context(db: DbSession, patient_id: str) -> tuple[str, list[str
                 Doctor.clinic_name,
                 Doctor.city,
                 Doctor.consultation_fee,
+                Doctor.availability,
             )
             .join(User, User.id == Doctor.user_id)
             .where(
@@ -270,11 +271,19 @@ async def _gather_context(db: DbSession, patient_id: str) -> tuple[str, list[str
             .limit(60)
         )
     ).all()
+    # Which weekdays each doctor actually sits.
+    #
+    # Without this the model has a name, a speciality and a fee, and no idea
+    # whether the day somebody just asked for is one this doctor works — so it
+    # proposes it, the diary has nothing, and the patient is told a time was
+    # found that never existed. The windows are already on the row; naming the
+    # days costs nothing and is the fact the question turns on.
     doctor_lines = [
         f"{row.name} — {row.specialization}"
         f" — {row.clinic_name or 'clinic not stated'}"
         f"{f', {row.city}' if row.city else ''}"
         f" — {settings.INVOICE_CURRENCY} {row.consultation_fee:.0f}"
+        f" — sees patients on: {_working_days(row.availability)}"
         for row in doctor_rows
     ]
 
@@ -285,6 +294,7 @@ async def _gather_context(db: DbSession, patient_id: str) -> tuple[str, list[str
         upcoming_appointments=appointment_lines,
         specialities=list(specialities),
         doctors=doctor_lines,
+        today=_clinic_today().strftime("%A, %d %B %Y"),
     )
     return context, medication_names
 
@@ -314,16 +324,76 @@ async def _recent_turns(
     return [(row.input, row.response) for row in reversed(rows)]
 
 
+#: Monday is 1 in the stored windows, which is ISO's numbering.
+_WEEKDAY_NAMES = {
+    1: "Monday",
+    2: "Tuesday",
+    3: "Wednesday",
+    4: "Thursday",
+    5: "Friday",
+    6: "Saturday",
+    7: "Sunday",
+}
+
+
+def _clinic_today() -> date:
+    """The date it is *at the clinic*, which is the one every answer is about.
+
+    Not the server's. For five hours of every day those differ, and a patient
+    told at 02:00 that tomorrow is Thursday when it is Thursday already has
+    been told something false about their own day.
+    """
+    return datetime.now(UTC).astimezone(clinic_timezone()).date()
+
+
+def _working_days(availability: object) -> str:
+    """The weekdays a doctor publishes hours for, in words.
+
+    Words rather than numbers because this goes to a language model and then,
+    through it, to a patient: "Saturday and Sunday" is a sentence somebody can
+    act on, and `[6, 7]` is a thing to be misread.
+    """
+    windows = parse_windows(availability)
+    if not windows:
+        return "no published hours yet"
+    days = sorted({w.day_of_week for w in windows})
+    return ", ".join(_WEEKDAY_NAMES.get(day, "?") for day in days)
+
+
+async def _next_free_dates(db: DbSession, doctor_id: str, after: date, limit: int = 4) -> list[str]:
+    """The next few dates this doctor actually has a free slot on.
+
+    Read from the diary, not from the published hours: a day the doctor works
+    but which is fully booked is not a day to offer somebody. Bounded to four
+    weeks — past that the answer is "call them", not a longer list.
+    """
+    try:
+        days = await appointments_service.availability(
+            db, doctor_id, after, after + timedelta(days=28)
+        )
+    except AppError:
+        return []
+    free = [
+        day["date"]
+        for day in days
+        if any(slot.get("available") for slot in day.get("slots", []))
+    ]
+    return free[:limit]
+
+
 async def _resolve_booking(
     db: DbSession, doctor_name: str, on: str
-) -> dict[str, Any] | None:
-    """Turn "Dr Rajesh Iyer on 2026-09-04" into an offer of a real free slot.
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Turn "Dr Rajesh Iyer on 2026-09-04" into an offer, or into a reason.
 
-    Returns ``None`` rather than raising for every way this can fail — an
-    unknown name, a bad date, a day the doctor does not work, a day already
-    full. A proposal that cannot be honoured is simply not made, and the
-    assistant's own sentence still stands: it said it would look, not that it
-    had booked.
+    Returns ``(offer, problem)`` — exactly one of them, or two ``None`` when the
+    line was so malformed there is nothing to say about it.
+
+    **It used to return only the offer, and nothing when there was none.** The
+    model had already written "I have found a time, confirm it on screen", so a
+    patient asking for a day the doctor does not work was told a time had been
+    found, shown no time, and left to work out which of the two was true. The
+    reason now travels back with the failure and the client states it.
 
     **This books nothing.** It offers the first free slot, and a person taps to
     confirm. The model can misread a name or a weekday, and a wrong appointment
@@ -333,7 +403,17 @@ async def _resolve_booking(
     try:
         wanted = date.fromisoformat(on)
     except ValueError:
-        return None
+        return None, None
+
+    # A date that has gone is refused here as well as in the prompt. The prompt
+    # is guidance to a model that may ignore it; this is the rule.
+    today = _clinic_today()
+    if wanted < today:
+        return None, {
+            "reason": "past",
+            "date": wanted.isoformat(),
+            "today": today.isoformat(),
+        }
 
     # Matched case-insensitively and loosely, because a model writes "Dr Rajesh
     # Iyer" for a row that reads "Rajesh Iyer". Exact-only would fail on the
@@ -341,7 +421,13 @@ async def _resolve_booking(
     cleaned = doctor_name.strip().removeprefix("Dr ").removeprefix("Dr. ").strip()
     row = (
         await db.execute(
-            select(Doctor.id, User.name, Doctor.specialization, Doctor.consultation_fee)
+            select(
+                Doctor.id,
+                User.name,
+                Doctor.specialization,
+                Doctor.consultation_fee,
+                Doctor.availability,
+            )
             .join(User, User.id == Doctor.user_id)
             .where(
                 User.status == UserStatus.ACTIVE,
@@ -351,17 +437,24 @@ async def _resolve_booking(
             .limit(2)
         )
     ).all()
+    if not row:
+        return None, {"reason": "unknown_doctor", "doctorName": cleaned}
     # Two matches means the name was ambiguous, and guessing between two doctors
     # is exactly the mistake this whole path is arranged to avoid.
-    if len(row) != 1:
-        return None
+    if len(row) > 1:
+        return None, {"reason": "ambiguous_doctor", "doctorName": cleaned}
 
-    doctor_id, name, speciality, fee = row[0]
+    doctor_id, name, speciality, fee, availability = row[0]
 
     try:
         days = await appointments_service.availability(db, doctor_id, wanted, wanted)
     except AppError:
-        return None
+        return None, {
+            "reason": "not_bookable",
+            "doctorId": doctor_id,
+            "doctorName": name,
+            "date": wanted.isoformat(),
+        }
 
     free = [
         slot
@@ -370,7 +463,26 @@ async def _resolve_booking(
         if slot.get("available")
     ]
     if not free:
-        return None
+        # The two ways a day can have nothing are worth telling apart: a day the
+        # doctor never works is answered with "they sit on Saturdays", and a day
+        # they work but is full is answered with "that day is taken". Saying the
+        # wrong one sends somebody to try a Wednesday again.
+        works_today = any(w.day_of_week == wanted.isoweekday() for w in parse_windows(availability))
+        return None, {
+            "reason": "day_full" if works_today else "not_working",
+            "doctorId": doctor_id,
+            "doctorName": name,
+            "date": wanted.isoformat(),
+            "worksOn": _working_days(availability),
+            # Concrete dates, because "Saturdays" still leaves somebody counting
+            # forwards on a calendar to find one that is not already taken.
+            #
+            # Counted from today, not from the day they asked for. Somebody who
+            # asks for the 9th and could have come on the 5th should be shown
+            # the 5th; starting after their guess hides the sooner answer for
+            # no reason, and the list is a suggestion rather than a constraint.
+            "nextFree": await _next_free_dates(db, doctor_id, today),
+        }
 
     first = free[0]
     return {
@@ -389,7 +501,7 @@ async def _resolve_booking(
             {"startTime": slot["startTime"], "endTime": slot["endTime"]}
             for slot in free[1:6]
         ],
-    }
+    }, None
 
 
 async def _answer(
@@ -436,7 +548,7 @@ async def _answer(
     # syntax — and only becomes an offer if a real doctor and a real free slot
     # are behind it.
     answer.answer, intent = assistant.extract_booking(answer.answer)
-    proposal = await _resolve_booking(db, *intent) if intent else None
+    proposal, problem = await _resolve_booking(db, *intent) if intent else (None, None)
 
     # The record says an image was attached, and nothing of what it showed:
     # the bytes are gone once this request returns.
@@ -478,6 +590,11 @@ async def _answer(
     payload = _serialize(answer, session_id)
     if proposal is not None:
         payload["booking"] = proposal
+    elif problem is not None:
+        # Sent as a reason rather than a sentence, so the client says it in the
+        # language the reader chose — the same two languages the rest of the
+        # interface already speaks — instead of the server guessing.
+        payload["bookingProblem"] = problem
     return ok(payload)
 
 

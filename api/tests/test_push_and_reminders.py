@@ -249,17 +249,27 @@ class TestWhichNotificationsEarnAPush:
         # servers. Only one of the two may name a medicine.
         assert NotificationType.MEDICATION_REMINDER not in EMAILED_TYPES
 
-    def test_an_invoice_is_not_worth_interrupting_someone_for(self) -> None:
-        assert NotificationType.INVOICE_ISSUED not in PUSHED_TYPES
+    def test_everything_is_pushed(self) -> None:
+        # The policy changed: push is the default channel for events, because
+        # it is cheap to receive and cheap to dismiss. Email is the exception.
+        assert frozenset(NotificationType) == PUSHED_TYPES
+
+    def test_an_invoice_is_worth_an_email_as_well(self) -> None:
         assert NotificationType.INVOICE_ISSUED in EMAILED_TYPES
 
     def test_pushed_is_a_subset_of_what_the_portal_shows(self) -> None:
         assert set(NotificationType) >= PUSHED_TYPES
 
-    def test_a_new_report_stays_in_the_portal(self) -> None:
-        # A result never leaves the portal, by either route.
-        assert NotificationType.REPORT_UPLOADED not in PUSHED_TYPES
+    def test_a_result_is_never_emailed(self) -> None:
+        # A push is encrypted to the device and says a report arrived; an email
+        # sits on a mail provider's servers. The notice may be pushed; it may
+        # not be mailed.
         assert NotificationType.REPORT_UPLOADED not in EMAILED_TYPES
+
+    def test_email_stays_the_short_list(self) -> None:
+        # If this ever equals the full set, the sender has become the kind that
+        # people filter — and the filter does not spare the break-glass notice.
+        assert len(EMAILED_TYPES) < len(NotificationType)
 
 
 class TestSendingOne:

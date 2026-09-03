@@ -65,6 +65,7 @@ export const ICON_NAMES = [
   "close",
   "cloud_off",
   "cloud_upload",
+  "cnic",
   "computer",
   "consultation",
   "contact_emergency",

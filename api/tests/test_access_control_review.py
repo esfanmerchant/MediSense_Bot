@@ -227,6 +227,10 @@ class TestEverythingIsGuarded:
                     # prescription and still not set an alarm on somebody's
                     # phone about it.
                     "require_own_prescription",
+                    # Same shape, one level down: the reminder rather than the
+                    # prescription it hangs on. Refuses every role but PATIENT
+                    # and then scopes the lookup to the session's patient id.
+                    "require_own_reminder",
                 )
             ) or DELEGATES_TO_SERVICE.search(source) is not None
             if not guarded:

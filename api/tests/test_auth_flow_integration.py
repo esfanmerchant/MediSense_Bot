@@ -20,6 +20,9 @@ from tests.conftest import requires_db
 pytestmark = requires_db
 
 PASSWORD = "IntegrationPass123"
+#: A syntactically valid CNIC. Registration requires one of every account;
+#: it identifies the person at the hospital and is never a credential.
+CNIC = "42101-7536622-3"
 #: Registration emails a code and stores only its hash, so a test cannot read
 #: the real one. A known hash is stamped onto the row instead and the ordinary
 #: endpoint is driven with it — see `test_email_verification_integration.py`,
@@ -45,7 +48,8 @@ async def register_and_verify(
 ) -> dict:
     """Sign up and prove the address, returning the user payload."""
     created = client.post(
-        "/api/auth/register", json={"name": name, "email": email, "password": PASSWORD}
+        "/api/auth/register",
+        json={"name": name, "email": email, "password": PASSWORD, "cnic": CNIC},
     )
     assert created.status_code == 201, created.text
     assert created.json()["data"]["pendingVerification"] is True
@@ -96,7 +100,12 @@ class TestRegistration:
     def test_refuses_a_duplicate_email(self, client: TestClient, registered: dict) -> None:
         response = client.post(
             "/api/auth/register",
-            json={"name": "Duplicate", "email": registered["email"], "password": PASSWORD},
+            json={
+                "name": "Duplicate",
+                "email": registered["email"],
+                "password": PASSWORD,
+                "cnic": CNIC,
+            },
         )
         assert response.status_code == 409
         assert response.json()["error"]["code"] == "CONFLICT"

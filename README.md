@@ -110,10 +110,29 @@ python -c "from py_vapid import Vapid01; import base64; \
   print('priv', b(v.private_key.private_numbers().private_value.to_bytes(32,'big')))"
 ```
 
-**Which notifications earn a push** is deliberately narrower than which earn an
-email (`PUSHED_TYPES` in `api/app/modules/notifications/templates.py`): a dose
-that is due, a vital past its threshold, break-glass access, a sign-in you may
-not have made. An invoice can wait for the inbox.
+**Push is the default channel; email is the exception.** A push is cheap to
+receive and cheap to dismiss, so every notification type reaches a device. An
+inbox is not, and a sender that mails about every small thing is one people
+filter out — which costs the messages that mattered. So `EMAILED_TYPES` in
+`api/app/modules/notifications/templates.py` is the short list: money, a booked
+time, your record being opened, your account changing hands, and the welcome
+that says the account exists.
+
+**Each account chooses its channels** at *Settings → Notifications*
+(`PATCH /api/account/notifications`). The in-app list is not switchable — it is
+the record that somebody was told. Two types ignore both switches and the page
+says so plainly: a break-glass access to your record, and a change to your
+account's security. Turning email off means "stop telling me about
+appointments"; it does not mean "do not tell me if somebody opened my medical
+record", and the person who would want that silenced is not the patient.
+
+**Today's doses are a to-do list that resets by itself.**
+`GET /api/medication-reminders/today` is the active reminders joined to the
+ticks recorded against the clinic-local date, so at midnight the same query
+returns the same doses with nothing ticked. Nothing runs at 00:00 to clear it —
+a nightly job is one more thing that can fail while everybody is asleep and
+leave somebody looking at yesterday. A tick is a note to self; it is not
+evidence a medicine was swallowed and no clinician is shown it.
 
 **Reminder times come from the patient, never from the prescription.** A
 prescription's `frequency` is prose — "twice a day", "after meals", "SOS" — and
@@ -155,6 +174,22 @@ outright when the sign-in declared a shared terminal.
 Uploaded application documents live in the same private Supabase Storage
 bucket the rest of the system uses; nothing is public, and every read is a
 short-lived signed URL.
+
+### Identity at registration
+
+Every account gives a CNIC when it registers, whatever role it holds. It is
+stored as thirteen digits — the dashes people type are thrown away, so two
+people who typed it differently are one value in the column.
+
+**It is an identifier, never a credential.** Sign-in remains email and
+password. A CNIC is printed on a card people hand to shopkeepers; a system that
+let it open an account would be one whose accounts open with something
+everybody already has.
+
+The column is nullable and the API requires it. Accounts that existed before it
+was asked for have none, and a NOT NULL with a made-up default would put a fake
+identity number on a real person's record — worse than a gap, because a gap is
+visibly a gap.
 
 ### Demo accounts
 

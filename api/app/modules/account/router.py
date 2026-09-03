@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Request, Response, UploadFile
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentAuth, DbSession, client_ip
@@ -37,6 +38,7 @@ from app.modules.auth.schemas import (
     TwoFactorStartRequest,
 )
 from app.modules.auth.twofactor import mask_email
+from app.modules.notifications.templates import ALWAYS_SENT
 from app.services import avatars, storage
 from app.services.files import FileRejectedError
 
@@ -409,3 +411,62 @@ async def remove_avatar(request: Request, auth: CurrentAuth, db: DbSession) -> d
 
     await storage.remove(settings.SUPABASE_AVATARS_BUCKET, path)
     return ok({"removed": True})
+
+
+# --- Notification channels ---------------------------------------------------
+
+
+class ChannelPreferences(BaseModel):
+    """Which of the two outbound channels this account wants.
+
+    The in-app list is not here and is not switchable. It is the record that
+    somebody was told; a portal that could stop keeping it would be unable to
+    answer "was I notified?", and that question matters most when the answer is
+    disputed.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    email: bool | None = Field(default=None, alias="notifyByEmail")
+    push: bool | None = Field(default=None, alias="notifyByPush")
+
+
+def _channels(user: User) -> dict[str, Any]:
+    return {
+        "notifyByEmail": user.notify_by_email,
+        "notifyByPush": user.notify_by_push,
+        # Named so the page can say which notices ignore the switches rather
+        # than accepting a setting it will not honour.
+        "alwaysSent": sorted(str(t) for t in ALWAYS_SENT),
+    }
+
+
+@router.get("/notifications")
+async def get_notification_channels(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
+    user = (await db.execute(select(User).where(User.id == auth.user_id))).scalar_one_or_none()
+    if user is None:
+        raise not_found("Account")
+    return ok(_channels(user))
+
+
+@router.patch("/notifications")
+async def set_notification_channels(
+    payload: ChannelPreferences, auth: CurrentAuth, db: DbSession
+) -> dict[str, Any]:
+    """Turn email or push on or off for this account.
+
+    Scoped to the session — there is no id in the path, so this cannot be
+    pointed at somebody else's settings. Either field may be omitted, so a page
+    that only knows about one switch cannot silently reset the other.
+    """
+    user = (await db.execute(select(User).where(User.id == auth.user_id))).scalar_one_or_none()
+    if user is None:
+        raise not_found("Account")
+
+    if payload.email is not None:
+        user.notify_by_email = payload.email
+    if payload.push is not None:
+        user.notify_by_push = payload.push
+    await db.flush()
+
+    return ok(_channels(user))

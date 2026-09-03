@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { MedicationToday } from "@/components/MedicationToday";
 import { CircuitNodes } from "@/components/brand/CircuitNodes";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
@@ -22,14 +23,12 @@ import {
   Badge,
   Button,
   Card,
-  Checkbox,
   EmptyState,
   ErrorState,
   QuickAction,
   SkeletonRows,
   SkeletonTiles,
   StatTile,
-  cx,
 } from "@/components/ui";
 import { VitalGauge } from "@/components/gauges";
 import {
@@ -289,88 +288,6 @@ function ExplainLatestReport({ patientId }: { patientId: string }) {
         {tr("Explain", "Samjhayein")}
       </Link>
     </div>
-  );
-}
-
-type ActivePrescription = {
-  id: string;
-  medication: string;
-  dosage: string;
-  frequency: string;
-  duration: string;
-  prescribedBy: string;
-};
-
-/**
- * Today's medication, with a box to tick beside each one.
- *
- * **The ticks are a reminder, not a record.** Nothing is sent anywhere, nothing
- * is stored, and they are gone on reload — so the panel says exactly that above
- * the list. A checkbox in a medical portal that silently looked like adherence
- * data would be worse than no checkbox: a doctor could read it as evidence a
- * dose was taken, when all it ever was is a person keeping their place.
- */
-function MedicationChecklist({ prescriptions }: { prescriptions: ActivePrescription[] }) {
-  const tr = useTr();
-  const [taken, setTaken] = useState<string[]>([]);
-
-  const toggle = (id: string) =>
-    setTaken((current) =>
-      current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
-    );
-
-  return (
-    <>
-      <p className="mb-3 flex items-start gap-1.5 rounded-xl bg-sunken/70 px-3 py-2 text-xs text-muted">
-        <Icon name="lock" className="mt-px shrink-0 text-[14px] text-faint" />
-        {tr(
-          `Tick these off as you go — a checklist for you alone. Nothing is sent or saved, and it clears when you leave. ${taken.length} of ${prescriptions.length} ticked today.`,
-          `Jaise jaise lein, tick karte jayein — yeh sirf aap ke liye hai. Kuchh bheja ya save nahi hota, aur page chhorte hi khali ho jata hai. Aaj ${prescriptions.length} mein se ${taken.length} tick hue.`,
-        )}
-      </p>
-      <ul className="stagger space-y-3">
-        {prescriptions.map((prescription) => {
-          const ticked = taken.includes(prescription.id);
-          return (
-            <li
-              key={prescription.id}
-              className={cx(
-                "flex items-start gap-3 rounded-xl border p-3 transition-[background-color,border-color,opacity] duration-200",
-                ticked ? "border-stable/40 bg-stable-soft/50" : "border-line bg-sunken/60",
-              )}
-            >
-              <span
-                aria-hidden
-                className={cx(
-                  "grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors",
-                  ticked ? "bg-stable-soft text-stable" : "bg-accent-soft text-accent",
-                )}
-              >
-                <Icon name={ticked ? "check" : "medication"} filled className="text-[22px]" />
-              </span>
-              <div className={cx("min-w-0 flex-1", ticked && "opacity-70")}>
-                <Checkbox
-                  checked={ticked}
-                  onChange={() => toggle(prescription.id)}
-                  label={
-                    <span className={cx("font-semibold text-strong", ticked && "line-through")}>
-                      {prescription.medication}{" "}
-                      <span className="font-normal text-muted">· {prescription.dosage}</span>
-                    </span>
-                  }
-                />
-                <p className="mt-0.5 pl-8 text-sm text-muted">
-                  {prescription.frequency} · {prescription.duration}
-                </p>
-                <p className="mt-0.5 pl-8 text-xs text-faint">
-                  {tr("Prescribed by", "Tajweez kardah")} {prescription.prescribedBy}
-                </p>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </>
   );
 }
 
@@ -652,24 +569,20 @@ export default function PatientDashboard() {
               </Card>
               </Section>
 
+              {/* The day's doses, not the list of prescriptions.
+                  ----------------------------------------------
+                  This was a checklist held in React state: the ticks were gone
+                  on reload, which the panel said honestly and which made it
+                  close to useless — the one thing a medication checklist has
+                  to survive is closing the app. It now ticks real rows keyed
+                  by the clinic's date, so it persists through the day and
+                  starts empty at midnight without anything resetting it.
+
+                  What is prescribed, and the times each medicine is taken at,
+                  live on the record page beside the prescription they belong
+                  to. This page is what to do now. */}
               <Section id="medication">
-              <Card
-                icon="pill"
-                title={tr("Current medication", "Maujooda dawa")}
-                description={tr(
-                  "Prescribed by your care team. Always follow the instructions on the label.",
-                  "Aap ki care team ki tajweez kardah. Hamesha label ki hidayat par amal karein.",
-                )}
-              >
-                {data.activePrescriptions.length === 0 ? (
-                  <EmptyState
-                    icon="pill_off"
-                    title={tr("No active prescriptions", "Koi chalu nuskha nahi")}
-                  />
-                ) : (
-                  <MedicationChecklist prescriptions={data.activePrescriptions} />
-                )}
-              </Card>
+                <MedicationToday />
               </Section>
             </div>
           </>

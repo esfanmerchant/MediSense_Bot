@@ -408,6 +408,14 @@ export const auth = {
     name: string;
     email: string;
     password: string;
+    /**
+     * Required, of every role. Dashes optional — the server keeps the digits.
+     *
+     * It identifies the person at the hospital and is never a credential:
+     * sign-in stays email and password, because a CNIC is printed on a card
+     * people hand over daily.
+     */
+    cnic: string;
     phone?: string;
     dateOfBirth?: string;
     /** Patients by default. A doctor's account is gated until an admin approves it. */
@@ -1049,7 +1057,44 @@ export const medicationReminders = {
       `/medication-reminders/${prescriptionId}`,
       { method: "DELETE" },
     ),
+
+  /**
+   * Every dose due today, and which are ticked.
+   *
+   * Computed from the active reminders rather than stored, so it empties by
+   * itself at the clinic's midnight — there is no reset to wait for and no job
+   * that can fail overnight and leave yesterday on screen.
+   */
+  today: () =>
+    apiList<MedicationDoseToday, { date: string; timezone: string; taken: number; total: number }>(
+      "/medication-reminders/today",
+    ),
+
+  markTaken: (reminderId: string) =>
+    apiRequest<{ reminderId: string; date: string; taken: boolean; takenAt: string }>(
+      `/medication-reminders/today/${reminderId}/taken`,
+      { method: "POST" },
+    ),
+
+  unmarkTaken: (reminderId: string) =>
+    apiRequest<{ reminderId: string; date: string; taken: boolean; removed: number }>(
+      `/medication-reminders/today/${reminderId}/taken`,
+      { method: "DELETE" },
+    ),
 };
+
+export interface MedicationDoseToday {
+  reminderId: string;
+  prescriptionId: string;
+  medication: string;
+  dosage: string;
+  instructions: string | null;
+  /** "HH:MM" in the clinic's timezone, which the meta names. */
+  time: string;
+  atMinutes: number;
+  taken: boolean;
+  takenAt: string | null;
+}
 
 // ---------------------------------------------------------------------------
 // Documents
@@ -1372,6 +1417,32 @@ export const notifications = {
       `/notifications/push?endpoint=${encodeURIComponent(endpoint)}`,
       { method: "DELETE" },
     ),
+};
+
+// ---------------------------------------------------------------------------
+// Which channels this account wants
+// ---------------------------------------------------------------------------
+
+export interface NotificationChannels {
+  notifyByEmail: boolean;
+  notifyByPush: boolean;
+  /**
+   * Notification types no switch turns off, named by the server rather than
+   * assumed here — so the page states the real exception rather than one that
+   * used to be true.
+   */
+  alwaysSent: string[];
+}
+
+export const notificationChannels = {
+  get: () => apiRequest<NotificationChannels>("/account/notifications"),
+
+  /** Either field may be omitted, so one switch cannot silently reset the other. */
+  set: (input: { notifyByEmail?: boolean; notifyByPush?: boolean }) =>
+    apiRequest<NotificationChannels>("/account/notifications", {
+      method: "PATCH",
+      body: input,
+    }),
 };
 
 // ---------------------------------------------------------------------------

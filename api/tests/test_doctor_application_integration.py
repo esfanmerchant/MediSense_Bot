@@ -163,7 +163,13 @@ async def applicant(client: TestClient, db: AsyncSession) -> AsyncIterator[dict[
     email = unique_email()
     created = client.post(
         "/api/auth/register",
-        json={"name": "Ayesha Iqbal", "email": email, "password": PASSWORD, "role": "DOCTOR"},
+        json={
+            "name": "Ayesha Iqbal",
+            "email": email,
+            "password": PASSWORD,
+            "role": "DOCTOR",
+            "cnic": "35202-1234567-1",
+        },
     )
     assert created.status_code == 201, created.text
 

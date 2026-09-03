@@ -34,6 +34,7 @@ import { Button, Checkbox, Field, Input } from "@/components/ui";
 import { ApiError, auth } from "@/lib/api";
 import { TermsDialog } from "@/components/Terms";
 import { useTr } from "@/lib/lang";
+import { formatCnic, isCompleteCnic } from "@/lib/pkFormat";
 
 type Role = "PATIENT" | "DOCTOR";
 
@@ -45,6 +46,7 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [cnic, setCnic] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [accepted, setAccepted] = useState(false);
@@ -77,6 +79,8 @@ export default function RegisterPage() {
         name: name.trim(),
         email: email.trim(),
         password,
+        // Sent with the dashes people typed; the server keeps the digits.
+        cnic,
         role,
         // The server refuses without this and records the version agreed to,
         // so the tick on this form is the thing that makes the account legal
@@ -176,6 +180,30 @@ export default function RegisterPage() {
             />
           </Field>
 
+          <Field
+            label={tr("CNIC", "CNIC")}
+            htmlFor="cnic"
+            error={error?.fieldError("cnic")}
+            hint={tr(
+              "13 digits. Dashes are added for you. Used to identify you at the hospital — never to sign in.",
+              "13 adad. Dashes khud lag jate hain. Hospital mein pehchan ke liye — sign in ke liye kabhi nahi.",
+            )}
+          >
+            <Input
+              id="cnic"
+              name="cnic"
+              inputMode="numeric"
+              autoComplete="off"
+              required
+              maxLength={15}
+              placeholder="42101-1234567-1"
+              className="font-mono"
+              value={cnic}
+              onChange={(event) => setCnic(formatCnic(event.target.value))}
+              invalid={Boolean(error?.fieldError("cnic"))}
+            />
+          </Field>
+
           {role === "PATIENT" && (
             <PhoneField
               id="phone"
@@ -268,7 +296,9 @@ export default function RegisterPage() {
             size="lg"
             className="btn-shine w-full"
             loading={submitting}
-            disabled={mismatch || strengthOf(password) === 0}
+            // A half-typed CNIC is not *wrong*, only unfinished — so the button
+            // waits for it rather than the field turning red as somebody types.
+            disabled={mismatch || strengthOf(password) === 0 || !isCompleteCnic(cnic)}
           >
             {submitting
               ? tr("Creating your account…", "Account ban raha hai…")

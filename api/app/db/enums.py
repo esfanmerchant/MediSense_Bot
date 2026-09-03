@@ -283,6 +283,11 @@ class NotificationType(StrEnum):
     #: type rather than ACCOUNT_SECURITY because it is a queue an administrator
     #: works through, and filing it under security events would bury it.
     DOCTOR_APPLICATION = "DOCTOR_APPLICATION"
+    #: The account is now real — email proved, sign-in available. Its own type
+    #: because it is the one message that is a welcome rather than a warning,
+    #: and filing it under ACCOUNT_SECURITY would make a good event look like a
+    #: suspicious one.
+    ACCOUNT_REGISTERED = "ACCOUNT_REGISTERED"
 
 
 class NotificationChannel(StrEnum):

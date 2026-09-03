@@ -91,7 +91,12 @@ async def unverified(client: TestClient, db: AsyncSession) -> AsyncIterator[dict
     email = unique_email()
     response = client.post(
         "/api/auth/register",
-        json={"name": "Verification Test Patient", "email": email, "password": PASSWORD},
+        json={
+            "name": "Verification Test Patient",
+            "email": email,
+            "password": PASSWORD,
+            "cnic": "42101-7536622-3",
+        },
     )
     assert response.status_code == 201, response.text
     yield {"email": email, "body": response.json()["data"]}
@@ -131,7 +136,12 @@ class TestRegistration:
     def test_refuses_a_duplicate_address(self, client: TestClient, unverified: dict) -> None:
         response = client.post(
             "/api/auth/register",
-            json={"name": "Someone Else", "email": unverified["email"], "password": PASSWORD},
+            json={
+                "name": "Someone Else",
+                "email": unverified["email"],
+                "password": PASSWORD,
+                "cnic": "42101-7536622-3",
+            },
         )
         assert response.status_code == 409
 

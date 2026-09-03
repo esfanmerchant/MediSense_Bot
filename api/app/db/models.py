@@ -75,6 +75,29 @@ class User(Base):
     #: mean the system can say they consented but not to what — and the
     #: moment the wording changes, every past acceptance silently becomes a
     #: claim about a document they never saw.
+    #: The national identity number, as thirteen digits with no dashes.
+    #:
+    #: Collected at registration and never used to sign in — email and password
+    #: remain the only credentials, because a CNIC is not a secret: it is
+    #: printed on a card people hand over daily, and an identifier that doubles
+    #: as a credential is a credential everybody already has.
+    #:
+    #: Nullable in the column and required by the API. The accounts that
+    #: existed before this was asked for do not have one, and refusing to load
+    #: them would lock real people out of their records to satisfy a schema.
+    cnic: Mapped[str | None] = mapped_column(String(13))
+    #: Whether notifications also travel by email and to enrolled devices.
+    #:
+    #: The in-app list is not switchable and is not represented here: it is the
+    #: record that somebody was told, and a portal that quietly stopped keeping
+    #: it could not answer "was I notified?" — which is a question that matters
+    #: most when the answer is contested.
+    notify_by_email: Mapped[bool] = mapped_column(
+        "notifyByEmail", Boolean, default=True, nullable=False
+    )
+    notify_by_push: Mapped[bool] = mapped_column(
+        "notifyByPush", Boolean, default=True, nullable=False
+    )
     terms_accepted_at: Mapped[datetime | None] = mapped_column("termsAcceptedAt", DateTime)
     terms_version: Mapped[str | None] = mapped_column("termsVersion", String(32))
     email_verified_at: Mapped[datetime | None] = mapped_column("emailVerifiedAt", DateTime)
@@ -1246,6 +1269,47 @@ class MedicationReminder(Base):
 # ===========================================================================
 
 
+class MedicationDose(Base):
+    """One dose, on one day, that the patient marked as taken.
+
+    **A row means taken. No row means not yet.** There is no "pending" state
+    and nothing to create in advance: the day's list is computed from the
+    active reminders, and this table only records the ticks. That is what makes
+    the reset at midnight free — tomorrow simply has no rows yet, so tomorrow's
+    list starts empty without a job running at 00:00 to clear anything. A
+    scheduled reset would be one more thing that can fail overnight and leave
+    somebody's list stuck on yesterday.
+
+    **The day is the clinic's day, not the server's.** ``on`` is a clinic-local
+    calendar date, so an 08:00 dose belongs to the same list whether the row is
+    written from Karachi or from a container in Frankfurt.
+
+    **Nothing here is a clinical record.** It is a checklist somebody keeps for
+    themselves; it is not evidence that a medicine was swallowed, and no part
+    of the system treats it as adherence data a clinician may rely on.
+    """
+
+    __tablename__ = "medication_doses"
+
+    id: Mapped[str] = _id()
+    reminder_id: Mapped[str] = mapped_column(
+        "reminderId",
+        String(64),
+        ForeignKey("medication_reminders.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    patient_id: Mapped[str] = mapped_column(
+        "patientId",
+        String(64),
+        ForeignKey("patients.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    #: The clinic-local calendar date this dose belonged to, as YYYY-MM-DD.
+    on: Mapped[str] = mapped_column(String(10), nullable=False)
+    taken_at: Mapped[datetime] = mapped_column("takenAt", DateTime, nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
 class EmergencyAccess(Base):
     """Break-glass grant (R3, conflict C1).
 
@@ -1487,3 +1551,13 @@ Index(
     MedicationReminder.at_minutes,
     unique=True,
 )
+# One tick per reminder per day. Unique, because that is what makes "mark
+# taken" idempotent: a double tap on a slow connection is one row, not two.
+Index(
+    "medication_doses_reminderId_on_key",
+    MedicationDose.reminder_id,
+    MedicationDose.on,
+    unique=True,
+)
+# The day's list is read per patient per day, and only ever that way.
+Index("medication_doses_patientId_on_idx", MedicationDose.patient_id, MedicationDose.on)

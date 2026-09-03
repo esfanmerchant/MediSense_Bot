@@ -31,14 +31,20 @@ from typing import Any
 from app.core.config import settings
 from app.db.enums import NotificationType
 
-#: Types that are emailed as well as shown in the portal.
+#: Types that are emailed as well as pushed and shown in the portal.
 #:
-#: Not every notification earns an email. A reminder someone must act on before
-#: they next open the app does; an event they will see when they next sign in
-#: does not. Emailing everything is how people learn to filter a sender out,
-#: which costs the reminders that mattered.
+#: The short list, on purpose. An email is worth sending when somebody may need
+#: it without the app in front of them, or may need it months later: money, a
+#: booked time, their record being opened, their account changing hands, and
+#: the one message that says the account exists at all.
+#:
+#: Everything else — a report added, a dose due, a doctor's application moving
+#: through a queue — is a push and a line in the portal. Mailing those too is
+#: how a sender ends up in a filter, and the filter does not distinguish
+#: between the notice about a scan and the notice about a break-glass access.
 EMAILED_TYPES: frozenset[NotificationType] = frozenset(
     {
+        NotificationType.ACCOUNT_REGISTERED,
         NotificationType.APPOINTMENT_BOOKED,
         NotificationType.APPOINTMENT_REMINDER,
         NotificationType.APPOINTMENT_CANCELLED,
@@ -50,24 +56,39 @@ EMAILED_TYPES: frozenset[NotificationType] = frozenset(
     }
 )
 
-
-#: Types that also buzz a phone.
+#: Types no preference can switch off.
 #:
-#: Deliberately narrower than the emailed set. A push interrupts somebody
-#: wherever they are, so it is reserved for the things that are useless if seen
-#: later: a dose that is due now, a vital that has crossed a threshold, a
-#: request to open somebody's record in an emergency, a sign-in they may not
-#: have made. An invoice can wait for the inbox.
-PUSHED_TYPES: frozenset[NotificationType] = frozenset(
+#: Somebody who turns email off has said "stop telling me about appointments".
+#: They have not said "do not tell me if my medical record is opened under
+#: break-glass access, or if this account's password changed". Those two are
+#: the notices a person needs precisely when they are not looking at the app,
+#: and precisely when the person who would want them silenced is not them.
+#:
+#: The settings page says this plainly rather than accepting the switch and
+#: ignoring it — a toggle that saves nowhere is the failure this file's
+#: neighbour was written to avoid.
+ALWAYS_SENT: frozenset[NotificationType] = frozenset(
     {
-        NotificationType.MEDICATION_REMINDER,
-        NotificationType.APPOINTMENT_REMINDER,
-        NotificationType.APPOINTMENT_CANCELLED,
-        NotificationType.VITAL_ALERT,
         NotificationType.EMERGENCY_ACCESS,
         NotificationType.ACCOUNT_SECURITY,
     }
 )
+
+
+#: Types that also reach a phone: all of them.
+#:
+#: The two channels answer different questions. A push is cheap to receive and
+#: cheap to dismiss — it lands in a tray the person already scrolls, next to
+#: everything else, and costs nothing if it is not interesting. An email lands
+#: in an inbox somebody has to keep clean, and one sender that mails about
+#: every small thing is a sender people filter out — which costs the messages
+#: that mattered.
+#:
+#: So push is the default channel for events and email is the exception, and
+#: `EMAILED_TYPES` below is the short list rather than this one. Anybody who
+#: disagrees turns push off for their account; that switch is theirs, and it is
+#: why widening this is safe.
+PUSHED_TYPES: frozenset[NotificationType] = frozenset(NotificationType)
 
 
 @dataclass(frozen=True)

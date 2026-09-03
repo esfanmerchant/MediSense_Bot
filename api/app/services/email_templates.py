@@ -193,6 +193,53 @@ def two_factor_code(*, name: str, code: str, expires_minutes: int = 10) -> Email
 # ---------------------------------------------------------------------------
 
 
+def account_registered(*, name: str, role: str) -> Email:
+    """The one email in this system that is a welcome rather than a warning.
+
+    Sent when the address is proved, not when the form was submitted: until
+    then the account cannot be signed into and congratulating somebody on it
+    would be premature.
+
+    A doctor gets different words because their account is not finished — the
+    role exists, the permission to practise does not, and a welcome that
+    implied otherwise would have them expecting a patient list.
+    """
+    greeting = f"Hello {name.split()[0]}," if name.strip() else "Hello,"
+    doctor = role.upper().endswith("DOCTOR")
+
+    if doctor:
+        lead = (
+            "Your email is verified and your account is active. Your registration "
+            "to practise is still with our administrators — we will email you as "
+            "soon as it is reviewed."
+        )
+        url = portal_url("/doctor")
+    else:
+        lead = (
+            "Your email is verified and your account is active. You can sign in "
+            "any time to book an appointment, see your records and vitals, and "
+            "keep track of your medication."
+        )
+        url = portal_url("/patient")
+
+    detail = (
+        "Sign in with your email address and password. Your CNIC is on file to "
+        "identify you at the hospital; it is never used to sign in."
+    )
+
+    return Email(
+        subject=f"Welcome to {BRAND}",
+        text="\n\n".join([greeting, lead, detail, f"Sign in: {url}", _SIGNOFF]),
+        html=_shell(
+            "Your account is ready",
+            _paragraph(greeting)
+            + _paragraph(lead)
+            + _button(f"Sign in to {BRAND}", url)
+            + _note(detail),
+        ),
+    )
+
+
 def doctor_application_received(*, name: str) -> Email:
     greeting = f"Hello Dr {name.split()[-1]}," if name.strip() else "Hello,"
     lead = (

@@ -26,7 +26,7 @@ from typing import Any
 #: audit entry can place it. Bump this only when the *substance* changes —
 #: fixing a typo and forcing every user in the hospital to re-consent is how a
 #: consent screen becomes something people click through without reading.
-TERMS_VERSION = "2026-08-31"
+TERMS_VERSION = "2026-09-03"
 
 
 class Section:
@@ -89,6 +89,29 @@ TERMS: list[Section] = [
             "payment: your bill is settled when we have checked the money arrived.",
             "Doctors are paid the consultation fee. They may withdraw their balance "
             "once it reaches the minimum shown in their portal.",
+        ],
+    ),
+    Section(
+        "If a bill is not paid",
+        [
+            "We will remind you the day before an invoice is due and again once it "
+            "is overdue. Both go to your portal and, unless you have turned it off, "
+            "to your email and your devices.",
+            "An overdue invoice may pause new bookings on your account. It does not "
+            "stop you seeing your own records, and it never stops emergency care — "
+            "a doctor treating you in an emergency is not shown your balance.",
+            "If an invoice remains unpaid after it is due, MediSense may recover the "
+            "amount owed, together with the late charge and any reasonable costs of "
+            "recovery. That may include instructing a collections agent or beginning "
+            "civil proceedings in the courts of Pakistan.",
+            "We will write to you at the email address on your account before taking "
+            "either step, and we will tell you the amount, what it is for, and how "
+            "long you have to settle it. If you think an invoice is wrong, tell us "
+            "before it falls due — while a query you have raised is open we will not "
+            "begin recovery on it.",
+            "Nothing here changes your right to be treated. Non-payment is a debt "
+            "between you and MediSense; it is not a clinical matter and is not "
+            "recorded in your medical record.",
         ],
     ),
     Section(

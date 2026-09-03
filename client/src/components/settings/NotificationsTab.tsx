@@ -17,6 +17,7 @@
  */
 
 import { Icon } from "@/components/Icon";
+import { NotificationChannels } from "@/components/settings/NotificationChannels";
 import { PushToggle } from "@/components/settings/PushToggle";
 import { Badge, Card, cx } from "@/components/ui";
 import { useTr } from "@/lib/lang";
@@ -28,8 +29,6 @@ interface NotificationKind {
   description: [string, string];
   /** Also sent by email — deliberately saying less than the in-app copy. */
   emailed: boolean;
-  /** Also pushed to enrolled devices. Reserved for what is useless seen late. */
-  pushed: boolean;
   roles: Role[];
 }
 
@@ -42,7 +41,6 @@ const KINDS: NotificationKind[] = [
       "Book hona, waqt badalna, cancel hona, aur visit se pehle reminder. Mareez aur doctor dono ko jata hai.",
     ],
     emailed: true,
-    pushed: true,
     roles: ["PATIENT", "DOCTOR"],
   },
   {
@@ -53,7 +51,6 @@ const KINDS: NotificationKind[] = [
       "Koi reading apni muqarrar hadd paar kare to. Yeh ilaaj karne wale doctor ko jata hai, reading ke saath.",
     ],
     emailed: true,
-    pushed: true,
     roles: ["DOCTOR"],
   },
   {
@@ -64,7 +61,6 @@ const KINDS: NotificationKind[] = [
       "Aap ka record emergency mein khola jaye to — aap ko bhi bataya jata hai aur admin ko bhi, jo isay review karta hai.",
     ],
     emailed: true,
-    pushed: true,
     roles: ["PATIENT", "ADMIN"],
   },
   {
@@ -75,7 +71,6 @@ const KINDS: NotificationKind[] = [
       "Mukammal consultation ke liye nayi invoice bane to.",
     ],
     emailed: true,
-    pushed: false,
     roles: ["PATIENT", "ADMIN"],
   },
   {
@@ -86,7 +81,6 @@ const KINDS: NotificationKind[] = [
       "Aap ke record mein report ya scan add ho to. Sirf portal mein — result kabhi bahar nahi jata.",
     ],
     emailed: false,
-    pushed: false,
     roles: ["PATIENT"],
   },
   {
@@ -97,7 +91,6 @@ const KINDS: NotificationKind[] = [
       "Dose ka waqt, jo aap khud prescription par muqarrar karte hain. Aap ke devices par push hota hai — email kabhi nahi.",
     ],
     emailed: false,
-    pushed: true,
     roles: ["PATIENT"],
   },
   {
@@ -108,7 +101,6 @@ const KINDS: NotificationKind[] = [
       "Password badalna, naya sign-in, ya two-factor on/off hona.",
     ],
     emailed: true,
-    pushed: true,
     roles: ["PATIENT", "DOCTOR", "ADMIN", "NURSE"],
   },
 ];
@@ -133,26 +125,30 @@ export function NotificationsTab({ role }: { role: Role }) {
         <p className="text-sm leading-relaxed text-strong">
           <strong className="font-semibold">
             {tr(
-              "You can switch this device on or off. Which notifications you get is not yet a choice.",
-              "Is device ko on ya off aap kar sakte hain. Kaun se notifications aayenge, yeh abhi tabdeel nahi hota.",
+              "You choose the channels. You do not yet choose them one notification at a time.",
+              "Channels aap chunte hain. Har notification ki alag setting abhi nahi.",
             )}
           </strong>{" "}
           <span className="text-muted">
             {tr(
-              "There is nowhere to save per-notification preferences yet, so the list below describes what the system actually sends rather than pretending to control it. All of it is on.",
-              "Har notification ki alag setting save karne ki abhi koi jagah nahi, is liye neeche di gayi fehrist sirf yeh batati hai ke system asal mein kya bhejta hai — control ka jhoota wada nahi karti. Yeh sab on hai.",
+              "Email and your devices can each be switched off above, and this device separately. There is nowhere yet to save a preference per notification type, so the list below describes what the system actually sends rather than pretending to control it.",
+              "Upar email aur apne devices alag alag band kiye ja sakte hain, aur yeh device alag se. Har qism ki alag setting save karne ki abhi jagah nahi, is liye neeche di gayi fehrist sirf yeh batati hai ke system asal mein kya bhejta hai — control ka jhoota wada nahi karti.",
             )}
           </span>
         </p>
       </div>
+
+      {/* Account first, then this device: turning the account switch off
+          stops every device, and turning the device one off stops this one. */}
+      <NotificationChannels />
 
       <PushToggle />
 
       <Card
         title={tr("What you are notified about", "Aap ko kis cheez ki ittila di jati hai")}
         description={tr(
-          "Every one of these reaches you in the portal. The badges say which also travel by email or to your devices.",
-          "In sab ki ittila portal mein milti hai. Nishaan batate hain ke kaun se email ya aap ke devices par bhi jate hain.",
+          "Every one of these reaches the portal and your devices. The badge says which also travel by email.",
+          "In sab ki ittila portal aur aap ke devices par milti hai. Nishaan batata hai ke kaun se email se bhi jate hain.",
         )}
         icon="notifications"
         flush
@@ -183,12 +179,12 @@ export function NotificationsTab({ role }: { role: Role }) {
                     {tr("Email", "Email")}
                   </Badge>
                 )}
-                {kind.pushed && (
-                  <Badge tone="info">
-                    <Icon name="notifications_active" className="text-[14px]" />
-                    {tr("Push", "Push")}
-                  </Badge>
-                )}
+                {/* Every type reaches a device; only some also reach an inbox,
+                    which is why the email badge is the one that varies. */}
+                <Badge tone="info">
+                  <Icon name="notifications_active" className="text-[14px]" />
+                  {tr("Devices", "Devices")}
+                </Badge>
               </div>
             </li>
           ))}

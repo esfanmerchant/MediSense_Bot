@@ -13,6 +13,9 @@ from app.db.enums import Gender, Role, TwoFactorMethod, UserStatus
 
 Password = Annotated[str, Field(min_length=10, max_length=200)]
 _PHONE = re.compile(r"^\+?[\d\s-]{7,20}$")
+#: A CNIC is thirteen digits. People type it as 42101-7536622-3, so the
+#: dashes are accepted and thrown away — what is stored is the digits.
+_CNIC = re.compile(r"^\d{5}-?\d{7}-?\d$")
 #: Long enough for a six-digit code and a ten-character backup code, with room
 #: for the spaces people paste around them.
 Code = Annotated[str, Field(min_length=4, max_length=32)]
@@ -50,6 +53,13 @@ class RegisterRequest(_Base):
         default=None, alias="emergencyContactName"
     )
     emergency_contact_phone: str | None = Field(default=None, alias="emergencyContactPhone")
+    #: Required, and required of every role.
+    #:
+    #: It is an identifier, never a credential: sign-in stays email and
+    #: password. A CNIC is printed on a card people hand to shopkeepers — a
+    #: system that let it open an account would be one whose accounts open with
+    #: something everybody already has.
+    cnic: str = Field(min_length=13, max_length=15)
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore", populate_by_name=True)
 
@@ -61,6 +71,15 @@ class RegisterRequest(_Base):
         if value and not _PHONE.match(value):
             raise ValueError("Enter a valid phone number.")
         return value
+
+    @field_validator("cnic")
+    @classmethod
+    def _valid_cnic(cls, value: str) -> str:
+        if not _CNIC.match(value.strip()):
+            raise ValueError("Enter a valid CNIC, for example 42101-7536622-3.")
+        # Stored without the dashes, so two people who typed it differently are
+        # one value in the column and a search for either finds the account.
+        return value.replace("-", "").strip()
 
     @field_validator("date_of_birth")
     @classmethod

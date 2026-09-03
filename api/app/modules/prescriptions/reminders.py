@@ -17,10 +17,18 @@ That gives the endpoints below their shape:
 * **Times are clinic-local minutes past midnight**, not timestamps. A reminder
   is a fact about someone's day; storing an instant would make it drift the
   first time the schedule was read on a different date.
+
+The day's list — ``GET /medication-reminders/today`` — is computed from those
+times rather than stored, and the ticks against it live in ``medication_doses``
+keyed by the clinic-local date. **That is what makes the reset at midnight
+free.** Tomorrow simply has no rows yet, so tomorrow's list starts empty with
+nothing running at 00:00 to clear it. A scheduled reset would be one more job
+that can fail overnight and leave somebody looking at yesterday.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Query
@@ -31,8 +39,10 @@ from app.api.deps import CurrentAuth, DbSession
 from app.api.responses import ok
 from app.core.config import settings
 from app.core.errors import forbidden, not_found
+from app.db.base import utcnow
 from app.db.enums import Role
-from app.db.models import MedicationReminder, Prescription
+from app.db.models import MedicationDose, MedicationReminder, Prescription
+from app.modules.appointments.schedule import clinic_timezone
 
 router = APIRouter(prefix="/medication-reminders", tags=["prescriptions"])
 
@@ -211,3 +221,170 @@ async def clear_reminders(
     # `CursorResult`, which is where `rowcount` lives.
     removed = cast("CursorResult[Any]", result).rowcount
     return ok({"prescriptionId": prescription_id, "removed": removed})
+
+
+# --- Today ------------------------------------------------------------------
+
+
+def _today() -> str:
+    """The clinic's calendar date, which is the one the list belongs to.
+
+    Not the server's: for five hours of every day those differ, and a dose
+    ticked at 02:00 in Karachi would otherwise land on the previous day's list.
+    """
+    return datetime.now(UTC).astimezone(clinic_timezone()).date().isoformat()
+
+
+@router.get("/today")
+async def todays_medication(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
+    """Every dose due today, and which of them are ticked.
+
+    Computed, not stored. There is no nightly job creating tomorrow's list and
+    none clearing today's — the list is the active reminders, and the ticks are
+    rows keyed by today's date, so at midnight the same query simply returns a
+    list with nothing ticked.
+
+    Discontinued medicines drop out here for the same reason they stop
+    reminding: the prescription's ``active`` flag is part of the query, so
+    "stop taking it" takes effect on the next read rather than waiting for
+    somebody to delete the reminders.
+    """
+    if auth.role != Role.PATIENT or not auth.patient_id:
+        return ok([], {"date": _today(), "timezone": settings.CLINIC_TIMEZONE, "taken": 0})
+
+    on = _today()
+    rows = (
+        (
+            await db.execute(
+                select(
+                    MedicationReminder,
+                    Prescription.medication,
+                    Prescription.dosage,
+                    Prescription.instructions,
+                    MedicationDose.taken_at,
+                )
+                .join(Prescription, Prescription.id == MedicationReminder.prescription_id)
+                .outerjoin(
+                    MedicationDose,
+                    (MedicationDose.reminder_id == MedicationReminder.id)
+                    & (MedicationDose.on == on),
+                )
+                .where(
+                    MedicationReminder.patient_id == auth.patient_id,
+                    MedicationReminder.active.is_(True),
+                    Prescription.active.is_(True),
+                )
+                .order_by(MedicationReminder.at_minutes)
+            )
+        )
+        .tuples()
+        .all()
+    )
+
+    items = [
+        {
+            "reminderId": reminder.id,
+            "prescriptionId": reminder.prescription_id,
+            "medication": medication,
+            "dosage": dosage,
+            "instructions": instructions,
+            "time": _clock(reminder.at_minutes),
+            "atMinutes": reminder.at_minutes,
+            "taken": taken_at is not None,
+            "takenAt": taken_at.replace(microsecond=0).isoformat() + "Z" if taken_at else None,
+        }
+        for reminder, medication, dosage, instructions, taken_at in rows
+    ]
+
+    return ok(
+        items,
+        {
+            "date": on,
+            "timezone": settings.CLINIC_TIMEZONE,
+            "taken": sum(1 for i in items if i["taken"]),
+            "total": len(items),
+        },
+    )
+
+
+async def require_own_reminder(db: DbSession, auth: CurrentAuth, reminder_id: str) -> MedicationReminder:
+    """A reminder the caller owns, or a 404.
+
+    Scoped in the query for the same reason the prescription lookup is: "not
+    yours" and "not there" must be one answer, or the difference between them
+    tells a stranger which ids exist.
+    """
+    if auth.role != Role.PATIENT or not auth.patient_id:
+        raise not_found("Reminder")
+    row = (
+        await db.execute(
+            select(MedicationReminder).where(
+                MedicationReminder.id == reminder_id,
+                MedicationReminder.patient_id == auth.patient_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise not_found("Reminder")
+    return row
+
+
+@router.post("/today/{reminder_id}/taken")
+async def mark_taken(reminder_id: str, auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
+    """Tick one dose for today.
+
+    Idempotent by the unique index on (reminder, date): pressing it twice on a
+    slow connection is one row, and the second press reports the same state as
+    the first rather than an error about a duplicate.
+
+    **This is a checklist, not a clinical record.** It says the person ticked a
+    box; it is not evidence a medicine was swallowed, and nothing in this
+    system treats it as adherence data a clinician may rely on.
+    """
+    reminder = await require_own_reminder(db, auth, reminder_id)
+    on = _today()
+
+    existing = (
+        await db.execute(
+            select(MedicationDose).where(
+                MedicationDose.reminder_id == reminder.id, MedicationDose.on == on
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        existing = MedicationDose(
+            reminder_id=reminder.id,
+            patient_id=reminder.patient_id,
+            on=on,
+            taken_at=utcnow(),
+        )
+        db.add(existing)
+        await db.flush()
+
+    return ok(
+        {
+            "reminderId": reminder.id,
+            "date": on,
+            "taken": True,
+            "takenAt": existing.taken_at.replace(microsecond=0).isoformat() + "Z",
+        }
+    )
+
+
+@router.delete("/today/{reminder_id}/taken")
+async def unmark_taken(reminder_id: str, auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
+    """Untick a dose ticked by mistake — today's only.
+
+    Yesterday is not editable here. A checklist somebody can rewrite after the
+    fact is not a checklist, and there is no reason to reach back into a day
+    that has already ended.
+    """
+    reminder = await require_own_reminder(db, auth, reminder_id)
+    on = _today()
+    result = await db.execute(
+        delete(MedicationDose).where(
+            MedicationDose.reminder_id == reminder.id, MedicationDose.on == on
+        )
+    )
+    removed = cast("CursorResult[Any]", result).rowcount
+    return ok({"reminderId": reminder.id, "date": on, "taken": False, "removed": removed})

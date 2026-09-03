@@ -58,6 +58,7 @@ from app.db.enums import (
     AuditSeverity,
     DoctorApplicationStatus,
     Gender,
+    NotificationType,
     Role,
     TwoFactorMethod,
     UserStatus,
@@ -77,8 +78,18 @@ from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth import twofactor
 from app.modules.auth.rbac import permissions_for
 from app.modules.auth.schemas import LoginRequest, RegisterRequest
+from app.modules.notifications.service import notify
 from app.services import email as email_service
 from app.services import email_templates, terms
+
+#: Where the welcome sends each role. Kept here rather than imported from a
+#: routing module the API does not have; the client owns its own paths, and
+#: this is one link in one email.
+_PORTAL_HOME = {
+    Role.PATIENT: "/patient",
+    Role.DOCTOR: "/doctor",
+    Role.ADMIN: "/admin",
+}
 
 MAX_FAILED_LOGINS = 5
 LOCKOUT_MINUTES = 15
@@ -278,6 +289,7 @@ async def register(
         id=new_id(),
         name=payload.name,
         email=str(payload.email),
+        cnic=payload.cnic,
         password_hash=hash_password(payload.password),
         role=Role(payload.role),
         phone=payload.phone,
@@ -414,6 +426,31 @@ async def verify_email(
             request_id=ctx.request_id,
         ),
     )
+
+    # The account is real from this moment — the address is proved and the
+    # password works — so this is where a registration is "successful" and
+    # where it is honest to say so. Saying it at the point the form was
+    # submitted would congratulate somebody who may never come back to the
+    # code, and would be a second email for the same event.
+    await notify(
+        db,
+        user_id=user.id,
+        notification_type=NotificationType.ACCOUNT_REGISTERED,
+        title="Your MediSense account is ready",
+        body="Your email is verified and your account is active.",
+        link=_PORTAL_HOME.get(user.role, "/"),
+        # The template below is a welcome with somewhere to go; the generic one
+        # would be a thinner second copy of it.
+        email=False,
+    )
+    if settings.email_configured:
+        message = email_templates.account_registered(name=user.name, role=str(user.role))
+        await email_service.send(
+            to=user.email,
+            subject=message.subject,
+            text_body=message.text,
+            html_body=message.html,
+        )
 
     return await _complete_sign_in(db, user, device_class, ctx, method="EMAIL_VERIFICATION")
 

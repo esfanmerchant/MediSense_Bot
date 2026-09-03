@@ -426,23 +426,23 @@ export function HospitalScene({
       const b = STOPS[leg + 1];
       const blend = (from: number, to: number) => from + (to - from) * glide;
 
-      /* The camera lifts as it travels, and sets back down.
-         --------------------------------------------------
-         Sliding straight from one room to the next passes through the walls
-         between them, which is both ugly and a lie about a building whose
-         whole point is that its walls are real. Rising over the move and
-         coming back down reads as a camera being carried rather than a value
-         being interpolated — and it is the single thing that made the scroll
-         feel like a film instead of a slider.
+      /* No arc between rooms.
+         ---------------------
+         The camera used to rise and pull back over every leg and set down
+         again. It was there in case sliding between rooms passed through the
+         walls — but every room shot sits at y 6.7 and the walls are 1.25 tall,
+         so it never could. What it actually did was zoom out and back in six
+         times in a row, which reads as the camera being unsure rather than as
+         a camera being carried.
 
-         Zero at both ends, so a stop is still a stop. */
-      const arc = Math.sin(Math.PI * along);
-      const lift = arc * 2.4;
-      const back = arc * 1.5;
-
-      eye.x = damp(eye.x, blend(a.eye[0], b.eye[0]) + back * 0.55, 5.5, dt);
-      eye.y = damp(eye.y, blend(a.eye[1], b.eye[1]) + lift, 5.5, dt);
-      eye.z = damp(eye.z, blend(a.eye[2], b.eye[2]) + back * 0.62, 5.5, dt);
+         All six room shots share one height and one offset, so what is left is
+         the only move the tour needs: descend once into the first room, track
+         sideways along the row, and climb back out at the end. The zoom now
+         happens twice, where the shot genuinely changes, instead of at every
+         stop. */
+      eye.x = damp(eye.x, blend(a.eye[0], b.eye[0]), 5.5, dt);
+      eye.y = damp(eye.y, blend(a.eye[1], b.eye[1]), 5.5, dt);
+      eye.z = damp(eye.z, blend(a.eye[2], b.eye[2]), 5.5, dt);
       look.x = damp(look.x, blend(a.look[0], b.look[0]), 5.5, dt);
       look.y = damp(look.y, blend(a.look[1], b.look[1]), 5.5, dt);
       look.z = damp(look.z, blend(a.look[2], b.look[2]), 5.5, dt);

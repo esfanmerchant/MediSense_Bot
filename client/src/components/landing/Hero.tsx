@@ -184,21 +184,29 @@ const STOPS: Stop[] = [
 /**
  * When each stop's words are on screen.
  *
- * These *overlap* on purpose. The first version left a gap between one stop
- * fading out and the next fading in, and in that gap — about a fifth of a
- * second of scrolling — the column was blank while the label at the top of the
- * screen already named the next room. A reader passing through it sees a
- * caption for nothing. Each window now reaches a tenth of a stop into its
- * neighbours, so one line is always going as the other arrives.
+ * One stop's words end exactly where the next stop's begin — the two windows
+ * meet at the midpoint of the leg rather than overlapping across it.
+ *
+ * Both of the obvious alternatives were tried and are worse. Leaving a *gap*
+ * between them meant the column went blank for about a fifth of a second while
+ * the label at the top of the screen already named the next room — a caption
+ * for nothing. Letting them *overlap* meant that anyone who stopped scrolling
+ * between two rooms — which is most of a slow scroll, and all of a trackpad's
+ * momentum — saw two headlines and two panels printed on top of each other.
+ *
+ * Meeting at a point has neither: there is no interval where both are drawn
+ * and no interval where neither is. The `y` offsets on the way in and out do
+ * the rest, so the swap reads as one line leaving upward as the next arrives
+ * from below.
  */
 const WINDOWS: [number, number, number, number][] = STOPS.map((_, i) => {
   const span = 1 / (STOPS.length - 1);
   const centre = i * span;
   return [
-    i === 0 ? -0.1 : centre - span * 0.55,
-    i === 0 ? -0.05 : centre - span * 0.3,
-    i === STOPS.length - 1 ? 1 : centre + span * 0.3,
-    i === STOPS.length - 1 ? 1 : centre + span * 0.55,
+    i === 0 ? -0.1 : centre - span * 0.5,
+    i === 0 ? -0.05 : centre - span * 0.34,
+    i === STOPS.length - 1 ? 1 : centre + span * 0.34,
+    i === STOPS.length - 1 ? 1 : centre + span * 0.5,
   ];
 });
 

@@ -25,6 +25,7 @@ Three rules hold regardless of channel:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
@@ -39,7 +40,7 @@ from app.db.enums import (
     NotificationType,
 )
 from app.db.models import Doctor, Notification, Patient, PushSubscription, User
-from app.modules.notifications.templates import EMAILED_TYPES, PUSHED_TYPES
+from app.modules.notifications.templates import ALWAYS_SENT, EMAILED_TYPES, PUSHED_TYPES
 
 #: Longest a notification body may be. Anything approaching this is carrying
 #: detail that belongs behind authentication, not in a notification.
@@ -56,6 +57,36 @@ async def user_id_for_doctor(db: AsyncSession, doctor_id: str) -> str | None:
     return (
         await db.execute(select(Doctor.user_id).where(Doctor.id == doctor_id))
     ).scalar_one_or_none()
+
+
+@dataclass(frozen=True)
+class Channels:
+    """Which of the two outbound channels this message may use."""
+
+    email: bool
+    push: bool
+
+
+async def allowed_channels(
+    db: AsyncSession, user_id: str, notification_type: NotificationType
+) -> Channels:
+    """The account's switches, with the two exceptions applied.
+
+    A missing user is treated as allowing both: the caller is about to write a
+    notification for them either way, and silently dropping the delivery
+    because a row could not be read would be a failure nobody could see.
+    """
+    if notification_type in ALWAYS_SENT:
+        return Channels(email=True, push=True)
+
+    row = (
+        await db.execute(
+            select(User.notify_by_email, User.notify_by_push).where(User.id == user_id)
+        )
+    ).first()
+    if row is None:
+        return Channels(email=True, push=True)
+    return Channels(email=bool(row[0]), push=bool(row[1]))
 
 
 async def notify(
@@ -110,8 +141,12 @@ async def notify(
         logger.exception("notification_write_failed", notification_type=str(notification_type))
         return None
 
+    # What the account has asked for, unless this is one of the two kinds of
+    # notice a preference does not get to silence.
+    channels = await allowed_channels(db, user_id, notification_type)
+
     wants_email = EMAILED_TYPES.__contains__(notification_type) if email is None else email
-    if wants_email:
+    if wants_email and channels.email:
         await queue_email(
             db,
             user_id=user_id,
@@ -124,7 +159,7 @@ async def notify(
         )
 
     wants_push = PUSHED_TYPES.__contains__(notification_type) if push is None else push
-    if wants_push:
+    if wants_push and channels.push:
         await queue_push(
             db,
             user_id=user_id,

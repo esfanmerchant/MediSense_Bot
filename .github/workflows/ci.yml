@@ -1,0 +1,117 @@
+# Every push and every pull request, checked the same way.
+#
+# **What runs here needs no secrets and no database.** That is the whole design:
+# a public repository runs this workflow for anybody who forks it, and a
+# workflow that needs a production connection string is one that either leaks it
+# or never runs. So this is the fast tier — the ~900 API tests and 250 UI tests
+# that exercise the application in-process — plus the linters and the type
+# checkers and a real production build.
+#
+# The integration tier is deliberately absent. Those tests sign in as real
+# accounts against a real Postgres holding real people's data; running them from
+# CI would mean putting that database's credentials into a public repository's
+# secrets, and running them at all would write to it. They are run by hand, and
+# the README says so.
+
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+# A new push supersedes an in-flight run on the same branch: nobody needs the
+# result for a commit that has already been replaced.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API — ruff, mypy, pytest
+    runs-on: ubuntu-latest
+    env:
+      # The suite sets these itself in conftest, but the settings validator runs
+      # at import time and refuses a short secret outside test mode. Fixed
+      # obviously-fake values, in a public file, on purpose.
+      NODE_ENV: test
+      JWT_SECRET: ci-jwt-secret-value-that-is-long-enough-32
+      SESSION_SECRET: ci-session-secret-value-that-is-long-enough-32
+      EMAIL_ENABLED: "false"
+      AI_ENABLED: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: api/pyproject.toml
+
+      - name: Install
+        working-directory: api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        working-directory: api
+        run: ruff check app tests alembic
+
+      - name: Types
+        working-directory: api
+        run: mypy app
+
+      - name: Tests
+        working-directory: api
+        # The same command the README documents for local runs, so a failure
+        # here is reproducible with one copy and paste.
+        run: pytest -q --ignore-glob="*_integration.py" -k "not a_caller_cannot_choose_a_role"
+
+  client:
+    name: Client — tsc, eslint, vitest, build
+    runs-on: ubuntu-latest
+    env:
+      # A build needs these to exist; they only shape the CSP and the API base
+      # URL, and neither is a secret.
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install
+        working-directory: client
+        run: npm ci
+
+      - name: Verify
+        working-directory: client
+        # typecheck, lint, test, build — one script, the same one used locally.
+        run: npm run verify
+
+  icons:
+    name: Icon font subset is current
+    runs-on: ubuntu-latest
+    # Its own job because the failure is invisible any other way: a missing
+    # glyph renders as its own ligature name in the page, which no test catches
+    # and every reviewer notices.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Regenerate and compare
+        working-directory: client
+        run: |
+          node scripts/icon-names.mjs --write
+          git diff --exit-code src/app/icon-names.generated.ts \
+            || (echo "::error::Run 'npm run icons' and commit the result." && exit 1)

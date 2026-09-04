@@ -737,9 +737,56 @@ export interface PatientProfile {
   chronicConditions?: string | null;
 }
 
+/**
+ * Everything the hospital holds about one patient, as a file they can keep.
+ *
+ * The lists are the same shapes the portal already renders, so a reader who
+ * knows one knows the other. `format` and `formatVersion` are what let somebody
+ * opening this in five years tell what it is; `truncated` names any list that
+ * hit its ceiling, and is empty for essentially everybody.
+ */
+export interface PatientExport {
+  format: string;
+  formatVersion: number;
+  exportedAt: string;
+  source: { system: string; timezone: string };
+  patient: PatientProfile & {
+    cnic: string | null;
+    registeredAt: string;
+    allergies: string | null;
+    chronicConditions: string | null;
+  };
+  appointments: Appointment[];
+  medicalRecords: MedicalRecord[];
+  prescriptions: Prescription[];
+  medicationReminders: Array<{
+    id: string;
+    prescriptionId: string;
+    medication: string | null;
+    atMinutes: number;
+    at: string;
+    timezone: string;
+    active: boolean;
+    createdAt: string;
+  }>;
+  vitals: Vital[];
+  reportedSymptoms: ReportedSymptom[];
+  documents: MedicalDocument[];
+  invoices: Invoice[];
+  documentsNote: string;
+  counts: Record<string, number>;
+  truncated: string[];
+  truncatedNote?: string;
+}
+
 export const patients = {
   me: () => apiRequest<PatientProfile>("/patients/me"),
   get: (id: string) => apiRequest<PatientProfile>(`/patients/${id}`),
+  /**
+   * The caller's own record, whole. Takes the subject from the session, so
+   * there is deliberately no id to pass.
+   */
+  exportRecord: () => apiRequest<PatientExport>("/patients/me/export"),
   list: (query?: { search?: string; limit?: number; offset?: number }) =>
     apiList<{
       id: string;
@@ -770,7 +817,60 @@ export const users = {
 
   setStatus: (userId: string, status: string, reason?: string) =>
     apiRequest(`/users/${userId}/status`, { method: "PATCH", body: { status, reason } }),
+
+  /**
+   * What removing this account would destroy, counted before anything happens.
+   *
+   * Fetched on demand rather than with the list: it is several counting queries
+   * per person, and an administrator opening the roster is almost never about
+   * to delete somebody.
+   */
+  removalPreview: (userId: string) => apiRequest<RemovalPlan>(`/users/${userId}/removal`),
+
+  /** Irreversible. The server recomputes the plan; the preview is not trusted. */
+  remove: (userId: string) => apiRequest<RemovalResult>(`/users/${userId}`, { method: "DELETE" }),
 };
+
+/**
+ * The shape of a removal before it happens.
+ *
+ * `mode` is decided by the data, not the role. `DELETE` means the row goes.
+ * `ANONYMISE` means it survives holding nothing, because somebody else's
+ * medical record names this person as its author and a chart must not lose its
+ * clinician. Either way the email and CNIC come free.
+ *
+ * `keeps` is the important half: it is what will *outlive* the removal, and the
+ * only chance the administrator has to see it before pressing the button.
+ */
+export interface RemovalPlan {
+  userId: string;
+  name: string;
+  email: string;
+  role: Role;
+  mode: "DELETE" | "ANONYMISE";
+  /** Label → row count. Only non-zero entries appear. */
+  deletes: Record<string, number>;
+  keeps: Record<string, number>;
+  /** Files in storage that go with the rows. */
+  files: number;
+  /** Non-empty means it cannot proceed, and says why. */
+  blockers: string[];
+  allowed: boolean;
+  freesEmail: boolean;
+  freesCnic: boolean;
+}
+
+export interface RemovalResult {
+  removed: boolean;
+  mode: "DELETE" | "ANONYMISE";
+  deleted: Record<string, number>;
+  kept: Record<string, number>;
+  filesDeleted: number;
+  /** Objects the bucket would not release. Reported, never fatal. */
+  filesFailed: number;
+  /** The address that is now available to register again. */
+  emailFreed: string;
+}
 
 export interface Department {
   id: string;

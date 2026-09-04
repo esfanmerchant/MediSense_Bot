@@ -1141,11 +1141,14 @@ select:focus ~ .select-chevron {
   }
 
   .invoice-print,
-  .invoice-print * {
+  .invoice-print *,
+  .record-print,
+  .record-print * {
     visibility: visible;
   }
 
-  .invoice-print {
+  .invoice-print,
+  .record-print {
     position: absolute;
     inset: 0 auto auto 0;
     width: 100%;
@@ -1157,7 +1160,9 @@ select:focus ~ .select-chevron {
   /* The row expands under an animated height with overflow hidden, which on
      paper means a long invoice is cut off at the fold instead of continuing. */
   .invoice-print,
-  .invoice-print * {
+  .invoice-print *,
+  .record-print,
+  .record-print * {
     overflow: visible !important;
     height: auto !important;
     max-height: none !important;

@@ -96,6 +96,7 @@ async def unverified(client: TestClient, db: AsyncSession) -> AsyncIterator[dict
             "email": email,
             "password": PASSWORD,
             "cnic": "42101-7536622-3",
+            "acceptedTerms": True,
         },
     )
     assert response.status_code == 201, response.text
@@ -141,6 +142,7 @@ class TestRegistration:
                 "email": unverified["email"],
                 "password": PASSWORD,
                 "cnic": "42101-7536622-3",
+                "acceptedTerms": True,
             },
         )
         assert response.status_code == 409
@@ -156,6 +158,10 @@ class TestRegistration:
                 "name": "Would Be Admin",
                 "email": unique_email("escalate"),
                 "password": PASSWORD,
+                # Present so the refusal under test is the role, not a missing
+                # field that happens to produce the same status code.
+                "cnic": "4210112345671",
+                "acceptedTerms": True,
                 "role": role,
             },
         )
@@ -363,6 +369,8 @@ class TestDoctorRegistration:
                 "name": "Applicant Doctor",
                 "email": email,
                 "password": PASSWORD,
+                "cnic": "4210112345671",
+                "acceptedTerms": True,
                 "role": "DOCTOR",
             },
         )
@@ -406,7 +414,14 @@ class TestDoctorRegistration:
         email = unique_email("draft-doctor")
         client.post(
             "/api/auth/register",
-            json={"name": "Draft Doctor", "email": email, "password": PASSWORD, "role": "DOCTOR"},
+            json={
+                "name": "Draft Doctor",
+                "email": email,
+                "password": PASSWORD,
+                "cnic": "4210112345671",
+                "acceptedTerms": True,
+                "role": "DOCTOR",
+            },
         )
         try:
             await _stamp_code(db, email)

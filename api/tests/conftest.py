@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import ratelimit
 from app.core.config import settings
 from app.db.session import SessionFactory
 from app.main import app as fastapi_app
@@ -148,3 +149,34 @@ def _provider_reachable() -> tuple[bool, str]:
             return False, type(exc).__name__
 
     return asyncio.run(probe())
+
+#: The one module whose subject *is* the limiter. Named here rather than
+#: inferred, so turning the limiter off for it would take deleting a line
+#: somebody has to read first.
+_LIMITER_OWN_TESTS = "test_ratelimit"
+
+
+@pytest.fixture(autouse=True)
+def _no_rate_limit(request: pytest.FixtureRequest) -> Generator[None, None, None]:
+    """Stand the rate limiter down for every test but its own.
+
+    This suite signs in several hundred times from one address within a few
+    minutes. That is exactly the traffic the login limit exists to refuse, so
+    with it on the run trips partway through and everything after fails on a
+    429 that says nothing about the code under test — which is what the last
+    full run did, across eleven files.
+
+    ``test_ratelimit.py`` is exempt by name, so the limiter's own tests still
+    run against a live limiter. The exemption is explicit because the previous
+    version was not: it relied on that file resetting counters as a side effect,
+    which also re-enabled the limiter for any *other* file that reset counters
+    for the ordinary reason — and one of them does.
+    """
+    if request.node.module.__name__.endswith(_LIMITER_OWN_TESTS):
+        ratelimit.enforce_for_tests()
+        yield
+        return
+
+    ratelimit.bypass_for_tests()
+    yield
+    ratelimit.enforce_for_tests()

@@ -333,6 +333,11 @@ class AuditAction(StrEnum):
     USER_CREATED = "USER_CREATED"
     USER_UPDATED = "USER_UPDATED"
     USER_STATUS_CHANGED = "USER_STATUS_CHANGED"
+    #: An account and its data were destroyed. Deliberately not filed under
+    #: USER_STATUS_CHANGED: suspension is reversible and removal is not, and an
+    #: access report that cannot tell them apart cannot answer "what happened to
+    #: this person's record" — which is the one question it will be asked.
+    USER_REMOVED = "USER_REMOVED"
     PATIENT_RECORD_VIEW = "PATIENT_RECORD_VIEW"
     PATIENT_RECORD_CREATE = "PATIENT_RECORD_CREATE"
     PATIENT_RECORD_UPDATE = "PATIENT_RECORD_UPDATE"
@@ -361,6 +366,12 @@ class AuditAction(StrEnum):
     #: browsing charts through the audit log would be the one access this system
     #: does not record (R6).
     AUDIT_VIEWED = "AUDIT_VIEWED"
+    #: A patient took a copy of their whole record away with them. Distinct from
+    #: PATIENT_RECORD_VIEW on purpose: viewing a chart leaves the data where it
+    #: is, and an export puts every diagnosis the hospital holds about a person
+    #: onto a device the hospital does not control. The trail should not describe
+    #: those two acts with the same word.
+    PATIENT_DATA_EXPORTED = "PATIENT_DATA_EXPORTED"
 
 
 class AuditSeverity(StrEnum):

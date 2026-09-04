@@ -13,6 +13,7 @@ gap, because a gap is visibly a gap.
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0020_cnic_prefs_and_doses"

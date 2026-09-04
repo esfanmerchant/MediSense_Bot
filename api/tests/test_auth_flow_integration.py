@@ -49,7 +49,13 @@ async def register_and_verify(
     """Sign up and prove the address, returning the user payload."""
     created = client.post(
         "/api/auth/register",
-        json={"name": name, "email": email, "password": PASSWORD, "cnic": CNIC},
+        json={
+            "name": name,
+            "email": email,
+            "password": PASSWORD,
+            "cnic": CNIC,
+            "acceptedTerms": True,
+        },
     )
     assert created.status_code == 201, created.text
     assert created.json()["data"]["pendingVerification"] is True
@@ -105,6 +111,7 @@ class TestRegistration:
                 "email": registered["email"],
                 "password": PASSWORD,
                 "cnic": CNIC,
+                "acceptedTerms": True,
             },
         )
         assert response.status_code == 409

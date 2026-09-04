@@ -3,13 +3,19 @@
 /**
  * Everybody on the platform, and taking somebody off it.
  *
- * **Suspend, never delete.** A patient has a medical record and a doctor has
- * consultations behind them; removing the row would either fail on a foreign
- * key or orphan real clinical history, and a hospital that can make a person's
- * treatment disappear is worse than one that cannot. Suspension ends the
- * access — every live session is revoked server-side the moment it is applied,
- * so somebody being removed for breaking the rules stops working immediately
- * rather than when their token happens to expire.
+ * **Two different actions, and the difference is the point.** Suspension ends
+ * the access and leaves everything else alone — every live session is revoked
+ * server-side the moment it is applied, so somebody suspended for breaking the
+ * rules stops working immediately rather than when their token expires. It is
+ * undone in one press.
+ *
+ * Removal is the other thing entirely: the account and the person's data are
+ * destroyed, their email address and CNIC come free to register again, and
+ * nothing brings it back. It is the only irreversible action in the product, so
+ * it is deliberately harder to reach — a second press, then the real counts of
+ * what is about to be deleted, then their address typed out in full. What
+ * survives it is on that panel too, because a doctor's removal must not take a
+ * patient's chart with it.
  *
  * **A reason is required here even though the API allows none.** This screen
  * exists for terms-of-service enforcement, and "why was this account closed"
@@ -23,6 +29,7 @@ import { useCallback, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import { RemoveAccount } from "@/components/admin/RemoveAccount";
 import { useToast } from "@/components/overlays";
 import {
   Avatar,
@@ -65,6 +72,7 @@ function Person({ row, onChanged }: { row: Row; onChanged: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [suspending, setSuspending] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [reason, setReason] = useState("");
 
   const active = row.status === "ACTIVE";
@@ -131,16 +139,43 @@ function Person({ row, onChanged }: { row: Row; onChanged: () => void }) {
           <span className="mono-caps text-[11px] text-faint">
             {tr("This is you", "Yeh aap hain")}
           </span>
-        ) : active ? (
-          <Button variant="ghost" onClick={() => setSuspending((open) => !open)}>
-            {tr("Suspend", "Mo'attal karein")}
-          </Button>
         ) : (
-          <Button variant="secondary" loading={busy} onClick={() => change("ACTIVE")}>
-            {tr("Restore", "Bahaal karein")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-1">
+            {active ? (
+              <Button variant="ghost" onClick={() => setSuspending((open) => !open)}>
+                {tr("Suspend", "Mo'attal karein")}
+              </Button>
+            ) : (
+              <Button variant="secondary" loading={busy} onClick={() => change("ACTIVE")}>
+                {tr("Restore", "Bahaal karein")}
+              </Button>
+            )}
+            {/* Quieter than Suspend on purpose. Removal is the rarer and far
+                more serious act, and the panel behind it is what makes it
+                deliberate — a louder button here would only make it easier to
+                press by mistake. */}
+            <Button
+              variant="ghost"
+              className="text-critical hover:bg-critical-soft"
+              onClick={() => setRemoving((open) => !open)}
+            >
+              {tr("Remove", "Hatayein")}
+            </Button>
+          </div>
         )}
       </div>
+
+      {removing && (
+        <RemoveAccount
+          userId={row.id}
+          name={row.name}
+          onCancel={() => setRemoving(false)}
+          onDone={() => {
+            setRemoving(false);
+            onChanged();
+          }}
+        />
+      )}
 
       {suspending && (
         <div className="mt-4 space-y-3 rounded-xl border border-critical/40 bg-critical-soft p-3">

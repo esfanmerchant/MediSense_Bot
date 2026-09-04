@@ -19,12 +19,14 @@ from sqlalchemy import func, or_, select
 from app.api.deps import CurrentAuth, DbSession, client_ip, require_permission
 from app.api.responses import Page, ok, pagination
 from app.core.errors import AppError, ErrorCode, conflict, forbidden, not_found
+from app.core.logging import logger
 from app.core.security import check_password_policy, generate_opaque_token, hash_password
 from app.db.base import new_id, utcnow
 from app.db.enums import AuditAction, AuditSeverity, Role, UserStatus
 from app.db.models import Doctor, DoctorPatientAssignment, Patient, Session, User
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission, permissions_for
+from app.modules.users import removal
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -272,6 +274,100 @@ async def set_user_status(
         ),
     )
     return ok(_serialize(user))
+
+
+async def _load_user(db: DbSession, user_id: str) -> User:
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        raise not_found("User")
+    return user
+
+
+@router.get("/{user_id}/removal")
+async def preview_removal(
+    user_id: str, auth: CurrentAuth, db: DbSession, _: RequireUserAdmin
+) -> dict[str, Any]:
+    """What removing this account would destroy, counted before anything happens.
+
+    Its own endpoint rather than a warning string in the dialog, because "are
+    you sure?" is not informed consent for deleting somebody's medical history.
+    The administrator gets real counts from real queries — including the handful
+    of things that will outlive the removal, and the reasons it may be refused.
+    """
+    plan = await removal.plan_removal(db, await _load_user(db, user_id), actor_id=auth.user_id)
+    return ok(plan.as_dict())
+
+
+@router.delete("/{user_id}")
+async def remove_user(
+    user_id: str, request: Request, auth: CurrentAuth, db: DbSession, _: RequireUserAdmin
+) -> dict[str, Any]:
+    """Remove an account and everything that was only ever theirs.
+
+    Not reversible, and not the same act as suspension — which is why it has its
+    own audit action rather than another USER_STATUS_CHANGED.
+
+    The plan is recomputed here rather than trusted from the preview. Between
+    the two requests a doctor can have written a note or a withdrawal can have
+    been opened, and acting on a count somebody read thirty seconds ago is how
+    a removal deletes something the administrator was told would survive.
+    """
+    user = await _load_user(db, user_id)
+    plan = await removal.plan_removal(db, user, actor_id=auth.user_id)
+    if not plan.allowed:
+        raise forbidden(" ".join(plan.blockers))
+
+    # Read before the rows go: what identified this person is about to stop
+    # existing, and the trail has to say who was removed.
+    removed = {"name": user.name, "email": user.email, "role": str(user.role)}
+    files = await removal.remove_user(db, user, plan)
+
+    await record_audit(
+        db,
+        AuditEntry(
+            action=AuditAction.USER_REMOVED,
+            severity=AuditSeverity.SECURITY,
+            user_id=auth.user_id,
+            actor_role=auth.role,
+            entity_type="User",
+            entity_id=user_id,
+            ip_address=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            request_id=getattr(request.state, "request_id", None),
+            # The name and address of somebody who no longer exists anywhere
+            # else. This is the deliberate exception to "references, never
+            # values": without it the trail records that an account was
+            # destroyed and cannot say whose, which makes the entry useless for
+            # the one question it exists to answer. Nothing clinical is copied.
+            metadata={
+                **removed,
+                "mode": plan.mode,
+                "deleted": plan.deletes,
+                "kept": plan.keeps,
+                "files": plan.files,
+            },
+        ),
+    )
+    await db.flush()
+
+    # Only once the rows are certainly gone. A file the bucket refuses is
+    # reported, never fatal — rolling back a completed erasure to retry a
+    # thumbnail would be the worse outcome.
+    failed = await removal.delete_files(files)
+    if failed:
+        logger.error("removal_files_left_behind", user_id=user_id, count=failed)
+
+    return ok(
+        {
+            "removed": True,
+            "mode": plan.mode,
+            "deleted": plan.deletes,
+            "kept": plan.keeps,
+            "filesDeleted": plan.files - failed,
+            "filesFailed": failed,
+            "emailFreed": removed["email"],
+        }
+    )
 
 
 @router.post("/assignments", status_code=201)

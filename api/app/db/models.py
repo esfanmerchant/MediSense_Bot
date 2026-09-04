@@ -28,6 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import enums
 from app.db.base import Base, new_id, utcnow
+from app.db.encrypted import SealedText
 
 
 def pg_enum(python_enum: type, name: str) -> ENUM:
@@ -63,6 +64,15 @@ class User(Base):
     status: Mapped[enums.UserStatus] = mapped_column(
         pg_enum(enums.UserStatus, "UserStatus"), nullable=False, default=enums.UserStatus.ACTIVE
     )
+
+    #: Set when this account was removed and emptied rather than deleted.
+    #:
+    #: The row survives only because somebody else's medical record names this
+    #: person as its author, and a chart must not lose its clinician. Everything
+    #: in it that identified them is gone — name, phone, CNIC, avatar, password,
+    #: second factor — and ``email`` has been rewritten to a dead address so the
+    #: real one is free to register again. Nothing here can be signed in to.
+    removed_at: Mapped[datetime | None] = mapped_column("removedAt", DateTime)
 
     #: Where this person's picture lives in the private avatars bucket, or NULL.
     #: A path, never a URL: the bucket has no public address, so the only thing
@@ -582,12 +592,20 @@ class MedicalRecord(Base):
         Text,
         ForeignKey("appointments.id", ondelete="SET NULL", onupdate="CASCADE"),
     )
-    symptoms: Mapped[str | None] = mapped_column(Text)
-    diagnosis: Mapped[str | None] = mapped_column(Text)
-    treatment_plan: Mapped[str | None] = mapped_column("treatmentPlan", Text)
-    notes: Mapped[str | None] = mapped_column(Text)
+    #: Sealed at rest — see ``db/encrypted.py``. These five are the clinical
+    #: judgement itself, and they are the columns a leaked connection string
+    #: would otherwise hand over in plain text. The attribute is still ordinary
+    #: prose to everything above this line; only Postgres sees ciphertext.
+    #:
+    #: ``follow_up_date`` stays a real timestamp between them, because the
+    #: scheduler orders and filters on it. That is the line: a column the
+    #: database has to reason about cannot be sealed.
+    symptoms: Mapped[str | None] = mapped_column(SealedText)
+    diagnosis: Mapped[str | None] = mapped_column(SealedText)
+    treatment_plan: Mapped[str | None] = mapped_column("treatmentPlan", SealedText)
+    notes: Mapped[str | None] = mapped_column(SealedText)
     follow_up_date: Mapped[datetime | None] = mapped_column("followUpDate", DateTime)
-    follow_up_notes: Mapped[str | None] = mapped_column("followUpNotes", Text)
+    follow_up_notes: Mapped[str | None] = mapped_column("followUpNotes", SealedText)
 
     #: Always PHYSICIAN here. Machine output lives in ReportedSymptom /
     #: MedicalDocument until a doctor promotes it.
@@ -1071,8 +1089,14 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     id: Mapped[str] = _id()
-    patient_id: Mapped[str] = mapped_column(
-        "patientId", Text, ForeignKey("patients.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False
+    #: Nullable, and SET NULL rather than CASCADE, because a settled invoice is
+    #: the hospital's record and not the patient's. Removing a patient destroys
+    #: their clinical history and their unpaid bills; it must not quietly
+    #: restate a quarter's revenue by deleting money that actually changed
+    #: hands. What is left is an amount, a date and a status with nobody's name
+    #: on it.
+    patient_id: Mapped[str | None] = mapped_column(
+        "patientId", Text, ForeignKey("patients.id", ondelete="SET NULL", onupdate="CASCADE")
     )
     #: Unique: one invoice per appointment. This is the idempotency guarantee
     #: for "complete consultation" retries (R4) — a duplicate fails at the

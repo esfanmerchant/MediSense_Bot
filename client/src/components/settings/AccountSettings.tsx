@@ -20,14 +20,27 @@ import { useCallback, useSyncExternalStore } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { Segmented } from "@/components/forms";
 import { AppearanceTab } from "@/components/settings/AppearanceTab";
+import { DataTab } from "@/components/settings/DataTab";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { ProfileTab } from "@/components/settings/ProfileTab";
 import { SecurityTab } from "@/components/settings/SecurityTab";
 import { useTr } from "@/lib/lang";
 import type { Role } from "@/lib/api";
 
-const TABS = ["profile", "security", "notifications", "appearance"] as const;
+const TABS = ["profile", "security", "notifications", "appearance", "data"] as const;
 type Tab = (typeof TABS)[number];
+
+/**
+ * Which sections this account actually has.
+ *
+ * `data` is a patient's own clinical history, so it exists only for a patient.
+ * A doctor's account holds no chart of its own, and an administrator taking a
+ * copy of somebody else's is not an export — it is access, and it goes through
+ * the chart, where it is recorded as such.
+ */
+export function tabsFor(role: Role): readonly Tab[] {
+  return role === "PATIENT" ? TABS : TABS.filter((tab) => tab !== "data");
+}
 
 function isTab(value: string): value is Tab {
   return (TABS as readonly string[]).includes(value);
@@ -75,13 +88,19 @@ function useTabFromHash(): [Tab, (next: Tab) => void] {
 
 export function AccountSettings({ role }: { role: Role }) {
   const tr = useTr();
-  const [tab, choose] = useTabFromHash();
+  const [fragment, choose] = useTabFromHash();
+  const available = tabsFor(role);
+  // A doctor following a patient's `#data` link lands on Profile rather than an
+  // empty panel. The fragment is public, so it cannot be trusted to name a tab
+  // this account has.
+  const tab = available.includes(fragment) ? fragment : "profile";
 
   const labels: Record<Tab, [string, string]> = {
     profile: ["Profile", "Profile"],
     security: ["Security", "Hifazat"],
     notifications: ["Notifications", "Ittilaat"],
     appearance: ["Appearance", "Shakl o surat"],
+    data: ["Your record", "Aap ka record"],
   };
 
   const icons: Record<Tab, string> = {
@@ -89,6 +108,7 @@ export function AccountSettings({ role }: { role: Role }) {
     security: "encrypted",
     notifications: "notifications",
     appearance: "palette",
+    data: "download",
   };
 
   return (
@@ -109,7 +129,7 @@ export function AccountSettings({ role }: { role: Role }) {
           onChange={choose}
           size="sm"
           className="w-max min-w-full"
-          options={TABS.map((value) => ({
+          options={available.map((value) => ({
             value,
             label: tr(...labels[value]),
             icon: icons[value],
@@ -124,6 +144,7 @@ export function AccountSettings({ role }: { role: Role }) {
         {tab === "security" && <SecurityTab />}
         {tab === "notifications" && <NotificationsTab role={role} />}
         {tab === "appearance" && <AppearanceTab />}
+        {tab === "data" && <DataTab />}
       </div>
     </div>
   );

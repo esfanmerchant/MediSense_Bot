@@ -24,12 +24,20 @@ from app.api.deps import (
 )
 from app.api.responses import Page, ok, pagination
 from app.core.errors import forbidden, not_found
-from app.db.enums import AuditAction, Gender, Role
+from app.core.ratelimit import limit
+from app.db.enums import AuditAction, AuditSeverity, Gender, Role
 from app.db.models import Patient, User
 from app.modules.audit.service import AuditEntry, record_audit
 from app.modules.auth.rbac import Permission
+from app.modules.patients.export import build_export
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+#: An export is the heaviest read a patient can ask for — eight queries and the
+#: whole history in one response. Five an hour is more than anyone taking a copy
+#: of their record needs, and few enough that a stolen session cannot sit there
+#: pulling the same chart repeatedly while the owner is still signed in.
+ExportRateLimit = Annotated[None, Depends(limit(times=5, seconds=3600, scope="patient_export"))]
 
 _PHONE = r"^\+?[\d\s-]{7,20}$"
 
@@ -182,6 +190,54 @@ async def set_ai_consent(
         ),
     )
     return ok({"aiConsentGranted": patient.ai_consent_active})
+
+
+@router.get("/me/export")
+async def export_my_record(
+    request: Request, auth: CurrentAuth, db: DbSession, _: ExportRateLimit
+) -> dict[str, Any]:
+    """A patient's whole record, for them to keep.
+
+    Declared before ``/{patient_id}`` because FastAPI matches in order and
+    ``me`` would otherwise be read as a patient id.
+
+    There is no ``patientId`` here and no administrative variant. The subject is
+    the session's own patient, which is what makes this safe to leave
+    unparameterised: the only record you can export is yours.
+
+    Recorded at NOTICE rather than INFO. Reading one chart and taking a copy of
+    every diagnosis the hospital holds about a person are different events, and
+    an access report that files them under the same heading cannot tell the
+    difference later — including when the person doing it is not the patient but
+    somebody who has their session.
+    """
+    if auth.role != Role.PATIENT or not auth.patient_id:
+        raise forbidden("This endpoint is for patients.")
+
+    patient, user = await _load(db, auth.patient_id)
+    bundle = await build_export(db, patient, user)
+
+    await record_audit(
+        db,
+        AuditEntry(
+            action=AuditAction.PATIENT_DATA_EXPORTED,
+            user_id=auth.user_id,
+            actor_role=auth.role,
+            severity=AuditSeverity.NOTICE,
+            patient_id=patient.id,
+            entity_type="Patient",
+            entity_id=patient.id,
+            ip_address=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+            request_id=getattr(request.state, "request_id", None),
+            # Counts, never content. How much left the building is the useful
+            # fact; copying the diagnoses into the audit log to say so would put
+            # a second plaintext copy of them in the one table nobody can delete
+            # from (C5).
+            metadata={"counts": bundle["counts"], "truncated": bundle["truncated"]},
+        ),
+    )
+    return ok(bundle)
 
 
 @router.get("")

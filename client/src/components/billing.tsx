@@ -16,9 +16,12 @@
  * (conflict C4). The UI shows the correction beside the original rather than
  * replacing it.
  *
- * There is no PDF download, and none is implied. `Print` opens the browser's
- * print dialogue, which can save a PDF — honest about what it does, rather than
- * a button labelled "Download PDF" that produces something else.
+ * **Two ways out, each labelled as what it is.** `Print` opens the browser's
+ * print dialogue, from which a PDF can be saved — one bill, laid out, for a
+ * person to read. `Download` writes the whole list as a CSV, for a spreadsheet
+ * to add up. Neither is called "Download PDF", because there is no server-side
+ * PDF generator and a button that names a file format it does not produce is
+ * the kind of lie people only discover at the moment they needed it.
  */
 
 import { AnimatePresence, motion } from "framer-motion";
@@ -27,6 +30,7 @@ import { createPortal } from "react-dom";
 
 import { Icon } from "@/components/Icon";
 import { PayInvoice } from "@/components/PayInvoice";
+import { useToast } from "@/components/overlays";
 import {
   Badge,
   Button,
@@ -46,6 +50,7 @@ import {
   type InvoiceStatus,
   type PaymentClaim,
 } from "@/lib/api";
+import { toCsv, downloadCsv } from "@/lib/csv";
 import { useTr } from "@/lib/lang";
 import { useAsync } from "@/lib/useAsync";
 
@@ -749,13 +754,90 @@ export function InvoicesPanel({
   description?: string;
 }) {
   const tr = useTr();
+  const toast = useToast();
   const fetched = useAsync(() => invoicesApi.list({ limit: 50 }), []);
   const heading = title ?? tr("Invoices", "Invoices");
   const subheading = description ?? tr("Your billing history.", "Aap ki billing ki tareekh.");
   const [edited, setEdited] = useState<Record<string, Invoice>>({});
+  const [downloading, setDownloading] = useState(false);
 
   const rows = (fetched.data?.data ?? []).map((invoice) => edited[invoice.id] ?? invoice);
   const outstanding = fetched.data?.meta.outstanding;
+
+  /**
+   * Every invoice as one spreadsheet.
+   *
+   * Refetched at the full page size rather than exported from the rows on
+   * screen: the table shows fifty, and a file called "my invoices" that quietly
+   * holds a subset is worse than no file. `total` says whether even that was
+   * enough, and the reader is told rather than left to count.
+   *
+   * Amounts go out as the strings the API sent. Formatting them for display
+   * here would put a currency symbol and a thousands separator into a column
+   * somebody is about to sum.
+   */
+  async function download() {
+    setDownloading(true);
+    try {
+      const page = await invoicesApi.list({ limit: 100 });
+      const csv = toCsv(
+        [
+          "Invoice",
+          "Issued",
+          "Due",
+          "Status",
+          "Amount",
+          "Platform fee",
+          "Tax",
+          "Total",
+          "Late fee charged",
+          "Amount due",
+          "Currency",
+          "Paid on",
+          "Notes",
+        ],
+        page.data.map((invoice) => [
+          invoice.invoiceNumber,
+          // ISO dates, not the display format: a spreadsheet sorts these and a
+          // human still reads them.
+          invoice.issuedAt?.slice(0, 10),
+          invoice.dueAt?.slice(0, 10),
+          invoice.status,
+          invoice.amount,
+          invoice.platformFee,
+          invoice.taxAmount,
+          invoice.totalAmount,
+          invoice.lateFeeCharged,
+          invoice.amountDue,
+          invoice.currency,
+          invoice.paidAt?.slice(0, 10),
+          invoice.notes,
+        ]),
+      );
+      downloadCsv(`medisense-invoices-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+
+      const total = page.meta.total;
+      toast.show({
+        tone: "success",
+        title: tr("Invoices saved", "Invoices save hogaye"),
+        body:
+          total > page.data.length
+            ? tr(
+                `The most recent ${page.data.length} of ${total}.`,
+                `${total} mein se haaliya ${page.data.length}.`,
+              )
+            : tr(`${page.data.length} invoice(s) in one file.`, `Ek file mein ${page.data.length} invoice.`),
+      });
+    } catch (cause) {
+      toast.show({
+        tone: "critical",
+        title: tr("Could not save your invoices", "Invoices save nahi ho sake"),
+        body: cause instanceof ApiError ? cause.message : String(cause),
+      });
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <Card
@@ -764,17 +846,34 @@ export function InvoicesPanel({
       title={heading}
       description={subheading}
       action={
-        outstanding !== undefined && (
-          <div className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3.5 py-2">
-            <Icon name="account_balance_wallet" className="text-[22px] text-primary" />
-            <div className="leading-tight">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-faint">
-                {tr("Outstanding", "Baqaya")}
-              </p>
-              <p className="text-gradient-brand font-display text-lg font-bold tabular-nums">{outstanding}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Only once there is something to put in the file. A download button
+              on an empty list produces a spreadsheet of column headings. */}
+          {rows.length > 0 && (
+            <Button
+              variant="ghost"
+              className="!min-h-9 px-3 text-sm"
+              loading={downloading}
+              onClick={() => void download()}
+            >
+              <Icon name="download" className="text-[18px]" />
+              {tr("Download", "Download karein")}
+            </Button>
+          )}
+          {outstanding !== undefined && (
+            <div className="flex items-center gap-3 rounded-xl border border-line bg-sunken px-3.5 py-2">
+              <Icon name="account_balance_wallet" className="text-[22px] text-primary" />
+              <div className="leading-tight">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-faint">
+                  {tr("Outstanding", "Baqaya")}
+                </p>
+                <p className="text-gradient-brand font-display text-lg font-bold tabular-nums">
+                  {outstanding}
+                </p>
+              </div>
             </div>
-          </div>
-        )
+          )}
+        </div>
       }
     >
       {fetched.loading && (

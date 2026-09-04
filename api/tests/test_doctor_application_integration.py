@@ -85,6 +85,13 @@ COMPLETE: dict[str, Any] = {
     ],
     "yearsExperience": 9,
     "previousHospital": "Services Hospital",
+    # Where this doctor actually sits. Required before an application may be
+    # submitted, and absent here for as long as it took a full suite run to
+    # notice — every submit in this file was failing on three missing fields
+    # and reporting it as whatever the test happened to be about.
+    "clinicName": "Iqbal Cardiology Clinic",
+    "city": "Lahore",
+    "addressLine": "12 Jail Road, Gulberg",
     "consultationFee": 2500,
     "availability": [{"dayOfWeek": 2, "startTime": "09:00", "endTime": "13:00", "slotMinutes": 30}],
 }
@@ -182,6 +189,7 @@ async def applicant(client: TestClient, db: AsyncSession) -> AsyncIterator[dict[
             "password": PASSWORD,
             "role": "DOCTOR",
             "cnic": "35202-1234567-1",
+            "acceptedTerms": True,
         },
     )
     assert created.status_code == 201, created.text

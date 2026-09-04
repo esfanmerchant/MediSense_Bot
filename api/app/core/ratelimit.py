@@ -130,6 +130,41 @@ async def _shared_window(key: str, times: int, seconds: int) -> tuple[bool, int]
     return False, retry_after
 
 
+#: Whether the limiter is standing down. Never true outside a test run.
+#:
+#: The integration suite signs in several hundred times from one address in a
+#: few minutes — which is precisely the traffic the login limit exists to
+#: refuse. Left on, it trips a third of the way through and every test after it
+#: fails on a 429 that has nothing to do with what that test was checking.
+#:
+#: A module-level flag rather than a setting, deliberately: a setting is a thing
+#: a deployment can turn off, and this must be unreachable from configuration.
+#: The only way in is ``bypass_for_tests()``, which lives in this module and is
+#: called from ``conftest``.
+_bypassed = False
+
+
+def bypass_for_tests() -> None:
+    """Stand the limiter down for the current test."""
+    global _bypassed
+    _bypassed = True
+
+
+def enforce_for_tests() -> None:
+    """Put the limiter back on.
+
+    Paired with ``bypass_for_tests``, and kept separate from ``reset`` on
+    purpose. Folding this into ``reset`` looked clever — the limiter's own tests
+    already reset counters, so they would have re-enabled it for free — but it
+    gave one function two meanings, and a second test file that reset counters
+    for the ordinary reason silently turned the limiter back on for everything
+    in it. A function that does a thing nobody reading the call site would
+    expect is a bug with a delay on it.
+    """
+    global _bypassed
+    _bypassed = False
+
+
 def reset() -> None:
     """Clear every counter. For tests, which must not inherit each other's."""
     _hits.clear()
@@ -147,6 +182,8 @@ def limit(
     """
 
     async def dependency(request: Request) -> None:
+        if _bypassed:
+            return
         # Read from the already-decoded token when the route has one, rather
         # than decoding again — this runs before the endpoint on every call.
         session_id = getattr(request.state, "session_id", None)

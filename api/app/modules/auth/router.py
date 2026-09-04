@@ -65,6 +65,40 @@ VerifyRateLimit = Annotated[None, Depends(limit(times=10, seconds=60, scope="ver
 #: they get that far.
 ResendRateLimit = Annotated[None, Depends(limit(times=5, seconds=300, scope="resend_code"))]
 
+#: Registration is unauthenticated and *sends an email to whatever address it is
+#: given*, which makes an unbounded one an open relay pointed at strangers from
+#: this hospital's own mailbox. The damage is not a database full of junk
+#: accounts — those are unverified and cannot sign in — it is the sender
+#: reputation: a mail provider that sees a sudden burst to unknown recipients
+#: throttles the sender, and the invoice and reminder mail stops arriving too.
+#:
+#: Five an hour per client. Nobody registers twice; a family sharing a phone
+#: might register three times.
+RegisterRateLimit = Annotated[None, Depends(limit(times=5, seconds=3600, scope="register"))]
+
+#: The same shape, and the same reason — this one mails a reset link, so an
+#: unbounded version lets anyone mail-bomb a real user's inbox from here. It is
+#: also the endpoint that answers identically whether or not an address exists,
+#: so a limit is what stops that answer being asked ten thousand times.
+ForgotPasswordRateLimit = Annotated[
+    None, Depends(limit(times=5, seconds=900, scope="forgot_password"))
+]
+
+#: Sends nothing, but the token in the body *is* the credential. It is 48 random
+#: bytes, so this is not what stops a brute force — the entropy is. It bounds
+#: the traffic a client can aim at the endpoint at all, which is the difference
+#: between a failed attack and a failed attack that also took the server down.
+ResetPasswordRateLimit = Annotated[
+    None, Depends(limit(times=10, seconds=900, scope="reset_password"))
+]
+
+#: Refresh carries a credential — the refresh cookie — and writes to the
+#: session table, so it is not free. It is also the one public endpoint a
+#: working client calls on a timer, and several open tabs each call it, so the
+#: budget is deliberately wide: 60 in five minutes is far more than any real
+#: browser needs and far less than a client spinning tokens in a loop.
+RefreshRateLimit = Annotated[None, Depends(limit(times=60, seconds=300, scope="refresh"))]
+
 
 def _set_auth_cookies(response: Response, tokens: service.SessionTokens) -> None:
     """Tokens live in httpOnly cookies.
@@ -179,7 +213,9 @@ async def read_terms() -> dict[str, Any]:
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, request: Request, db: DbSession) -> dict[str, Any]:
+async def register(
+    payload: RegisterRequest, request: Request, db: DbSession, _: RegisterRateLimit
+) -> dict[str, Any]:
     """Create an account and email it a code. No session is issued here.
 
     Nothing usable exists until the address is proved, which is what stops a
@@ -280,7 +316,9 @@ async def resend_two_factor(
 
 
 @router.post("/refresh")
-async def refresh(request: Request, response: Response, db: DbSession) -> dict[str, Any]:
+async def refresh(
+    request: Request, response: Response, db: DbSession, _: RefreshRateLimit
+) -> dict[str, Any]:
     token = request.cookies.get(REFRESH_COOKIE)
     if not token:
         body = {}
@@ -323,7 +361,9 @@ async def me(auth: CurrentAuth, db: DbSession) -> dict[str, Any]:
 
 
 @router.post("/forgot-password")
-async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: DbSession) -> dict[str, Any]:
+async def forgot_password(
+    payload: ForgotPasswordRequest, request: Request, db: DbSession, _: ForgotPasswordRateLimit
+) -> dict[str, Any]:
     dev_token = await service.request_password_reset(db, str(payload.email), _ctx(request))
     data: dict[str, Any] = {
         # Identical whether or not the address has an account.
@@ -336,7 +376,11 @@ async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: 
 
 @router.post("/reset-password")
 async def reset_password(
-    payload: ResetPasswordRequest, request: Request, response: Response, db: DbSession
+    payload: ResetPasswordRequest,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    _: ResetPasswordRateLimit,
 ) -> dict[str, Any]:
     await service.reset_password(db, payload.token, payload.password, _ctx(request))
     _clear_auth_cookies(response)

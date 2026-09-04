@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
 from app.db.base import new_id, utcnow
-from app.db.enums import AppointmentStatus, InvoiceStatus
+from app.db.enums import AppointmentStatus, InvoiceStatus, NotificationChannel
 from app.db.models import Appointment, Doctor, Invoice, Notification, Patient, User
 from app.db.session import SessionFactory
 from app.modules.appointments.schedule import to_clinic, to_utc
@@ -248,17 +248,39 @@ class TestAutomaticGeneration:
                     select(Patient.user_id).where(Patient.id == invoice.patient_id)
                 )
             ).scalar_one()
-            notification = (
-                await session.execute(
-                    select(Notification).where(
-                        Notification.user_id == patient_user_id,
-                        Notification.notification_metadata["invoiceId"].astext == invoice.id,
+            # One event writes one row per channel — the IN_APP row the patient
+            # reads in the portal, and the EMAIL and PUSH rows the dispatcher
+            # drains. This used to ask for `scalar_one_or_none()` across all of
+            # them and raised MultipleResultsFound on a perfectly correct
+            # invoice, because the fan-out arrived after the test did.
+            rows = (
+                (
+                    await session.execute(
+                        select(Notification).where(
+                            Notification.user_id == patient_user_id,
+                            Notification.notification_metadata["invoiceId"].astext == invoice.id,
+                        )
                     )
                 )
-            ).scalar_one_or_none()
+                .scalars()
+                .all()
+            )
 
-        assert notification is not None
-        assert invoice.invoice_number in notification.body
+        by_channel = {str(row.channel): row for row in rows}
+        # The one a person actually opens.
+        assert NotificationChannel.IN_APP.value in by_channel, by_channel.keys()
+        assert invoice.invoice_number in by_channel[NotificationChannel.IN_APP.value].body
+
+        # And deliberately *no* EMAIL row. The invoice mail is a templated
+        # message sent directly — it carries the amount, the due date and a link
+        # to pay — so `notify` is called with `email=False`. A queued generic
+        # one would arrive as a second, thinner copy of a bill the patient has
+        # already been sent, which is how a hospital teaches people to ignore
+        # its email.
+        #
+        # Asserted rather than left unsaid: switching that flag back on is a
+        # one-word change that nothing else would catch.
+        assert NotificationChannel.EMAIL.value not in by_channel, by_channel.keys()
 
     async def test_administrators_are_notified(
         self, client: TestClient, billed: Billed
@@ -622,4 +644,15 @@ class TestAmounts:
         complete(client, appointment_id)
         invoice = await invoice_for(appointment_id)
         assert invoice is not None
-        assert invoice.total_amount == invoice.amount + invoice.tax_amount
+        # Three parts, not two. This assertion used to read
+        # `amount + tax_amount`, from before a platform fee existed — so it
+        # failed on a correct invoice (800 + 150 + 142.50 = 1092.50) and said
+        # the arithmetic was wrong when the arithmetic was right.
+        #
+        # The order matters as well as the sum: the fee is charged on the
+        # consultation, and the tax on both. Asserting the total alone would
+        # pass on a build that taxed the fee separately and reached the same
+        # number by luck.
+        assert invoice.total_amount == invoice.amount + invoice.platform_fee + invoice.tax_amount
+        assert invoice.platform_fee >= 0
+        assert invoice.tax_amount >= 0

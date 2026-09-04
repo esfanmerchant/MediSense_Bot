@@ -13,7 +13,9 @@ removing rows is exactly the tampering ``verify_audit_chain`` exists to detect.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
+import random
+from collections.abc import AsyncIterator
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -21,7 +23,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
 from app.db.enums import AppointmentStatus
-from app.db.models import Appointment, Doctor, Notification, Patient, User
+from app.db.models import Appointment, Doctor, DoctorTimeOff, Notification, Patient, User
 from app.db.session import SessionFactory
 from tests.conftest import ADMIN_EMAIL, password_for, requires_db
 
@@ -828,18 +830,58 @@ class TestDoctorAvailabilityManagement:
         assert response.status_code == 422
 
 
+#: The first day of this run's leave window, chosen far ahead and differently
+#: every run.
+#:
+#: These dates used to be literals — 2027-03-01 and so on. A run that failed
+#: between creating leave and recording its id left the row in the database, and
+#: because the API correctly refuses *overlapping* leave, every later run was
+#: then refused for colliding with it. One crashed run poisoned the test
+#: permanently, against a database that no seed script can rebuild. That is
+#: exactly what had happened: a stray 2027-05-01 row for the second doctor.
+#:
+#: A fresh window per run cannot collide with a leftover, and the teardown below
+#: sweeps the whole window rather than only the ids a test managed to record —
+#: the ids are precisely what is missing when a test fails early.
+# S311: this picks a calendar date, not a key. `secrets` would say the
+# opposite of what is meant here.
+LEAVE_EPOCH = date(2030, 1, 1) + timedelta(days=random.randrange(0, 2000))  # noqa: S311
+
+
+def leave_window(start_offset: int, days: int) -> dict[str, str]:
+    """A window `start_offset` days into this run's block, `days` long."""
+    start = LEAVE_EPOCH + timedelta(days=start_offset)
+    end = start + timedelta(days=days)
+    return {"startsAt": f"{start.isoformat()}T00:00:00Z", "endsAt": f"{end.isoformat()}T00:00:00Z"}
+
+
 class TestTimeOff:
     """Leave blocks out slots that would otherwise be offered."""
 
     @pytest.fixture
-    def leave(self, client: TestClient) -> Iterator[list[str]]:
-        """Removes any leave a test created, whichever way the test ends."""
+    async def leave(self, client: TestClient) -> AsyncIterator[list[str]]:
+        """Removes this run's leave, whichever way the test ended.
+
+        The recorded ids are deleted through the API, and then the whole window
+        is swept from the database — because a test that failed before it could
+        record an id is the case that left the litter in the first place.
+        """
         created: list[str] = []
         yield created
+
         sign_in(client, OTHER_DOCTOR)
         for time_off_id in created:
             client.delete(f"/api/doctors/me/time-off/{time_off_id}")
         client.cookies.clear()
+
+        async with SessionFactory() as session:
+            await session.execute(
+                delete(DoctorTimeOff).where(
+                    DoctorTimeOff.starts_at >= datetime(LEAVE_EPOCH.year, 1, 1),
+                    DoctorTimeOff.starts_at < datetime(LEAVE_EPOCH.year + 1, 1, 1),
+                )
+            )
+            await session.commit()
 
     async def test_leave_removes_the_slots_it_covers(
         self, client: TestClient, leave: list[str]
@@ -916,14 +958,15 @@ class TestTimeOff:
         sign_in(client, OTHER_DOCTOR)
         first = client.post(
             "/api/doctors/me/time-off",
-            json={"startsAt": "2027-03-01T00:00:00Z", "endsAt": "2027-03-08T00:00:00Z"},
+            json=leave_window(0, 7),
         )
         assert first.status_code == 201
         leave.append(first.json()["data"]["id"])
 
         overlapping = client.post(
             "/api/doctors/me/time-off",
-            json={"startsAt": "2027-03-05T00:00:00Z", "endsAt": "2027-03-10T00:00:00Z"},
+            # Deliberately overlaps the week above.
+            json=leave_window(4, 5),
         )
         client.cookies.clear()
 
@@ -933,7 +976,8 @@ class TestTimeOff:
         sign_in(client, OTHER_DOCTOR)
         response = client.post(
             "/api/doctors/me/time-off",
-            json={"startsAt": "2027-03-08T00:00:00Z", "endsAt": "2027-03-01T00:00:00Z"},
+            # Ends before it starts.
+            json={**leave_window(7, 0), "endsAt": leave_window(0, 0)["startsAt"]},
         )
         client.cookies.clear()
 
@@ -953,7 +997,7 @@ class TestTimeOff:
         sign_in(client, PATIENT)
         response = client.post(
             "/api/doctors/me/time-off",
-            json={"startsAt": "2027-04-01T00:00:00Z", "endsAt": "2027-04-02T00:00:00Z"},
+            json=leave_window(40, 1),
         )
         client.cookies.clear()
 
@@ -965,7 +1009,7 @@ class TestTimeOff:
         sign_in(client, OTHER_DOCTOR)
         created = client.post(
             "/api/doctors/me/time-off",
-            json={"startsAt": "2027-05-01T00:00:00Z", "endsAt": "2027-05-03T00:00:00Z"},
+            json=leave_window(80, 2),
         )
         time_off_id = created.json()["data"]["id"]
         leave.append(time_off_id)

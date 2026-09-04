@@ -1,5 +1,10 @@
 # MediSense — Smart Healthcare Management System
 
+<!-- Replace OWNER/REPO with your GitHub path once the repository is pushed;
+     until then the badge renders as "unknown" rather than as a passing build,
+     which is the honest failure mode. -->
+[![CI](https://github.com/esfanmerchant/actions/workflows/ci.yml/badge.svg)](https://github.com/esfanmerchant/actions/workflows/ci.yml)
+
 A secure hospital platform with three primary roles (Admin, Doctor, Patient), a
 patient self-service portal, an AI health assistant with voice symptom input,
 OCR for uploaded prescriptions and reports, real-time vitals monitoring with
@@ -23,7 +28,8 @@ append-only audit trail.
 | Storage | Supabase Storage, private buckets with short-lived signed URLs |
 | OCR | Gemini vision (with consent) · PaddleOCR PP-OCRv5 locally otherwise |
 | AI | Google Gemini — vision extraction, chatbot, symptom triage |
-| Tests | pytest + httpx TestClient |
+| Tests | pytest + httpx TestClient · Vitest + Testing Library |
+| Security | Clinical free text sealed at rest · CSP on both halves · hash-chained audit log |
 
 Supabase supplies the database and file storage. It does **not** supply
 authentication: Supabase Auth has no idle-timeout concept, and R8 requires the
@@ -207,6 +213,7 @@ back to the in-process behaviour rather than failing the request.
 | Variable | Meaning |
 |---|---|
 | `SESSION_SECRET` | Signs sessions **and** derives the key that seals TOTP secrets at rest — rotating it invalidates both |
+| `PHI_ENCRYPTION_KEY` | Seals the clinical free text on `medical_records`. **Losing it loses that text** — keep it in the backup set. Separate from `SESSION_SECRET` so that one can be rotated after an incident without destroying charts. Empty falls back to `SESSION_SECRET` |
 | `JWT_SECRET` | Signs access tokens |
 | `CLINIC_TIMEZONE` | The wall clock every schedule is written in. `Asia/Karachi` |
 
@@ -256,9 +263,70 @@ because a missing credential is not a broken endpoint.
 TEST_ADMIN_EMAIL=you@example.org TEST_ADMIN_PASSWORD=...   .venv/Scripts/python.exe -m pytest tests/test_authorization_integration.py
 ```
 
-Several demo accounts are currently `SUSPENDED` in the database and cannot sign
-in, which fails the integration tests that use them. Reactivating them is an
-administrator's decision, not something a test run should make for itself.
+### Running the integration tier
+
+It needs a real database and it is slow — about 1.5 hours, because every query
+is a round trip to Supabase in Mumbai and there are roughly 350 of these tests.
+It is deliberately **not** in CI: those tests sign in as real accounts and write
+to a real database, and putting that connection string into a public
+repository's secrets is not a trade worth making.
+
+Two things it needs that the fast tier does not:
+
+* The demo accounts in the table above must be `ACTIVE`. Four of them were
+  suspended at one point and every test that signed in as them failed.
+* `TEST_ADMIN_EMAIL` and `TEST_ADMIN_PASSWORD`, or the tests that act as an
+  administrator skip rather than fail.
+
+It writes as it goes — accounts, applications, leave, invoices — and cleans up
+after itself. A run that is killed part-way does not: a stray row of doctor's
+leave once made one test unpassable for good, because the API correctly refuses
+overlapping leave and nothing was left to say where the collision came from.
+Tests that create dated rows now pick a window unique to the run and sweep it
+afterwards.
+
+## Deploying
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** — it covers the two things that are easy
+to get wrong: the API cannot run on Vercel (it holds a background dispatcher and
+an SSE stream), and `SameSite=Lax` session cookies mean the frontend and the API
+must share one registrable domain or sign-in silently fails after the login
+screen.
+
+## Suspending and removing an account
+
+Two different administrator actions, and the difference matters.
+
+**Suspend** ends the access and changes nothing else. Every live session is
+revoked server-side the moment it is applied, so somebody suspended for breaking
+the rules stops working immediately rather than when their token expires. One
+press undoes it.
+
+**Remove** destroys the account and the person's data, and releases their email
+address and CNIC to be registered again. It cannot be undone. Which shape it
+takes is decided by the data rather than the role:
+
+| | What happens |
+|---|---|
+| Nothing of theirs is referenced | The row is deleted. Appointments, records, prescriptions, vitals, documents, reminders, symptoms and unpaid bills go with it, and so do the files behind their uploads. |
+| Somebody else's record names them as its author | The row survives holding nothing. Name, phone, CNIC, avatar, password, second factor, licence number and clinic address are destroyed; the email is rewritten into a `.invalid` domain, which is what frees the real one. |
+
+The second case is why a doctor's removal does not take a patient's chart with
+it: deleting the author would mean deleting the consultation or leaving it
+without a clinician, and both are worse than an anonymous row.
+
+Three things deliberately outlive a removal. The **audit log** — `userId` there
+is not a foreign key, on purpose, and the removal is itself recorded with who
+did it and what was destroyed. **Settled invoices**, which lose their patient and
+keep their amount, because money that changed hands is the hospital's record and
+deleting it would restate a past quarter's revenue with nothing to explain the
+change. And a doctor's **specialization**, so a chart can still say a
+cardiologist wrote it.
+
+Refused outright: removing yourself, removing the last active administrator, and
+removing a doctor with an open withdrawal request. `GET /api/users/{id}/removal`
+returns the counts and the refusals before anything happens; the admin screen
+shows them and asks for the address to be typed out before the button works.
 
 ## Project layout
 
@@ -616,7 +684,7 @@ explicit `Z` alongside a pre-formatted clinic-local label.
 | Req | Status | Where |
 |---|---|---|
 | R1 real-time vitals + alerts | **done** | `modules/vitals/` — threshold engine, alert lifecycle, SSE |
-| R2 encryption + role-based access | **done (access control)** | `rbac.py`, `deps.py`; at-rest field encryption Phase 13 |
+| R2 encryption + role-based access | **done** | `rbac.py`, `deps.py`; clinical free text sealed at rest by `db/encrypted.py` |
 | R3 emergency override | **done** | `modules/emergency/` — immediate grant, one patient, expiring, reviewed |
 | R4 automated billing | **done** | `modules/billing/` — unique `appointmentId` is the idempotency guarantee |
 | R5 doctor record updates | **done** | `modules/records/` — author-only amendment, audited by field |

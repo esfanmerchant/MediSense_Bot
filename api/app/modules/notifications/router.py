@@ -28,6 +28,7 @@ from app.api.deps import CurrentAuth, DbSession
 from app.api.responses import Page, ok, pagination
 from app.core.config import settings
 from app.core.errors import not_found
+from app.core.ratelimit import limit
 from app.db.base import utcnow
 from app.db.enums import NotificationChannel, NotificationStatus
 from app.db.models import Notification, PushSubscription, User
@@ -35,6 +36,15 @@ from app.modules.notifications.service import serialize
 from app.services.email_links import read_unsubscribe_token
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+#: The only unauthenticated write in the application. Its credential is a sealed
+#: token, so it cannot be forged — but it is reached with no session at all, and
+#: Gmail's one-click posts to it without a browser. Twenty an hour is far more
+#: than anyone unsubscribing needs, and it bounds what an endpoint that takes no
+#: session can be made to do to the database.
+UnsubscribeRateLimit = Annotated[
+    None, Depends(limit(times=20, seconds=3600, scope="unsubscribe"))
+]
 
 
 def _mine(auth: CurrentAuth) -> list[Any]:
@@ -268,7 +278,9 @@ class UnsubscribeRequest(BaseModel):
 
 
 @router.post("/unsubscribe", status_code=200)
-async def unsubscribe(payload: UnsubscribeRequest, db: DbSession) -> dict[str, Any]:
+async def unsubscribe(
+    payload: UnsubscribeRequest, db: DbSession, _: UnsubscribeRateLimit
+) -> dict[str, Any]:
     """Turn email off for the account this token belongs to.
 
     **No session, on purpose.** This is reached from a mail client — either the

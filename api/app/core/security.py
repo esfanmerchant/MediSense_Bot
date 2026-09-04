@@ -184,14 +184,20 @@ def _hkdf_sha256(ikm: bytes, salt: bytes, info: bytes, length: int) -> bytes:
     return out[:length]
 
 
-def _seal_keys(purpose: str) -> tuple[bytes, bytes]:
+def _seal_keys(purpose: str, key_material: str | None = None) -> tuple[bytes, bytes]:
     """Encryption and authentication subkeys, bound to what they are sealing.
 
     ``purpose`` goes into the HKDF info, so a sealed TOTP secret cannot be
     replayed into a column that seals something else.
+
+    ``key_material`` defaults to ``SESSION_SECRET`` — right for anything whose
+    loss is an inconvenience, like a TOTP enrolment that can be redone. Callers
+    holding something that cannot be re-created pass their own: rotating the
+    session secret is ordinary hygiene, and it must not be the act that makes
+    every patient's diagnosis unreadable.
     """
     material = _hkdf_sha256(
-        settings.SESSION_SECRET.encode(), _SEAL_SALT, purpose.encode(), 64
+        (key_material or settings.SESSION_SECRET).encode(), _SEAL_SALT, purpose.encode(), 64
     )
     return material[:32], material[32:]
 
@@ -205,9 +211,9 @@ def _keystream(key: bytes, nonce: bytes, length: int) -> bytes:
     return stream[:length]
 
 
-def seal_secret(plaintext: str, purpose: str = "totp") -> str:
+def seal_secret(plaintext: str, purpose: str = "totp", key_material: str | None = None) -> str:
     """Returns ``v1$<nonce-b64>$<ciphertext-b64>$<tag-b64>``."""
-    enc_key, mac_key = _seal_keys(purpose)
+    enc_key, mac_key = _seal_keys(purpose, key_material)
     nonce = secrets.token_bytes(_SEAL_NONCE_BYTES)
     raw = plaintext.encode()
     ciphertext = bytes(a ^ b for a, b in zip(raw, _keystream(enc_key, nonce, len(raw)), strict=True))
@@ -222,7 +228,7 @@ def seal_secret(plaintext: str, purpose: str = "totp") -> str:
     )
 
 
-def unseal_secret(sealed: str, purpose: str = "totp") -> str:
+def unseal_secret(sealed: str, purpose: str = "totp", key_material: str | None = None) -> str:
     """Recover a sealed value, or raise ``SealError``.
 
     Raising rather than returning ``None`` is the point: a tampered or
@@ -239,7 +245,7 @@ def unseal_secret(sealed: str, purpose: str = "totp") -> str:
     except (ValueError, TypeError) as exc:
         raise SealError("malformed sealed value") from exc
 
-    enc_key, mac_key = _seal_keys(purpose)
+    enc_key, mac_key = _seal_keys(purpose, key_material)
     expected = hmac.new(mac_key, _SEAL_VERSION.encode() + nonce + ciphertext, hashlib.sha256).digest()
     if not hmac.compare_digest(expected, tag):
         raise SealError("sealed value failed authentication")

@@ -52,6 +52,33 @@ from app.services.files import ALLOWED_MIME_TYPES
 
 configure_logging()
 
+#: Content-Security-Policy for the API's own responses.
+#:
+#: This API returns JSON and nothing else — no HTML, no templates, no inline
+#: script. So the honest policy is the closed one: `default-src 'none'` denies
+#: every fetch, frame, script and style outright, and nothing is added back.
+#:
+#: It matters despite there being no page to protect. A JSON response opened
+#: directly in a browser, or one a content-type confusion attack persuades a
+#: browser to render, has no way to load or execute anything under this. The
+#: `frame-ancestors` directive is the modern half of `X-Frame-Options`, which is
+#: also set above because older browsers only understand that one.
+#:
+#: The *client* needs its own, quite different policy — it has scripts, styles
+#: and fonts to allow. That one lives in `client/next.config.ts`, next to the
+#: app it describes.
+API_CSP = (
+    "default-src 'none'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'none'; "
+    "form-action 'none'"
+)
+
+#: Powerful browser features this API never uses. Sent for the same reason as
+#: the CSP: it costs one header, and it means a response from here can never be
+#: the thing that asks for a camera.
+PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+
 
 async def _ensure_storage_buckets() -> None:
     """Make sure every bucket the application writes to exists, and is private.
@@ -175,6 +202,8 @@ def create_app() -> FastAPI:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = API_CSP
+        response.headers["Permissions-Policy"] = PERMISSIONS_POLICY
         if settings.is_production:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
@@ -236,6 +265,20 @@ def create_app() -> FastAPI:
                         "ai": settings.ai_configured,
                         "email": settings.email_configured,
                         "ocr": settings.OCR_ENABLED,
+                        "push": settings.push_enabled,
+                    },
+                    # Whether this process holds a dedicated key for the sealed
+                    # clinical columns, or fell back to SESSION_SECRET.
+                    #
+                    # A boolean, and never the key. It answers the one question
+                    # a deployment cannot answer any other way: settings are read
+                    # once at startup, so a `.env` corrected afterwards changes
+                    # nothing until a restart — and a process running on the
+                    # fallback writes ciphertext that the correctly-configured
+                    # process next to it cannot open.
+                    "clinicalEncryption": {
+                        "dedicatedKey": bool(settings.PHI_ENCRYPTION_KEY),
+                        "usingSessionSecretFallback": not settings.PHI_ENCRYPTION_KEY,
                     },
                 },
             },

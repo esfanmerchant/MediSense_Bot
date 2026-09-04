@@ -74,6 +74,28 @@ class Settings(BaseSettings):
     SESSION_IDLE_TIMEOUT_SECONDS: int = 120
     SESSION_ABSOLUTE_TIMEOUT_SECONDS: int = 43_200
 
+    # --- Clinical field encryption ---------------------------------------
+    #: Key material for the sealed clinical columns (see ``db/encrypted.py``).
+    #:
+    #: Separate from ``SESSION_SECRET`` on purpose. Rotating the session secret
+    #: is a normal thing to do — it signs everyone out, which is sometimes
+    #: exactly what you want after an incident. If clinical text hung off that
+    #: same secret, doing the responsible thing would destroy every diagnosis
+    #: in the database. These two must be rotatable independently.
+    #:
+    #: **This key cannot be changed without re-encrypting.** Losing it loses the
+    #: clinical text; it belongs wherever the deployment keeps things it cannot
+    #: regenerate, and it must be in the backup set.
+    #:
+    #: Empty falls back to ``SESSION_SECRET`` so an existing deployment keeps
+    #: working after an upgrade, and so tests need no extra fixture — but a
+    #: real deployment sets it, and ``/health/ready`` reports which it is using.
+    PHI_ENCRYPTION_KEY: str = ""
+
+    @property
+    def phi_key_material(self) -> str:
+        return self.PHI_ENCRYPTION_KEY or self.SESSION_SECRET
+
     # --- Web Push ---------------------------------------------------------
     #: The VAPID keypair that identifies this server to a push service. The
     #: public half is handed to the browser and is public by design; the

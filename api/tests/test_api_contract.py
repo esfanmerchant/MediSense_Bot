@@ -86,9 +86,19 @@ class TestRequestValidation:
     def test_rejects_registration_with_a_weak_password(self, client: TestClient) -> None:
         response = client.post(
             "/api/auth/register",
-            json={"name": "Demo Patient", "email": "demo@example.com", "password": "short"},
+            # A CNIC is required of every registration, so it is supplied here:
+            # without it this test would pass on the missing field and never
+            # exercise the password policy it is named after.
+            json={
+                "name": "Demo Patient",
+                "email": "demo@example.com",
+                "password": "short",
+                "cnic": "4210112345671",
+                "acceptedTerms": True,
+            },
         )
         assert response.status_code == 422
+        assert any(d["field"] == "password" for d in response.json()["error"]["details"])
 
     @requires_db
     async def test_a_caller_cannot_choose_a_role_nobody_may_grant_themselves(
@@ -111,6 +121,8 @@ class TestRequestValidation:
                 "name": "Role Escalation",
                 "email": email,
                 "password": "ValidPass123",
+                "cnic": "4210112345671",
+                "acceptedTerms": True,
                 "role": "ADMIN",
             },
         )

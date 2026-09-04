@@ -20,6 +20,26 @@ const api = originOf(process.env.NEXT_PUBLIC_API_URL);
 const supabase = originOf(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 /**
+ * `'unsafe-eval'`, and only while developing.
+ *
+ * React's development build uses `eval()` for its debugging machinery —
+ * reconstructing a callstack that came from another environment, chiefly — and
+ * refuses to start without it, which is what a CSP written for production does
+ * to `next dev`: a console full of "eval() is not supported in this
+ * environment" and an error overlay that cannot render.
+ *
+ * React's own message is the justification for scoping it this narrowly: *"React
+ * will never use eval() in production mode."* So the production policy keeps
+ * `eval` denied, which is the half that matters — it is the primitive that turns
+ * an injected string into running code.
+ *
+ * Keyed on NODE_ENV, which Next sets itself: `development` for `next dev`,
+ * `production` for `next build`. Nothing here can loosen a deployed policy,
+ * because a deployment is built in production mode by definition.
+ */
+const developing = process.env.NODE_ENV !== "production";
+
+/**
  * What the Google Maps JavaScript API needs, per host and per directive.
  *
  * Grouped and named rather than scattered through the policy, because these are
@@ -66,7 +86,7 @@ const maps = {
 const csp = [
   "default-src 'self'",
   // Google Maps draws the clinic locations; it loads its own further scripts.
-  `script-src 'self' 'unsafe-inline' ${maps.script.join(" ")}`,
+  `script-src 'self' 'unsafe-inline' ${developing ? "'unsafe-eval' " : ""}${maps.script.join(" ")}`,
   // Tailwind and the Material Symbols stylesheet; inline styles come from the
   // framework, from element-level style attributes, and from Maps, which
   // injects its own.

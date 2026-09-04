@@ -1,9 +1,6 @@
 # MediSense — Smart Healthcare Management System
 
-<!-- Replace OWNER/REPO with your GitHub path once the repository is pushed;
-     until then the badge renders as "unknown" rather than as a passing build,
-     which is the honest failure mode. -->
-[![CI](https://github.com/esfanmerchant/actions/workflows/ci.yml/badge.svg)](https://github.com/esfanmerchant/actions/workflows/ci.yml)
+[![CI](https://github.com/esfanmerchant/MediSense_Bot/actions/workflows/ci.yml/badge.svg)](https://github.com/esfanmerchant/MediSense_Bot/actions/workflows/ci.yml)
 
 A secure hospital platform with three primary roles (Admin, Doctor, Patient), a
 patient self-service portal, an AI health assistant with voice symptom input,

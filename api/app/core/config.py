@@ -96,6 +96,15 @@ class Settings(BaseSettings):
     def phi_key_material(self) -> str:
         return self.PHI_ENCRYPTION_KEY or self.SESSION_SECRET
 
+    # --- Scheduled dispatch ----------------------------------------------
+    #: Shared secret for POST /api/internal/dispatch.
+    #:
+    #: Only needed where the API cannot hold a background loop — a serverless
+    #: platform, chiefly — and an external scheduler has to drive the
+    #: dispatcher instead. Empty means the endpoint refuses every call, which is
+    #: the right default: a deployment that runs the loop has nothing to open.
+    DISPATCH_SECRET: str = ""
+
     # --- Web Push ---------------------------------------------------------
     #: The VAPID keypair that identifies this server to a push service. The
     #: public half is handed to the browser and is public by design; the

@@ -118,5 +118,9 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 # Third-party packages that ship no type information. Listed explicitly rather
 # than globally ignored, so a genuinely missing import is still an error.
-module = ["paddleocr.*", "paddle.*", "pypdfium2.*", "pywebpush.*"]
+# `numpy` arrives with the `ocr` extra, not with `dev` — so a machine that has
+# run the local OCR engine has it and a CI runner does not. Listing it here is
+# what stops `mypy app` passing on a laptop and failing on a clean install,
+# which is precisely how it was found.
+module = ["paddleocr.*", "paddle.*", "pypdfium2.*", "pywebpush.*", "numpy.*"]
 ignore_missing_imports = true

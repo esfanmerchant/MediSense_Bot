@@ -38,6 +38,7 @@ from app.modules.documents.ocr_router import router as ocr_router
 from app.modules.documents.router import router as documents_router
 from app.modules.emergency.router import router as emergency_router
 from app.modules.notifications import dispatcher
+from app.modules.notifications.dispatch_router import router as dispatch_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.patients.router import router as patients_router
 from app.modules.prescriptions.reminders import router as medication_reminders_router
@@ -234,6 +235,7 @@ def create_app() -> FastAPI:
         emergency_router,
         audit_router,
         notifications_router,
+        dispatch_router,
         dashboard_router,
     ):
         app.include_router(module_router, prefix="/api")

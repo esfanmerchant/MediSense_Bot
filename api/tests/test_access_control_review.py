@@ -93,6 +93,22 @@ PUBLIC_PATHS = {
     # reversible in one press from the settings page. The portal keeps every
     # notification regardless.
     "/api/notifications/unsubscribe",
+    # The dispatcher pass, for an external scheduler.
+    #
+    # It carries no session because the caller is not a person: it is cron, on a
+    # platform that cannot hold the background loop the dispatcher normally runs
+    # in. A serverless deployment freezes the function between requests, so
+    # queued email is never sent and a medication reminder never fires — with
+    # nothing visibly broken, because every request a browser makes still works.
+    #
+    # Its credential is a shared secret in a header, compared with
+    # `hmac.compare_digest`. What that credential grants is deliberately almost
+    # nothing: one pass of work the application was going to do anyway, on a
+    # schedule it sets itself. It reads no patient data, takes no id, and its
+    # response is five counts. With `DISPATCH_SECRET` unset — the default, and
+    # correct for any deployment that runs the loop — the endpoint refuses every
+    # call rather than accepting an empty secret.
+    "/api/internal/dispatch",
 }
 
 #: Routes that authenticate but deliberately have no permission requirement:
@@ -116,6 +132,9 @@ AUTH_ENTRY_PATHS = {
     # token *is* the credential, and it is single-use and expiring.
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
+    # Its credential is the shared secret in the header, checked before any work
+    # is done. See PUBLIC_PATHS.
+    "/api/internal/dispatch",
 }
 
 
@@ -255,6 +274,10 @@ class TestEverythingIsGuarded:
                     # endpoint cannot reach another inbox or the delivery
                     # queue — see `_mine` in that router.
                     "_mine(auth)",
+                    # A shared secret compared in constant time. The caller is a
+                    # scheduler rather than a person, so there is no session to
+                    # check — but there is a credential, and this is it.
+                    "compare_digest",
                 )
             ) or DELEGATES_TO_SERVICE.search(source) is not None
             if not guarded:
